@@ -365,7 +365,9 @@
             <div id="new-custom-widget">
               <!-- 我们用一个新的容器把月份和头像包起来 -->
               <div id="new-widget-header">
-                <div id="widget-month-display"></div>
+                <!-- 加上了 contenteditable 和 class，现在你可以随便改它了，写数字、文字都可以 -->
+<div id="widget-month-display" class="editable-text" contenteditable="true">12</div>
+
                 <img
                   id="new-widget-avatar"
                   src="https://i.postimg.cc/qRqpK5kP/anime-avatar.jpg"
@@ -40776,12 +40778,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
         // ===================================================================
         async function init() {
           // ▼▼▼ 在 init()    // ▼▼▼ 在这里粘贴下面这几行新代码 ▼▼▼
-          // 更新小组件的月份显示
-          const monthElement = document.getElementById('widget-month-display');
-          if (monthElement) {
-            const currentMonth = new Date().getMonth() + 1; // getMonth()返回0-11，所以要+1
-            monthElement.textContent = currentMonth;
-          }
+
           // ▲▲▲ 新代码粘贴结束 ▲▲▲ 函数的【最开头】，粘贴下面这两行代码 ▼▼▼
           const savedTheme = localStorage.getItem('ephone-theme') || 'light'; // 默认为日间模式
           applyTheme(savedTheme);
