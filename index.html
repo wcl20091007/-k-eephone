@@ -31373,6 +31373,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
          * 【日记】独立刷新，生成新的日记条目 (已增加错误处理)
          */
         async function generateNewDiaryEntry() {
+          const userNickname = state.qzoneSettings.nickname || '我';
           if (!activeCharacterPhoneId) return;
           const chat = state.chats[activeCharacterPhoneId];
           if (!chat) return;
