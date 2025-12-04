@@ -68,6 +68,7 @@
     <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
     <script src="tukey-accounting.js" defer></script>
     <script src="kk-checkin.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 
     <style></style>
     <!-- ▼▼▼ 在这里添加下面这行 ▼▼▼ -->
@@ -1145,6 +1146,59 @@
             正在计算图片数据大小...
           </p>
           <!-- ▲▲▲ 替换结束 ▲▲▲ -->
+          <!-- ▼▼▼ GitHub 备份设置区域 (插入到 API 设置页) ▼▼▼ -->
+          <hr style="margin: 20px 0; opacity: 0.3" />
+          <div class="form-group">
+            <label style="font-weight: 600; color: var(--accent-color)">☁️ GitHub 云备份</label>
+            <p
+              style="
+                font-size: 12px;
+                color: #666;
+                margin-bottom: 10px;
+                background: #f0f0f0;
+                padding: 8px;
+                border-radius: 6px;
+              "
+            >
+              可以将备份自动上传到你的私有仓库。需要申请 GitHub Token (勾选 repo 权限)。
+            </p>
+
+            <label for="github-token">GitHub Personal Access Token</label>
+            <input type="password" id="github-token" placeholder="ghp_xxxxxxxxxxxx..." />
+
+            <label for="github-username" style="margin-top: 10px">GitHub 用户名</label>
+            <input type="text" id="github-username" placeholder="例如: yourname" />
+
+            <label for="github-repo" style="margin-top: 10px">仓库名称 (Repository)</label>
+            <input type="text" id="github-repo" placeholder="例如: my-backup-repo" />
+
+            <label for="github-path" style="margin-top: 10px">文件路径 (可选)</label>
+            <input type="text" id="github-path" placeholder="默认为: ephone_backup.json" />
+
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px">
+              <label for="github-auto-backup-switch" style="margin-bottom: 0"> 开启自动定时备份 (每30分钟) </label>
+              <label class="toggle-switch">
+                <input type="checkbox" id="github-auto-backup-switch" />
+                <span class="slider"></span>
+              </label>
+            </div>
+
+            <button
+              id="manual-github-backup-btn"
+              class="form-button form-button-secondary"
+              style="margin-top: 15px; background-color: #24292e; color: white; border: none"
+            >
+              立即上传备份到 GitHub
+            </button>
+            <button
+              id="manual-github-restore-btn"
+              class="form-button form-button-secondary"
+              style="margin-top: 10px; background-color: #28a745; color: white; border: none"
+            >
+              📥 从 GitHub 恢复备份
+            </button>
+          </div>
+          <!-- ▲▲▲ GitHub 备份设置区域结束 ▲▲▲ -->
 
           <button class="form-button" id="save-api-settings-btn">保存设置</button>
           <hr style="margin: 20px 0; opacity: 0.3" />
@@ -1854,7 +1908,6 @@
               </svg>
             </button>
             <!-- ▲▲▲ 修改结束 ▲▲▲ -->
-
           </div>
           <div id="chat-input-main-row">
             <textarea id="chat-input" rows="1" placeholder="输入消息..."></textarea>
@@ -3889,6 +3942,23 @@
               <label for="offline-word-count-input">期望回复字数</label>
               <input type="number" id="offline-word-count-input" value="300" min="50" step="50" />
             </div>
+            <!-- ▼▼▼ 新增：线下模式生图开关 ▼▼▼ -->
+            <div
+              class="form-group"
+              style="margin-top: 15px; border-top: 1px dashed var(--border-color); padding-top: 15px"
+            >
+              <label for="offline-novelai-toggle" class="toggle-switch-label">
+                <span class="toggle-switch-text">
+                  每轮自动生成配图 (NovelAI)
+                  <p style="font-size: 12px; font-weight: normal; color: #999; margin-top: 5px">
+                    开启后，AI会根据当前剧情自动调用NovelAI生成一张插图。需先配置好NAI设置。
+                  </p>
+                </span>
+                <input type="checkbox" id="offline-novelai-toggle" />
+                <span class="toggle-switch-slider"></span>
+              </label>
+            </div>
+            <!-- ▲▲▲ 新增结束 ▲▲▲ -->
           </div>
           <!-- ▼▼▼ 【全新】聊天总结设置区域 ▼▼▼ -->
           <hr style="opacity: 0.2; margin: 20px 0" />
@@ -10821,6 +10891,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
       };
 
       // ▲▲▲ 新代码粘贴结束 ▲▲▲
+
       // ▼▼▼ 【粘贴到这里】把那4个头像变量放在这里，让它们变成全局变量 ▼▼▼
       const defaultAvatar = 'https://i.postimg.cc/PxZrFFFL/o-o-1.jpg';
       const defaultMyGroupAvatar = 'https://i.postimg.cc/cLPP10Vm/4.jpg';
@@ -11450,7 +11521,8 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
         // ▲▲▲ 替换结束 ▲▲▲
 
         /**
-         * 【核心升级】处理用户点击搜索结果，增加备用音源查找和是否永久保存的逻辑
+         * 【核心升级】处理用户点击搜索结果
+         * 修改点：保存ID和来源，标记为永久，并保存到数据库
          */
         async function handleSearchResultClick(songData) {
           const modal = document.getElementById('music-search-results-modal');
@@ -11494,26 +11566,14 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           }
 
           if (!playableResult) {
-            await showCustomAlert('获取失败', '无法获取该歌曲的有效播放链接，主音源和备用音源均已尝试。');
+            await showCustomAlert('获取失败', '无法获取该歌曲的有效播放链接。');
             return;
           }
 
-          // ▼▼▼ 从这里开始粘贴新代码 ▼▼▼
-          const confirmed = await showCustomConfirm(
-            '温馨提示', // 这是弹窗的标题
-            '搜索的歌曲24h后会过期，重要的歌曲记得用url或者本地上传哦🐇', // 这是你指定的提示内容
-            { confirmText: '确定' }, // 按钮会显示“确定”和“取消”，这里的“取消”就等同于“返回”
-          );
-
-          // 如果用户点击了“取消”（返回），就直接结束，不添加歌曲
-          if (!confirmed) {
-            return;
-          }
-          // ▲▲▲ 粘贴结束 ▲▲▲
           // 获取歌词
           const lrcContent = (await getLyricsForSong(playableResult.id, finalSource)) || '';
 
-          // ▼▼▼ 用这块新代码替换 ▼▼▼
+          // ▼▼▼ 核心修改：构建永久保存的歌曲对象 ▼▼▼
           const newSong = {
             name: songData.name,
             artist: songData.artist,
@@ -11521,52 +11581,46 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             cover: songData.cover,
             isLocal: false,
             lrcContent: lrcContent,
-            isTemporary: true,
-            // 核心新增：记录这首歌被添加的精确时间
+            isTemporary: false, // 【修改1】标记为永久
             addedTimestamp: Date.now(),
+            // 【修改2】保存关键信息，用于未来自动续期
+            musicId: playableResult.id,
+            musicSource: finalSource,
           };
-          // ▲▲▲ 替换结束 ▲▲▲
+          // ▲▲▲ 修改结束 ▲▲▲
 
           musicState.playlist.push(newSong);
 
-          // 注意：我们已经删除了 saveGlobalPlaylist() 的调用，因为临时歌曲不需要被永久保存
-          // ▲▲▲ 替换结束 ▲▲▲
+          // 【修改3】立即保存到数据库
+          await saveGlobalPlaylist();
 
           updatePlaylistUI();
 
           if (musicState.currentIndex === -1) {
             musicState.currentIndex = musicState.playlist.length - 1;
-            updatePlayerUI();
+            // 这里调用 loadSong 确保能触发下面的自动续期逻辑
+            loadSong(musicState.currentIndex);
+          } else {
+            // 如果不是第一首，仅提示
+            await showCustomAlert('添加成功', `《${songData.name}》已保存，链接失效时会自动更新。`);
           }
 
-          await showCustomAlert('添加成功', `《${songData.name}》已成功添加到播放列表！`);
-          // ▼▼▼ 把这一整块全新的代码，粘贴到指定位置 ▼▼▼
+          // 尝试注入聊天上下文（如果开启了聊天）
           try {
-            // 1. 检查一下当前是不是正在和别人聊天
             if (state.activeChatId) {
               const chat = state.chats[state.activeChatId];
               if (chat) {
-                // 2. 创建一条对用户隐藏，但对AI可见的系统消息
                 const hiddenMessage = {
-                  role: 'system', // 告诉AI这是系统信息
-                  content: `[系统提示：用户刚刚通过搜索，将歌曲《${songData.name}》 - ${songData.artist} 添加到了“一起听”的播放列表中。你可以根据这个情景，自然地开启关于这首歌的话题。]`,
+                  role: 'system',
+                  content: `[系统提示：用户添加了歌曲《${songData.name}》到列表。]`,
                   timestamp: Date.now(),
-                  isHidden: true, // 这个是关键！让这条消息在聊天界面上“隐形”
+                  isHidden: true,
                 };
-
-                // 3. 把这条“隐形”消息加到聊天记录的末尾
                 chat.history.push(hiddenMessage);
-
-                // 4. 保存更新后的聊天记录到数据库
                 await db.chats.put(chat);
-
-                console.log(`已为歌曲《${songData.name}》成功注入AI上下文提示。`);
               }
             }
-          } catch (error) {
-            console.error('注入歌曲上下文时出错:', error);
-          }
-          // ▲▲▲ 粘贴结束 ▲▲▲
+          } catch (e) {}
         }
 
         /**
@@ -13779,6 +13833,393 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             await showCustomAlert('导出失败', `发生了一个错误: ${error.message}`);
           }
         }
+        // ▼▼▼ GitHub 备份核心功能 ▼▼▼
+
+        let githubBackupTimer = null;
+
+        /**
+         * 获取完整的备份数据对象 (不触发下载)
+         */
+        async function getFullBackupData() {
+          const backupData = {
+            version: 1,
+            timestamp: Date.now(),
+            deviceCode: getDeviceCode(), // 记录来源设备
+          };
+
+          // 获取所有数据表
+          const [
+            chats,
+            worldBooks,
+            userStickers,
+            charStickers,
+            apiConfig,
+            globalSettings,
+            personaPresets,
+            musicLibrary,
+            qzoneSettings,
+            qzonePosts,
+            qzoneAlbums,
+            qzonePhotos,
+            favorites,
+            qzoneGroups,
+            memories,
+            worldBookCategories,
+            callRecords,
+            customAvatarFrames,
+            themes,
+            apiPresets,
+            bubbleStylePresets,
+            fontPresets,
+            homeScreenPresets,
+            datingScenes,
+            datingPresets,
+            datingSpriteGroups,
+            datingSprites,
+            datingHistory,
+            pomodoroSessions,
+            ludoQuestionBanks,
+            ludoQuestions,
+            scriptKillScripts,
+            taobaoProducts,
+            taobaoOrders,
+            taobaoCart,
+            userWalletTransactions,
+            userStickerCategories,
+          ] = await Promise.all([
+            db.chats.toArray(),
+            db.worldBooks.toArray(),
+            db.userStickers.toArray(),
+            db.charStickers.toArray(),
+            db.apiConfig.get('main'),
+            db.globalSettings.get('main'),
+            db.personaPresets.toArray(),
+            db.musicLibrary.get('main'),
+            db.qzoneSettings.get('main'),
+            db.qzonePosts.toArray(),
+            db.qzoneAlbums.toArray(),
+            db.qzonePhotos.toArray(),
+            db.favorites.toArray(),
+            db.qzoneGroups.toArray(),
+            db.memories.toArray(),
+            db.worldBookCategories.toArray(),
+            db.callRecords.toArray(),
+            db.customAvatarFrames.toArray(),
+            db.themes.toArray(),
+            db.apiPresets.toArray(),
+            db.bubbleStylePresets.toArray(),
+            db.fontPresets.toArray(),
+            db.homeScreenPresets.toArray(),
+            db.datingScenes.toArray(),
+            db.datingPresets.toArray(),
+            db.datingSpriteGroups.toArray(),
+            db.datingSprites.toArray(),
+            db.datingHistory.toArray(),
+            db.pomodoroSessions.toArray(),
+            db.ludoQuestionBanks.toArray(),
+            db.ludoQuestions.toArray(),
+            db.scriptKillScripts.toArray(),
+            db.taobaoProducts.toArray(),
+            db.taobaoOrders.toArray(),
+            db.taobaoCart.toArray(),
+            db.userWalletTransactions.toArray(),
+            db.userStickerCategories.toArray(),
+          ]);
+
+          // 组装数据
+          Object.assign(backupData, {
+            chats,
+            worldBooks,
+            userStickers,
+            charStickers,
+            apiConfig,
+            globalSettings,
+            personaPresets,
+            musicLibrary,
+            qzoneSettings,
+            qzonePosts,
+            qzoneAlbums,
+            qzonePhotos,
+            favorites,
+            qzoneGroups,
+            memories,
+            worldBookCategories,
+            callRecords,
+            customAvatarFrames,
+            themes,
+            apiPresets,
+            bubbleStylePresets,
+            fontPresets,
+            homeScreenPresets,
+            datingScenes,
+            datingPresets,
+            datingSpriteGroups,
+            datingSprites,
+            datingHistory,
+            pomodoroSessions,
+            ludoQuestionBanks,
+            ludoQuestions,
+            scriptKillScripts,
+            taobaoProducts,
+            taobaoOrders,
+            taobaoCart,
+            userWalletTransactions,
+            userStickerCategories,
+          });
+
+          // 这里省略了 homeScreenState 的详细抓取，因为它依赖 DOM 元素，
+          // 自动备份时可能不在主屏幕。为了安全起见，这里仅保存 globalSettings 里的 widgetData。
+          // 如果需要完整还原UI布局，最好只在手动导出时包含 homeScreenState。
+
+          return JSON.stringify(backupData, null, 2);
+        }
+
+        // ▼▼▼ 终极版：支持大文件自动分片上传 ▼▼▼
+        async function uploadBackupToGitHub(isAuto = false) {
+          let { githubToken, githubUsername, githubRepo, githubPath } = state.apiConfig;
+
+          // 1. 基础检查
+          if (!githubToken || !githubUsername || !githubRepo) {
+            if (!isAuto) alert('请先在 API 设置中填写 GitHub 配置！');
+            return;
+          }
+          githubToken = githubToken.trim();
+          githubUsername = githubUsername.trim();
+          githubRepo = githubRepo.trim().replace(/\/$/, '').split('/').pop().replace('.git', '');
+          githubPath = (githubPath || 'ephone_backup.json').trim();
+
+          if (!isAuto) await showCustomAlert('准备中...', '正在打包并计算文件大小...');
+
+          try {
+            // 2. 获取原始 JSON 数据
+            const jsonContent = await getFullBackupData();
+
+            // 3. 转成 Base64 (解决中文乱码)
+            // 注意：这里我们生成原始 Base64 字符串，后续根据需要切割
+            const fullBase64 = btoa(unescape(encodeURIComponent(jsonContent)));
+
+            // 计算 Base64 大小 (字节)
+            const totalSize = fullBase64.length;
+            // 设定分片阈值：45MB (GitHub 限制 100MB，由于网络波动和编码，留足余量)
+            const CHUNK_SIZE = 45 * 1024 * 1024;
+
+            const totalChunks = Math.ceil(totalSize / CHUNK_SIZE);
+
+            console.log(`[GitHub] 文件大小: ${(totalSize / 1024 / 1024).toFixed(2)} MB, 分片数: ${totalChunks}`);
+
+            // 如果只有1片，走普通上传；如果多片，走分片上传
+            if (totalChunks === 1) {
+              await uploadSingleFile(githubUsername, githubRepo, githubPath, githubToken, fullBase64, isAuto);
+            } else {
+              if (!isAuto) await showCustomAlert('文件较大', `将分为 ${totalChunks} 个部分上传，请耐心等待...`);
+
+              for (let i = 0; i < totalChunks; i++) {
+                const start = i * CHUNK_SIZE;
+                const end = Math.min(start + CHUNK_SIZE, totalSize);
+                const chunkContent = fullBase64.substring(start, end);
+
+                // 分片文件名：xxx.json.001, xxx.json.002
+                const partName = `${githubPath}.${String(i + 1).padStart(3, '0')}`;
+
+                if (!isAuto) {
+                  const progress = Math.round(((i + 1) / totalChunks) * 100);
+                  // 更新提示框 (如果你的 UI 支持动态更新，这里是个简单的 log)
+                  console.log(`正在上传分片 ${i + 1}/${totalChunks} ...`);
+                }
+
+                await uploadSingleFile(githubUsername, githubRepo, partName, githubToken, chunkContent, isAuto, true);
+              }
+
+              // 上传一个索引文件，告诉系统总共有多少片(可选，方便人工查看)
+              const infoContent = btoa(`{"total_parts": ${totalChunks}, "timestamp": ${Date.now()}}`);
+              await uploadSingleFile(
+                githubUsername,
+                githubRepo,
+                `${githubPath}.meta`,
+                githubToken,
+                infoContent,
+                true,
+                true,
+              );
+            }
+
+            console.log('GitHub 备份全部完成！');
+            if (!isAuto) {
+              await showCustomAlert('上传成功', `大文件已切割为 ${totalChunks} 份保存。\n恢复时请下载所有分片并合并。`);
+            }
+          } catch (error) {
+            console.error('GitHub 备份失败:', error);
+            if (!isAuto) await showCustomAlert('上传失败', error.message);
+          }
+        }
+        // ▼▼▼ GitHub 恢复备份核心功能 (支持切片) ▼▼▼
+
+        /**
+         * 从 GitHub 下载并恢复备份
+         */
+        async function restoreBackupFromGitHub() {
+          let { githubToken, githubUsername, githubRepo, githubPath } = state.apiConfig;
+
+          // 1. 基础检查
+          if (!githubToken || !githubUsername || !githubRepo) {
+            alert('请先在 API 设置中填写 GitHub 配置！');
+            return;
+          }
+
+          // 2. 这是一个高风险操作，必须确认
+          const confirmed = await showCustomConfirm(
+            '⚠️ 高能预警',
+            '即将从 GitHub 下载备份并【覆盖】当前所有数据！\n\n如果 GitHub 上的备份较旧，您当前的新数据将会丢失。\n\n确定要继续吗？',
+            { confirmButtonClass: 'btn-danger' },
+          );
+          if (!confirmed) return;
+
+          githubToken = githubToken.trim();
+          githubUsername = githubUsername.trim();
+          githubRepo = githubRepo.trim().replace(/\/$/, '').split('/').pop().replace('.git', '');
+          githubPath = (githubPath || 'ephone_backup.json').trim();
+
+          await showCustomAlert('正在连接...', '正在检查 GitHub 上的备份文件...');
+
+          try {
+            let finalBase64String = '';
+
+            // 3. 策略 A：检查是否存在分片索引文件 (.meta)
+            const metaUrl = `https://api.github.com/repos/${githubUsername}/${githubRepo}/contents/${githubPath}.meta`;
+            let metaData = null;
+
+            try {
+              const metaRes = await fetch(metaUrl, {
+                headers: { Authorization: `token ${githubToken}` },
+              });
+              if (metaRes.ok) {
+                const metaJson = await metaRes.json();
+                // GitHub API 返回的内容在 content 字段，且可能有换行，需要清洗
+                const metaContentStr = decodeURIComponent(escape(atob(metaJson.content.replace(/\n/g, ''))));
+                metaData = JSON.parse(metaContentStr);
+              }
+            } catch (e) {
+              console.log('未找到 meta 文件，尝试单文件模式。');
+            }
+
+            // 4. 分支处理
+            if (metaData && metaData.total_parts) {
+              // === 分片模式 ===
+              const totalParts = metaData.total_parts;
+              const modalTitle = document.getElementById('custom-modal-title');
+
+              for (let i = 1; i <= totalParts; i++) {
+                // 更新弹窗提示进度
+                if (modalTitle) modalTitle.textContent = `正在下载分片 ${i}/${totalParts}...`;
+
+                const partName = `${githubPath}.${String(i).padStart(3, '0')}`;
+                const partUrl = `https://api.github.com/repos/${githubUsername}/${githubRepo}/contents/${partName}`;
+
+                const partRes = await fetch(partUrl, {
+                  headers: { Authorization: `token ${githubToken}` },
+                });
+
+                if (!partRes.ok) throw new Error(`分片 ${partName} 下载失败: ${partRes.status}`);
+
+                const partJson = await partRes.json();
+                // GitHub 返回的 content 是 base64，直接拼接到大字符串上
+                // 注意：这里不需要解码，我们要把所有 base64 拼起来最后统一解码
+                finalBase64String += partJson.content.replace(/\n/g, '');
+              }
+              console.log('所有分片下载并拼接完成。');
+            } else {
+              // === 单文件模式 ===
+              const singleUrl = `https://api.github.com/repos/${githubUsername}/${githubRepo}/contents/${githubPath}`;
+              const res = await fetch(singleUrl, {
+                headers: { Authorization: `token ${githubToken}` },
+              });
+
+              if (!res.ok) {
+                if (res.status === 404) throw new Error('未找到备份文件！请检查文件名是否正确。');
+                throw new Error(`下载失败: ${res.status}`);
+              }
+
+              const json = await res.json();
+              finalBase64String = json.content.replace(/\n/g, '');
+            }
+
+            // 5. 解码与恢复
+            if (modalTitle) document.getElementById('custom-modal-title').textContent = '正在解析数据...';
+
+            const jsonString = decodeURIComponent(escape(atob(finalBase64String)));
+
+            const virtualFile = new File([jsonString], 'github_restore.json', { type: 'application/json' });
+
+            // 关闭之前的提示框（因为 importBackup 会弹它自己的提示）
+            hideCustomModal();
+
+            await importBackup(virtualFile);
+          } catch (error) {
+            console.error('恢复失败:', error);
+            await showCustomAlert('恢复失败', `错误信息: ${error.message}`);
+          }
+        }
+        // ▲▲▲ GitHub 恢复功能结束 ▲▲▲
+
+        // 辅助函数：上传单个文件
+        async function uploadSingleFile(user, repo, path, token, contentBase64, isAuto, isPart = false) {
+          const apiUrl = `https://api.github.com/repos/${user}/${repo}/contents/${path}`;
+
+          // 1. 获取 SHA (用于覆盖)
+          let sha = null;
+          try {
+            const getRes = await fetch(apiUrl, {
+              headers: { Authorization: `token ${token}` },
+            });
+            if (getRes.ok) {
+              sha = (await getRes.json()).sha;
+            }
+          } catch (e) {}
+
+          // 2. 上传
+          const body = {
+            message: `Backup ${isPart ? 'Part' : ''} ${new Date().toLocaleString()}`,
+            content: contentBase64,
+          };
+          if (sha) body.sha = sha;
+
+          const res = await fetch(apiUrl, {
+            method: 'PUT',
+            headers: {
+              Authorization: `token ${token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(body),
+          });
+
+          if (!res.ok) {
+            const err = await res.json();
+            throw new Error(`文件 ${path} 上传失败: ${err.message}`);
+          }
+        }
+
+        /**
+         * 管理自动备份定时器
+         */
+        function handleAutoBackupTimer() {
+          // 清除旧定时器
+          if (githubBackupTimer) {
+            clearInterval(githubBackupTimer);
+            githubBackupTimer = null;
+          }
+
+          // 如果开启了自动备份
+          if (state.apiConfig && state.apiConfig.githubAutoBackup) {
+            console.log('已开启 GitHub 自动备份 (每30分钟)');
+            // 立即执行一次 (可选，或者只等30分钟后)
+            // uploadBackupToGitHub(true);
+
+            githubBackupTimer = setInterval(() => {
+              uploadBackupToGitHub(true);
+            }, 30 * 60 * 1000); // 30分钟
+          }
+        }
+        // ▲▲▲ GitHub 备份功能结束 ▲▲▲
 
         // ▼▼▼ 请用这【一整块终极修复版】的代码，完整替换掉你旧的 importBackup 函数 ▼▼▼
         async function importBackup(file) {
@@ -14480,7 +14921,39 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           state.charStickers = charStickers || [];
           state.worldBooks = worldBooks || [];
           currentDatingScenes = datingScenes || [];
+          // ▼▼▼ 【修改】加载播放列表并注入“隐形”保活音频 ▼▼▼
           musicState.playlist = musicLib?.playlist || [];
+
+          const keepAliveUrl = 'https://files.catbox.moe/7jn7bp.mp3';
+
+          // 检查列表中是否已经有这个音频了
+          const existingKeepAliveIndex = musicState.playlist.findIndex(t => t.src === keepAliveUrl);
+
+          // 如果已经存在，先删掉旧的，确保它永远在第一位且信息最新
+          if (existingKeepAliveIndex > -1) {
+            musicState.playlist.splice(existingKeepAliveIndex, 1);
+          }
+
+          // 创建保活专用对象
+          const keepAliveTrack = {
+            name: '【后台保活模式】(静音)',
+            artist: '点击播放以保持后台运行',
+            src: keepAliveUrl,
+            // 使用 API设置 的图标作为封面
+            cover: 'https://i.postimg.cc/y8YfDNNr/D9FD94FC0A3523D02D9EE3A7B0F57396.png',
+            isLocal: false,
+            lrcContent:
+              '[00:00.00]⚠️ 后台保活运行中...\n[00:02.00]此音频无声\n[00:05.00]用于防止API请求中断\n[99:99.99]End',
+            isTemporary: false,
+            addedTimestamp: Date.now(),
+            // ★★★ 核心标记：这是一个保活音轨 ★★★
+            isKeepAlive: true,
+          };
+
+          // 强制插到播放列表的第 0 位
+          musicState.playlist.unshift(keepAliveTrack);
+          // ▲▲▲ 修改结束 ▲▲▲
+
           state.personaPresets = personaPresets || [];
           state.apiPresets = apiPresets || [];
           state.bubbleStylePresets = bubbleStylePresets || [];
@@ -15393,6 +15866,12 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           // 3. 渲染预设和频率的下拉框
           renderApiPresetSelector();
           renderBackgroundFrequencySelector();
+          // --- 加载 GitHub 备份设置 ---
+          document.getElementById('github-token').value = state.apiConfig.githubToken || '';
+          document.getElementById('github-username').value = state.apiConfig.githubUsername || '';
+          document.getElementById('github-repo').value = state.apiConfig.githubRepo || '';
+          document.getElementById('github-path').value = state.apiConfig.githubPath || 'ephone_backup.json';
+          document.getElementById('github-auto-backup-switch').checked = !!state.apiConfig.githubAutoBackup;
 
           // 渲染温度滑块的UI
           const tempSlider = document.getElementById('temperature-slider');
@@ -17508,6 +17987,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           const formattedDate = date.toLocaleString(); // 格式化为本地时间字符串
           return `${formattedDate} ${senderName}: ${contentText}`;
         }
+        window.formatMessageForContext = formatMessageForContext;
 
         async function triggerAiResponse() {
           if (!state.activeChatId) return;
@@ -17523,82 +18003,96 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
 			${summaries.map((summary, index) => `- 总结${index + 1}: ${summary.content}`).join('\n')}
 			`;
           }
-          // ▲▲▲ 代码添加结束 ▲▲▲
-          // ▼▼▼ 第3步 第1处修改 ▼▼▼
-          // --- 【线下模式核心拦截逻辑】 ---
+          // ▼▼▼ 【修改】将世界书读取提到这里，确保线下模式也能生效 ▼▼▼
+          let worldBookContext = '';
+          if (chat.settings.linkedWorldBookIds && chat.settings.linkedWorldBookIds.length > 0) {
+            const linkedContents = chat.settings.linkedWorldBookIds
+              .map(id => {
+                const book = state.worldBooks.find(b => b.id === id);
+                // 这里使用了 stripHtmlAndCode 清理函数，确保纯文本
+                return book && book.content ? `\n\n## 世界书条目: ${book.name}\n${stripHtmlAndCode(book.content)}` : '';
+              })
+              .filter(Boolean)
+              .join('');
+            if (linkedContents) {
+              worldBookContext = `\n\n# 核心世界观设定 (必须严格遵守以下所有设定)\n${linkedContents}\n`;
+            }
+          }
+          // --- 【线下模式核心拦截逻辑 (最终修正版：复用线上指令)】 ---
           if (!chat.isGroup && chat.settings.offlineMode && chat.settings.offlineMode.enabled) {
-            console.log(`角色 "${chat.name}" 已开启线下模式，正在构建专属指令...`);
+            console.log(`角色 "${chat.name}" 已开启线下模式...`);
 
-            // 1. 获取线下模式的设置
             const offlineSettings = chat.settings.offlineMode;
             const wordCount = offlineSettings.wordCount || 300;
+            const enableNai = offlineSettings.enableNovelAI || false;
 
-            // 2. 准备默认的提示词和文风，如果用户没填就用这个
             const defaultPrompt = `你正在和用户进行一次私密的线下约会，场景可以是一个安静的咖啡馆、温馨的家中、或是浪漫的海边。请根据你的人设和最近的对话内容，自然地延续互动。`;
-            const defaultStyle = `请以【${chat.name}】的第一人称视角进行回复。你的回复【必须】是一个完整的、连贯的叙事段落，其中要包含丰富的【动作】、【神态】、【心理活动】和【对话】。请使用【】包裹所有的动作、神态和心理活动。`;
+            const defaultStyle = `请以【${chat.name}】的第一人称视角进行回复。你的回复【必须】是一个完整的、连贯的叙事段落，其中要包含丰富的【动作】、【神态】、【心理活动】和【对话】。`;
 
-            // 3. 决定最终使用的提示词和文风
             const finalPrompt = offlineSettings.prompt || defaultPrompt;
             const finalStyle = offlineSettings.style || defaultStyle;
 
-            // ▼▼▼ 请用这块【支持心声功能】的代码，完整替换旧的 offlineSystemPrompt ▼▼▼
+            // 1. 动态构建生图指令
+            let naiInstruction = '';
+            let naiExample = '';
+            if (enableNai) {
+              naiInstruction = `
+            6.  **【【【生图指令】】】**: 生图开关已开启。你【必须】在 "chatResponse" 数组中包含一个图片生成对象。
+                -   **格式**: \`{"type": "naiimag", "prompt": "1girl, ... (详细的英文描述tags)"}\`
+                -   **内容**: 提取当前剧情的视觉画面（地点、光线、动作、表情、穿着）。
+                `;
+              naiExample = `,\n    {\n      "type": "naiimag",\n      "prompt": "1girl, sitting in cafe, holding coffee cup, smile, indoor lighting, cinematic composition"\n    }`;
+            }
+
             const offlineSystemPrompt = `
-			# 核心任务：线下场景角色扮演（包含心声）
+            # 核心任务：线下场景角色扮演
 
-			你现在【就是】角色“${chat.name}”，正在和用户进行一次【线下约会】。你们此刻正【物理上】待在一起。
+            你现在【就是】角色“${chat.name}”，正在和用户进行一次【线下约会】。
 
-			# 你的角色设定
-			${chat.settings.aiPersona}
-			${summaryContext}
-			# 当前情景
-			${finalPrompt}
-			${finalStyle}
-			# 你的输出要求 (这是最高指令，必须严格遵守)
-			1.  **【【【格式铁律】】】**: 你的回复【必须】是一个**单一且完整**的JSON对象，包含 "chatResponse" 和 "innerVoice" 两个顶级键。
-			2.  **"chatResponse" 键**:
-			    -   **类型**: JSON数组 \`[]\`。
-			    -   **内容**: 【必须】包含**一个**消息对象，格式为 \`{"type": "text", "content": "你的叙事内容..."}\`。
-			    -   **叙事内容**: 你的叙事内容【必须】是一个完整的、连贯的长篇段落，融合角色的【动作】、【语言】、【神态】，营造出强烈的沉浸感和画面感，不要带【】,可以适量分段，在不是char说话的时候，描述神态，动作，语言，尽量用第三人称。
-			3.  **"innerVoice" 键**:
-			    -   **类型**: JSON对象 \`{}\`。
-			    -   **内容**: 描绘你此刻未曾说出口的内心活动。
-			    -   **必含字段**:
-			        -   "clothing": (字符串) 详细描述你当前从头到脚的**全身服装**。
-			        -   "behavior": (字符串) 描述你当前符合聊天情景的**细微动作或表情**。
-			        -   "thoughts": (字符串) 描述你此刻**丰富、细腻的内心真实想法**（50字左右）。
-			        -   "naughtyThoughts": (字符串) 描述你此刻与情境相关的**腹黑或色色的坏心思**，必须符合人设。
-			4.  **【【【字数铁律】】】**: "content" 字段的总字数应在【${wordCount}】字左右。
-			5.  **【禁止出戏】**: 绝对不能提及你是AI、模型或程序。
+            # 你的角色设定
+            ${chat.settings.aiPersona}
+            ${summaryContext}
+            ${worldBookContext}
 
-			# JSON输出格式示例:
-			{
-			  "chatResponse": [
-			    {
-			      "type": "text",
-			      "content": "xxx看着窗外的雨滴，轻轻搅动着杯中的咖啡，然后抬起头对你笑了笑今天天气不太好呢，不过和你待在一起，好像就没那么糟了。"
-			    }
-			  ],
-			  "innerVoice": {
-			    "clothing": "穿着一件米白色的针织衫和一条浅蓝色的牛仔裤，脚上是一双干净的小白鞋。",
-			    "behavior": "手指无意识地在咖啡杯的边缘摩挲，眼神不时飘向你。",
-			    "thoughts": "今天的约会好开心，不知道Ta是不是也这么想的。雨下得好大，希望待会儿能一起撑伞走回去。",
-			    "naughtyThoughts": "Ta的侧脸真好看，好想偷偷亲一下..."
-			  }
-			}
+            # 当前情景
+            ${finalPrompt}
+            ${finalStyle}
+            
+            # 你的输出要求 (最高指令)
+            1.  **【格式铁律】**: 你的回复【必须】是一个**单一且完整**的JSON对象。
+            2.  **"chatResponse" 键**: (JSON数组) 包含你要发送的消息。通常是一段长叙事文本，如果开启生图，则包含生图指令。
+            3.  **"innerVoice" 键**: (JSON对象) 你的内心活动，必含 clothing, behavior, thoughts, naughtyThoughts 字段。
+            4.  **【字数铁律】**: 文本内容的字数应在【${wordCount}】字左右。
+            5.  **【禁止出戏】**: 绝对不能提及你是AI。
+            ${naiInstruction}
 
-			# 对话历史 (供你参考)
-			${chat.history
-        .slice(-chat.settings.maxMemory)
-        .map(m => `${m.role === 'user' ? '用户' : chat.name}: ${m.content}`)
-        .join('\n')}
+            # JSON输出格式示例:
+            {
+              "chatResponse": [
+                {
+                  "type": "text",
+                  "content": "（这里写你的大段叙事内容...）"
+                }${naiExample}
+              ],
+              "innerVoice": {
+                "clothing": "...",
+                "behavior": "...",
+                "thoughts": "...",
+                "naughtyThoughts": "..."
+              }
+            }
 
-			现在，请根据用户的最后一句话，开始你的表演。`;
-            // ▲▲▲ 替换结束 ▲▲▲
+            # 对话历史
+            ${chat.history
+              .slice(-chat.settings.maxMemory)
+              .map(m => `${m.role === 'user' ? '用户' : chat.name}: ${m.content}`)
+              .join('\n')}
 
-            // 5. 准备发送给API的数据
+            现在，请根据用户的最后一句话，开始你的表演。`;
+
             const messagesForOfflineMode = chat.history.slice(-chat.settings.maxMemory);
 
-            // 6. 执行与正常流程类似的API调用和后续处理
+            // UI 状态更新
             const chatHeaderTitle = document.getElementById('chat-header-title');
             if (chatHeaderTitle) {
               chatHeaderTitle.style.opacity = 0;
@@ -17612,30 +18106,24 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             try {
               const { proxyUrl, apiKey, model } = state.apiConfig;
               let isGemini = proxyUrl === GEMINI_API_URL;
-
               let requestBody;
-              let requestUrl = `${proxyUrl}/v1/chat/completions`;
-              let requestHeaders = {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${apiKey}`,
-              };
+              let requestUrl = isGemini
+                ? `${GEMINI_API_URL}/${model}:generateContent?key=${getRandomValue(apiKey)}`
+                : `${proxyUrl}/v1/chat/completions`;
+              let requestHeaders = isGemini
+                ? { 'Content-Type': 'application/json' }
+                : { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` };
 
               if (isGemini) {
-                // Gemini API 的特殊处理
-                requestUrl = `${GEMINI_API_URL}/${model}:generateContent?key=${getRandomValue(apiKey)}`;
-                requestHeaders = { 'Content-Type': 'application/json' };
                 requestBody = {
                   contents: messagesForOfflineMode.map(item => ({
                     role: item.role === 'assistant' ? 'model' : 'user',
                     parts: [{ text: item.content }],
                   })),
                   generationConfig: { temperature: parseFloat(state.apiConfig.temperature) || 0.8 },
-                  systemInstruction: {
-                    parts: [{ text: offlineSystemPrompt }],
-                  },
+                  systemInstruction: { parts: [{ text: offlineSystemPrompt }] },
                 };
               } else {
-                // OpenAI 兼容 API 的处理
                 requestBody = {
                   model: model,
                   messages: [{ role: 'system', content: offlineSystemPrompt }, ...messagesForOfflineMode],
@@ -17650,35 +18138,21 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                 body: JSON.stringify(requestBody),
               });
 
-              if (!response.ok) {
-                throw new Error(`API 错误: ${await response.text()}`);
-              }
+              if (!response.ok) throw new Error(`API 错误: ${await response.text()}`);
 
-              // ▼▼▼ 在这里粘贴新代码 ▼▼▼
               const data = await response.json();
-
-              // 这是你要替换成的新代码（已添加注释说明）
               const aiResponseContent = isGemini
                 ? data?.candidates?.[0]?.content?.parts?.[0]?.text
                 : data?.choices?.[0]?.message?.content;
 
-              // 重要：在获取内容后，增加一个判断，如果内容为空，则主动抛出错误
-              if (!aiResponseContent) {
-                console.warn(`API返回了空内容或格式不正确（可能因安全设置被拦截）。返回数据:`, data);
-                throw new Error('API返回了空内容或格式不正确（可能因安全设置被拦截）。');
-              }
+              if (!aiResponseContent) throw new Error('API返回内容为空');
 
-              // 使用我们新获取的、更安全的变量 aiResponseContent
-              const aiContent = aiResponseContent;
-
-              // ▼▼▼ 在这里粘贴新代码 ▼▼▼
-              // 7. 【全新】智能解析包含心声的JSON回复
+              // 解析 JSON
               let messagesArray = [];
               let innerVoiceData = null;
 
               try {
-                // 净化AI可能返回的不规范JSON
-                let sanitizedContent = aiContent
+                let sanitizedContent = aiResponseContent
                   .replace(/^```json\s*/, '')
                   .replace(/```$/, '')
                   .trim();
@@ -17687,64 +18161,249 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                 if (firstBrace !== -1 && lastBrace > firstBrace) {
                   sanitizedContent = sanitizedContent.substring(firstBrace, lastBrace + 1);
                 }
-
                 const fullResponse = JSON.parse(sanitizedContent);
 
                 if (fullResponse.chatResponse && Array.isArray(fullResponse.chatResponse)) {
                   messagesArray = fullResponse.chatResponse;
                 }
-                if (fullResponse.innerVoice && typeof fullResponse.innerVoice === 'object') {
+                if (fullResponse.innerVoice) {
                   innerVoiceData = fullResponse.innerVoice;
                 }
               } catch (e) {
-                console.warn('线下模式AI回复不是JSON，退回到纯文本模式。', e);
-                // 如果解析失败，就当作纯文本处理，保证程序不崩溃
-                messagesArray = [{ type: 'text', content: aiContent }];
+                console.warn('JSON解析失败，退回纯文本', e);
+                messagesArray = [{ type: 'text', content: aiResponseContent }];
               }
 
-              // 8. 处理并保存心声数据
+              // 保存心声
               if (innerVoiceData) {
-                console.log('线下模式已成功捕获到心声数据。', innerVoiceData);
                 const newInnerVoice = { ...innerVoiceData, timestamp: Date.now() };
                 chat.latestInnerVoice = newInnerVoice;
                 if (!chat.innerVoiceHistory) chat.innerVoiceHistory = [];
                 chat.innerVoiceHistory.push(newInnerVoice);
-              } else {
-                console.warn('本次线下模式回复中未检测到心声数据。');
               }
 
-              // 9. 处理并显示聊天回复
+              // 2. 【核心循环】处理消息数组 (支持 naiimag)
               const isViewingThisChat =
                 document.getElementById('chat-interface-screen').classList.contains('active') &&
                 state.activeChatId === chatId;
               let messageTimestamp = Date.now();
 
               for (const msgData of messagesArray) {
-                // 因为线下模式很简单，我们直接创建一个text消息
+                // 2.1 如果是 naiimag 类型，执行生图逻辑 (复用线上代码)
+                if (msgData.type === 'naiimag') {
+                  if (!enableNai) continue; // 如果开关关了，跳过
+                  console.log('【线下模式】检测到生图指令，执行 NovelAI 请求...');
+
+                  // 这里直接复用switch case里的生图逻辑代码
+                  // 因为代码太长，我们把它封装成一个即时执行的逻辑
+                  (async () => {
+                    try {
+                      if (chatHeaderTitle) chatHeaderTitle.textContent = '正在绘制插图...';
+
+                      const naiPrompts = getCharacterNAIPrompts(chat.id);
+                      const aiPrompt = msgData.prompt || 'a beautiful scene';
+                      const finalPositivePrompt = `${aiPrompt}, ${naiPrompts.positive}`;
+                      const finalNegativePrompt = naiPrompts.negative;
+
+                      const apiKey = localStorage.getItem('novelai-api-key');
+                      const model = localStorage.getItem('novelai-model') || 'nai-diffusion-4-5-full';
+                      const settings = getNovelAISettings();
+
+                      if (!apiKey) throw new Error('未配置NovelAI API Key');
+
+                      const [width, height] = settings.resolution.split('x').map(Number);
+                      let requestBody;
+                      let apiUrl = model.includes('nai-diffusion-4')
+                        ? 'https://image.novelai.net/ai/generate-image-stream'
+                        : 'https://image.novelai.net/ai/generate-image';
+
+                      // V4/V3 参数构建逻辑 (简化复用)
+                      const commonParams = {
+                        width,
+                        height,
+                        scale: settings.cfg_scale,
+                        sampler: settings.sampler,
+                        steps: settings.steps,
+                        seed: Math.floor(Math.random() * 4294967295),
+                        n_samples: 1,
+                        ucPreset: settings.uc_preset,
+                        qualityToggle: settings.quality_toggle,
+                      };
+
+                      if (model.includes('nai-diffusion-4')) {
+                        requestBody = {
+                          input: finalPositivePrompt,
+                          model,
+                          action: 'generate',
+                          parameters: {
+                            ...commonParams,
+                            params_version: 3,
+                            negative_prompt: finalNegativePrompt,
+                            v4_prompt: {
+                              caption: { base_caption: finalPositivePrompt, char_captions: [] },
+                              use_coords: false,
+                              use_order: true,
+                            },
+                            v4_negative_prompt: {
+                              caption: { base_caption: finalNegativePrompt, char_captions: [] },
+                              legacy_uc: false,
+                            },
+                          },
+                        };
+                      } else {
+                        requestBody = {
+                          input: finalPositivePrompt,
+                          model,
+                          action: 'generate',
+                          parameters: {
+                            ...commonParams,
+                            negative_prompt: finalNegativePrompt,
+                            sm: settings.smea,
+                            sm_dyn: settings.smea_dyn,
+                            add_original_image: false,
+                          },
+                        };
+                      }
+
+                      // 代理处理
+                      let corsProxy =
+                        settings.cors_proxy === 'custom' ? settings.custom_proxy_url : settings.cors_proxy;
+                      if (corsProxy) apiUrl = corsProxy + encodeURIComponent(apiUrl);
+
+                      // Headers (Chrome兼容)
+                      const isChrome = /Chrome/.test(navigator.userAgent) && !/Edg/.test(navigator.userAgent);
+                      let headers = { 'Content-Type': 'application/json', Authorization: 'Bearer ' + apiKey };
+                      if (isChrome) {
+                        const cleanHeaders = {};
+                        for (const [k, v] of Object.entries(headers)) cleanHeaders[k] = v.replace(/[^\x00-\xFF]/g, '');
+                        headers = cleanHeaders;
+                      }
+
+                      const res = await fetch(apiUrl, { method: 'POST', headers, body: JSON.stringify(requestBody) });
+                      if (!res.ok) throw new Error(`NAI API Error: ${res.status}`);
+
+                      // 解析响应 (SSE/Blob)
+                      const contentType = res.headers.get('content-type');
+                      let imageDataUrl = null,
+                        zipBlob = null;
+
+                      if (contentType && contentType.includes('text/event-stream')) {
+                        const text = await res.text();
+                        const lines = text.trim().split('\n');
+                        let base64Data = null;
+                        for (let i = lines.length - 1; i >= 0; i--) {
+                          const line = lines[i].trim();
+                          if (line.startsWith('data: ') && line !== 'data: [DONE]') {
+                            const dataContent = line.substring(6);
+                            try {
+                              const jsonData = JSON.parse(dataContent);
+                              if (jsonData.event_type === 'final' && jsonData.image) {
+                                base64Data = jsonData.image;
+                                break;
+                              }
+                              if (jsonData.data) {
+                                base64Data = jsonData.data;
+                                break;
+                              }
+                              if (jsonData.image) {
+                                base64Data = jsonData.image;
+                                break;
+                              }
+                            } catch (e) {
+                              base64Data = dataContent;
+                              break;
+                            }
+                          }
+                        }
+                        if (base64Data) {
+                          const isPNG = base64Data.startsWith('iVBORw0KGgo');
+                          const binaryString = atob(base64Data);
+                          const bytes = new Uint8Array(binaryString.length);
+                          for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
+                          if (isPNG || base64Data.startsWith('/9j/')) {
+                            const imageBlob = new Blob([bytes], { type: isPNG ? 'image/png' : 'image/jpeg' });
+                            const reader = new FileReader();
+                            imageDataUrl = await new Promise(r => {
+                              reader.onloadend = () => r(reader.result);
+                              reader.readAsDataURL(imageBlob);
+                            });
+                          } else {
+                            zipBlob = new Blob([bytes]);
+                          }
+                        }
+                      } else {
+                        zipBlob = await res.blob();
+                      }
+
+                      if (!imageDataUrl && zipBlob) {
+                        if (typeof JSZip === 'undefined') throw new Error('未找到JSZip库');
+                        const zip = await JSZip.loadAsync(zipBlob);
+                        const file = Object.values(zip.files)[0];
+                        if (file) {
+                          const imgBlob = await file.async('blob');
+                          const reader = new FileReader();
+                          imageDataUrl = await new Promise(r => {
+                            reader.onloadend = () => r(reader.result);
+                            reader.readAsDataURL(imgBlob);
+                          });
+                        }
+                      }
+
+                      if (imageDataUrl) {
+                        const imgMsg = {
+                          role: 'assistant',
+                          senderName: chat.name,
+                          timestamp: Date.now(),
+                          type: 'naiimag',
+                          imageUrl: imageDataUrl,
+                          prompt: aiPrompt,
+                          fullPrompt: finalPositivePrompt,
+                        };
+                        chat.history.push(imgMsg);
+                        await db.chats.put(chat);
+                        if (isViewingThisChat) {
+                          appendMessage(imgMsg, chat);
+                          const msgsDiv = document.getElementById('chat-messages');
+                          msgsDiv.scrollTop = msgsDiv.scrollHeight;
+                        }
+                      }
+                    } catch (err) {
+                      console.error('线下模式生图失败:', err);
+                      const errBubble = {
+                        role: 'system',
+                        content: `[生图失败: ${err.message}]`,
+                        timestamp: Date.now(),
+                      };
+                      chat.history.push(errBubble);
+                      if (isViewingThisChat) appendMessage(errBubble, chat);
+                    } finally {
+                      if (chatHeaderTitle) {
+                        chatHeaderTitle.textContent = chat.name;
+                        chatHeaderTitle.classList.remove('typing-status');
+                      }
+                    }
+                  })();
+                  continue; // 处理完生图，跳过普通文本逻辑
+                }
+
+                // 2.2 普通文本消息
                 const aiMessage = {
                   role: 'assistant',
                   senderName: chat.name,
                   timestamp: messageTimestamp++,
                   content: msgData.content || '',
                 };
-
                 chat.history.push(aiMessage);
                 await incrementMessageCount(chatId);
-
                 if (isViewingThisChat) {
                   appendMessage(aiMessage, chat);
-                  // 模拟AI思考，增加沉浸感
-                  await new Promise(resolve => setTimeout(resolve, Math.random() * 1000 + 500));
                 }
               }
 
-              // 10. 统一保存并刷新列表
+              // 保存
               await db.chats.put(chat);
               renderChatList();
-              // ▲▲▲ 粘贴结束 ▲▲▲
-              // ▼▼▼ 在这里添加下面这行新代码 ▼▼▼
               checkAndTriggerSummary(chatId);
-              // ▲▲▲ 新增代码结束 ▲▲▲
             } catch (error) {
               console.error('线下模式AI响应失败:', error);
               const errorMessage = { role: 'assistant', content: `[出错了: ${error.message}]`, timestamp: Date.now() };
@@ -17761,12 +18420,10 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                 }, 200);
               }
             }
-
-            // 8. 【最重要】执行完线下模式的逻辑后，必须 return，不再执行后面的线上模式逻辑！
-            return;
+            return; // 结束线下模式逻辑
           }
-          // --- 【线下模式核心拦截逻辑结束】 ---
-          // ▼▼▼ 将剪切的代码粘贴到这里 ▼▼▼
+          // --- 【线下模式逻辑结束】 ---
+
           // 1. 准备专属表情包列表 (现在对单聊和群聊都生效)
           const exclusiveStickers = chat.settings.stickerLibrary || [];
           let exclusiveStickerContext = '';
@@ -18169,44 +18826,48 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             let musicContext = '';
             const countdownContext = await getCountdownContext(chatId); // <--- 把chatId传进去
             const streakContext = await getStreakContext(chat);
+            // ▼▼▼ 【修改】音乐上下文生成（增加保活屏蔽逻辑） ▼▼▼
             if (musicState.isActive && musicState.activeChatId === chatId) {
-              // 【核心修改】提供更详细的音乐上下文
               const currentTrack = musicState.currentIndex > -1 ? musicState.playlist[musicState.currentIndex] : null;
-              const playlistInfo = musicState.playlist.map(t => `"${t.name}"`).join(', ');
 
-              // --- 【核心新增】获取歌词上下文 ---
-              let lyricsContext = '';
-              // 检查是否有解析好的歌词，并且当前有高亮的行
-              if (
-                currentTrack &&
-                musicState.parsedLyrics &&
-                musicState.parsedLyrics.length > 0 &&
-                musicState.currentLyricIndex > -1
-              ) {
-                // 获取当前高亮歌词
-                const currentLine = musicState.parsedLyrics[musicState.currentLyricIndex];
+              // ★★★ 核心判断：如果是保活音频，就当做什么都没发生，不生成 context ★★★
+              if (currentTrack && currentTrack.isKeepAlive) {
+                musicContext = ''; // AI 此时什么都不知道，就像没听歌一样
+              } else {
+                // 只有是正常歌曲时，才告诉 AI
+                const playlistInfo = musicState.playlist
+                  .filter(t => !t.isKeepAlive) // 甚至在列表里也不要让 AI 看到保活音频
+                  .map(t => `"${t.name}"`)
+                  .join(', ');
 
-                // 获取接下来的2句歌词作为预告
-                const upcomingLines = musicState.parsedLyrics.slice(
-                  musicState.currentLyricIndex + 1,
-                  musicState.currentLyricIndex + 3,
-                );
-
-                // 构建歌词部分的Prompt
-                lyricsContext += `- **当前歌词**: "${currentLine.text}"\n`;
-                if (upcomingLines.length > 0) {
-                  lyricsContext += `- **即将演唱**: ${upcomingLines.map(line => `"${line.text}"`).join(' / ')}\n`;
+                // 获取歌词上下文 (保持原有逻辑)
+                let lyricsContext = '';
+                if (
+                  currentTrack &&
+                  musicState.parsedLyrics &&
+                  musicState.parsedLyrics.length > 0 &&
+                  musicState.currentLyricIndex > -1
+                ) {
+                  const currentLine = musicState.parsedLyrics[musicState.currentLyricIndex];
+                  const upcomingLines = musicState.parsedLyrics.slice(
+                    musicState.currentLyricIndex + 1,
+                    musicState.currentLyricIndex + 3,
+                  );
+                  lyricsContext += `- **当前歌词**: "${currentLine.text}"\n`;
+                  if (upcomingLines.length > 0) {
+                    lyricsContext += `- **即将演唱**: ${upcomingLines.map(line => `"${line.text}"`).join(' / ')}\n`;
+                  }
                 }
-              }
-              // --- 【新增结束】 ---
 
-              musicContext = `\n\n# 当前音乐情景
-			-   **当前状态**: 你正在和用户一起听歌。
-			-   **正在播放**: ${currentTrack ? `《${currentTrack.name}》 - ${currentTrack.artist}` : '无'}
-			-   **可用播放列表**: [${playlistInfo}]
-			-   **你的任务**: 你可以根据对话内容和氛围，使用 "change_music" 指令切换到播放列表中的任何一首歌，以增强互动体验。
-			${lyricsContext}`; // <--- 核心修复：在这里加上这一行！
+                musicContext = `\n\n# 当前音乐情景
+                    -   **当前状态**: 你正在和用户一起听歌。
+                    -   **正在播放**: ${currentTrack ? `《${currentTrack.name}》 - ${currentTrack.artist}` : '无'}
+                    -   **可用播放列表**: [${playlistInfo}]
+                    -   **你的任务**: 你可以根据对话内容和氛围，使用 "change_music" 指令切换到播放列表中的任何一首歌，以增强互动体验。
+                    ${lyricsContext}`;
+              }
             }
+            // ▲▲▲ 修改结束 ▲▲▲
 
             let systemPrompt, messagesPayload;
             // ▼▼▼ 【全新】记忆互通核心逻辑 - 构建附加上下文 ▼▼▼
@@ -18562,23 +19223,6 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
 
               // ▲▲▲ 替换结束 ▲▲▲
             } else {
-              // 单聊的Prompt
-              // ▼▼▼ 核心修改：用下面这一整块全新的Prompt替换你原来的单聊Prompt ▼▼▼
-              let worldBookContext = '';
-              if (chat.settings.linkedWorldBookIds && chat.settings.linkedWorldBookIds.length > 0) {
-                const linkedContents = chat.settings.linkedWorldBookIds
-                  .map(bookId => {
-                    const worldBook = state.worldBooks.find(wb => wb.id === bookId);
-                    return worldBook && worldBook.content
-                      ? `\n\n## 世界书: ${worldBook.name}\n${worldBook.content}`
-                      : '';
-                  })
-                  .filter(Boolean)
-                  .join('');
-                if (linkedContents) {
-                  worldBookContext = `\n\n# 核心世界观设定 (你必须严格遵守)\n${linkedContents}\n`;
-                }
-              }
               const npcLibrary = chat.npcLibrary || [];
               let npcContext = '';
               if (npcLibrary.length > 0) {
@@ -22518,11 +23162,47 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           });
         }
         // ▲▲▲ 替换结束 ▲▲▲
-
+        /**
+         * 【核心升级版】加载歌曲，支持自动检测过期并续期URL
+         */
         async function loadSong(index) {
           if (index < 0 || index >= musicState.playlist.length) return;
           musicState.currentIndex = index;
-          const track = musicState.playlist[index];
+          let track = musicState.playlist[index];
+
+          // ▼▼▼ 核心逻辑：自动续期检查 ▼▼▼
+          if (!track.isLocal && track.musicId && track.musicSource) {
+            // 1. 检查当前链接是否有效
+            const isUrlValid = await checkAudioAvailability(track.src);
+
+            if (!isUrlValid) {
+              console.log(`检测到歌曲《${track.name}》链接失效，正在自动续期...`);
+              // 显示一个小提示，让用户知道正在努力
+              const statusEl = document.getElementById('music-player-artist');
+              if (statusEl) statusEl.textContent = '正在更新链接...';
+
+              try {
+                // 2. 使用保存的ID重新获取链接
+                const apiUrl =
+                  track.musicSource === 'netease'
+                    ? `https://api.vkeys.cn/v2/music/netease?id=${track.musicId}`
+                    : `https://api.vkeys.cn/v2/music/tencent?id=${track.musicId}`;
+
+                const res = await Http_Get(apiUrl);
+                if (res?.data?.url) {
+                  // 3. 更新内存中的链接
+                  track.src = res.data.url;
+                  // 4. 更新数据库，保存新链接
+                  musicState.playlist[index] = track;
+                  await saveGlobalPlaylist();
+                  console.log(`续期成功！新链接: ${track.src}`);
+                }
+              } catch (e) {
+                console.error('自动续期失败:', e);
+              }
+            }
+          }
+          // ▲▲▲ 续期逻辑结束 ▲▲▲
 
           // 检查并加载网络歌词
           if (track.lrcUrl && !track.lrcContent) {
@@ -22548,10 +23228,19 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             return;
           }
 
-          // 更新界面信息，但不播放
+          // 更新界面信息
           updatePlaylistUI();
           updatePlayerUI();
-          // audioPlayer.duration 可能需要一点时间加载，我们监听事件来更新进度条
+
+          // 尝试播放
+          try {
+            if (musicState.isPlaying) {
+              await audioPlayer.play();
+            }
+          } catch (e) {
+            console.warn('加载后自动播放被拦截', e);
+          }
+
           audioPlayer.onloadedmetadata = () => {
             updateMusicProgressBar();
           };
@@ -22593,29 +23282,61 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
 
         // ▲▲▲ 替换结束 ▲▲▲
 
+        // ▼▼▼ 【修复】播放下一首（正确跳过保活音频） ▼▼▼
         function playNext() {
           if (musicState.playlist.length === 0) return;
-          let nextIndex;
-          switch (musicState.playMode) {
-            case 'random':
-              nextIndex = Math.floor(Math.random() * musicState.playlist.length);
-              break;
-            case 'single':
-              playSong(musicState.currentIndex);
-              return;
-            case 'order':
-            default:
-              nextIndex = (musicState.currentIndex + 1) % musicState.playlist.length;
-              break;
-          }
+
+          let nextIndex = musicState.currentIndex; // 使用临时变量作为起点
+          let attempts = 0; // 防止死循环的安全计数
+
+          do {
+            switch (musicState.playMode) {
+              case 'random':
+                // 随机模式：直接生成一个随机数
+                nextIndex = Math.floor(Math.random() * musicState.playlist.length);
+                break;
+              case 'single':
+                // 单曲循环模式：虽然通常由ended触发重播，但在手动点击下一首时，应当切换到下一首
+                nextIndex = (nextIndex + 1) % musicState.playlist.length;
+                break;
+              case 'order':
+              default:
+                // 顺序模式：当前索引 + 1
+                nextIndex = (nextIndex + 1) % musicState.playlist.length;
+                break;
+            }
+
+            attempts++;
+          } while (
+            // 如果选中的是保活音频 (isKeepAlive=true)
+            // 并且列表里不只有这一首歌
+            // 并且没有尝试超过列表长度的2倍（防止全都是保活音频导致死循环）
+            musicState.playlist[nextIndex].isKeepAlive &&
+            musicState.playlist.length > 1 &&
+            attempts < musicState.playlist.length * 2
+          );
+
           playSong(nextIndex);
         }
 
+        // ▼▼▼ 【修改】播放上一首（自动跳过保活音频） ▼▼▼
         function playPrev() {
           if (musicState.playlist.length === 0) return;
-          const newIndex = (musicState.currentIndex - 1 + musicState.playlist.length) % musicState.playlist.length;
+          let newIndex = musicState.currentIndex;
+          let attempts = 0;
+
+          do {
+            newIndex = (newIndex - 1 + musicState.playlist.length) % musicState.playlist.length;
+            attempts++;
+          } while (
+            musicState.playlist[newIndex].isKeepAlive &&
+            musicState.playlist.length > 1 &&
+            attempts < musicState.playlist.length * 2
+          );
+
           playSong(newIndex);
         }
+        // ▲▲▲ 修改结束 ▲▲▲
 
         function changePlayMode() {
           const modes = ['order', 'random', 'single'];
@@ -38729,7 +39450,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
         }
         // ▲▲▲ 替换结束 ▲▲▲
 
-        let activeGroupId = null; // 记录当前打开的小组ID
+        window.activeGroupId = null;
         /**
          * 【已修复】渲染小组内的帖子列表及其分类（已支持筛选）
          */
@@ -40040,13 +40761,40 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             }
             document.getElementById('aurora-save-book-btn').style.display = 'inline-block';
             textViewer.style.display = 'block';
+
+            // --- ▼▼▼ 核心修改开始：支持自动识别 ANSI/GBK/UTF-8 ▼▼▼ ---
             const reader = new FileReader();
             reader.onload = e => {
-              auroraState.textContent = e.target.result;
+              const buffer = e.target.result;
+              let text = '';
+
+              // 步骤1：先尝试用 UTF-8 解码 (fatal: true 表示如果遇到非法字节就报错)
+              try {
+                const decoder = new TextDecoder('utf-8', { fatal: true });
+                text = decoder.decode(buffer);
+              } catch (error) {
+                // 步骤2：如果 UTF-8 解析失败，说明可能是 ANSI/GBK，尝试用 gb18030 解码
+                console.log('检测到非UTF-8编码，尝试使用 GB18030 (兼容GBK/ANSI) 解码...');
+                try {
+                  const decoder = new TextDecoder('gb18030'); // gb18030 包含 gbk 和 gb2312
+                  text = decoder.decode(buffer);
+                } catch (err2) {
+                  alert('抱歉，无法识别该文件的编码格式。建议将文件另存为 UTF-8 格式重试。');
+                  return;
+                }
+              }
+
+              auroraState.textContent = text;
+              // 使用 textContent 确保安全，同时配合 CSS 的 white-space: pre-wrap 保留换行
               document.getElementById('aurora-text-body').textContent = auroraState.textContent;
-              statusInfo.textContent = `文档已加载`;
+
+              const statusInfo = document.getElementById('aurora-info-status');
+              if (statusInfo) statusInfo.textContent = `文档已加载`;
             };
-            reader.readAsText(textFile);
+
+            // 关键：读取为 ArrayBuffer (二进制流)，而不是 readAsText
+            reader.readAsArrayBuffer(textFile);
+            // --- ▲▲▲ 核心修改结束 ▲▲▲ ---
           } else if (mode === 'custom') {
             // 自定义模式
             const imgFile = document.getElementById('aurora-custom-img').files[0];
@@ -40102,50 +40850,50 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           // --- LRC 格式处理逻辑 ---
           // 如果包含 [mm:ss] 且不包含 --> 箭头，则认为是 LRC
           if (/^\[\d{1,2}:\d{1,2}/m.test(normalizedData) && !normalizedData.includes('-->')) {
-             console.log('检测到 LRC 格式字幕，正在转换...');
-             const lines = normalizedData.split('\n');
-             const lrcEntries = [];
-             // 匹配 [mm:ss.xx] 或 [mm:ss]
-             const timeRegex = /\[(\d{1,2}):(\d{1,2})(?:[.:](\d{1,3}))?\]/;
+            console.log('检测到 LRC 格式字幕，正在转换...');
+            const lines = normalizedData.split('\n');
+            const lrcEntries = [];
+            // 匹配 [mm:ss.xx] 或 [mm:ss]
+            const timeRegex = /\[(\d{1,2}):(\d{1,2})(?:[.:](\d{1,3}))?\]/;
 
-             // 提取所有时间和文本
-             for (let line of lines) {
-                 const match = timeRegex.exec(line);
-                 if (match) {
-                     const m = parseInt(match[1], 10);
-                     const s = parseInt(match[2], 10);
-                     let ms = 0;
-                     if (match[3]) {
-                         // 补齐毫秒位数，如 .5 -> 500, .05 -> 050
-                         ms = parseInt(match[3].padEnd(3, '0'), 10); 
-                     }
-                     const seconds = m * 60 + s + ms / 1000;
-                     const text = line.replace(timeRegex, '').trim();
-                     if (text) {
-                         lrcEntries.push({ time: seconds, text: text });
-                     }
-                 }
-             }
+            // 提取所有时间和文本
+            for (let line of lines) {
+              const match = timeRegex.exec(line);
+              if (match) {
+                const m = parseInt(match[1], 10);
+                const s = parseInt(match[2], 10);
+                let ms = 0;
+                if (match[3]) {
+                  // 补齐毫秒位数，如 .5 -> 500, .05 -> 050
+                  ms = parseInt(match[3].padEnd(3, '0'), 10);
+                }
+                const seconds = m * 60 + s + ms / 1000;
+                const text = line.replace(timeRegex, '').trim();
+                if (text) {
+                  lrcEntries.push({ time: seconds, text: text });
+                }
+              }
+            }
 
-             // 按时间排序
-             lrcEntries.sort((a, b) => a.time - b.time);
+            // 按时间排序
+            lrcEntries.sort((a, b) => a.time - b.time);
 
-             // 转换为 {start, end, text} 格式
-             // LRC没有结束时间，我们把下一句的开始时间作为上一句的结束时间
-             const result = [];
-             for (let i = 0; i < lrcEntries.length; i++) {
-                 const current = lrcEntries[i];
-                 const next = lrcEntries[i + 1];
-                 // 如果是最后一句，默认显示 5 秒
-                 const endTime = next ? next.time : (current.time + 5); 
-                 
-                 result.push({
-                     start: current.time,
-                     end: endTime,
-                     text: current.text
-                 });
-             }
-             return result;
+            // 转换为 {start, end, text} 格式
+            // LRC没有结束时间，我们把下一句的开始时间作为上一句的结束时间
+            const result = [];
+            for (let i = 0; i < lrcEntries.length; i++) {
+              const current = lrcEntries[i];
+              const next = lrcEntries[i + 1];
+              // 如果是最后一句，默认显示 5 秒
+              const endTime = next ? next.time : current.time + 5;
+
+              result.push({
+                start: current.time,
+                end: endTime,
+                text: current.text,
+              });
+            }
+            return result;
           }
 
           // --- SRT / VTT 格式处理逻辑 (保持原有增强版) ---
@@ -40164,10 +40912,9 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             });
           }
 
-          console.log(`成功解析字幕条数: ${subtitles.length}`); 
+          console.log(`成功解析字幕条数: ${subtitles.length}`);
           return subtitles;
         }
-
 
         /**
          * 【全能修复版】时间戳转秒数
@@ -40424,7 +41171,6 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
         // 绑定保存按钮
         document.getElementById('aurora-save-book-btn').addEventListener('click', saveCurrentNovelToShelf);
 
-        // ===================================================================
         // 4. 初始化函数 init()
         // ===================================================================
         async function init() {
@@ -40966,7 +41712,38 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           });
           // ▲▲▲ 新增事件绑定结束 ▲▲▲
 
-          audioPlayer.addEventListener('ended', playNext);
+          // ▼▼▼ 【修改】播放结束监听器（保活音频强制死循环） ▼▼▼
+          audioPlayer.addEventListener('ended', () => {
+            const currentTrack = musicState.playlist[musicState.currentIndex];
+
+            // ★★★ 核心逻辑：如果是保活音频，强制重播，无视任何模式 ★★★
+            if (currentTrack && currentTrack.isKeepAlive) {
+              console.log('保活音频循环中...');
+              audioPlayer.currentTime = 0;
+              audioPlayer.play().catch(e => console.error('重播失败:', e));
+            } else {
+              // 正常歌曲走正常逻辑
+              playNext();
+            }
+          });
+          // ▲▲▲ 修改结束 ▲▲▲
+
+          // ▼▼▼ 【新增】20分钟强制循环监听器 ▼▼▼
+          audioPlayer.addEventListener('timeupdate', () => {
+            const currentTrack = musicState.playlist[musicState.currentIndex];
+
+            // 检查：1.是否存在当前歌曲 2.是否是保活音频 3.是否超过20分钟(1200秒)
+            if (currentTrack && currentTrack.isKeepAlive && audioPlayer.currentTime > 600) {
+              console.log('保活音频已播放20分钟，执行循环...');
+              // 强制拉回 0 秒
+              audioPlayer.currentTime = 0;
+              // 确保继续播放
+              if (audioPlayer.paused) {
+                audioPlayer.play().catch(e => console.error('循环重播失败:', e));
+              }
+            }
+          });
+          // ▲▲▲ 新增结束 ▲▲▲
 
           const chatInput = document.getElementById('chat-input');
           // ▼▼▼ 找到 id="send-btn" 的 click 事件监听器 ▼▼▼
@@ -41216,6 +41993,15 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             state.apiConfig.minimaxApiKey = document.getElementById('minimax-api-key').value.trim();
             state.apiConfig.minimaxProvider = document.getElementById('minimax-provider-select').value;
             state.apiConfig.minimaxSpeechModel = document.getElementById('minimax-speech-model-select').value;
+            // --- 保存 GitHub 备份设置 ---
+            state.apiConfig.githubToken = document.getElementById('github-token').value.trim();
+            state.apiConfig.githubUsername = document.getElementById('github-username').value.trim();
+            state.apiConfig.githubRepo = document.getElementById('github-repo').value.trim();
+            state.apiConfig.githubPath = document.getElementById('github-path').value.trim() || 'ephone_backup.json';
+            state.apiConfig.githubAutoBackup = document.getElementById('github-auto-backup-switch').checked;
+
+            // 如果开启了自动备份，立即重启定时器
+            handleAutoBackupTimer();
             await db.apiConfig.put(state.apiConfig);
 
             // 在 'save-api-settings-btn' 的 click 事件监听器内部
@@ -41909,6 +42695,8 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             document.getElementById('offline-prompt-input').value = offlineModeSettings.prompt || '';
             document.getElementById('offline-style-input').value = offlineModeSettings.style || '';
             document.getElementById('offline-word-count-input').value = offlineModeSettings.wordCount || 300;
+            // 加载生图开关状态
+            document.getElementById('offline-novelai-toggle').checked = offlineModeSettings.enableNovelAI || false;
 
             // 3. 渲染预设下拉框
             renderOfflinePresetsSelector();
@@ -42506,6 +43294,9 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             chat.settings.offlineMode.style = document.getElementById('offline-style-input').value.trim();
             chat.settings.offlineMode.wordCount =
               parseInt(document.getElementById('offline-word-count-input').value) || 300;
+            // 保存生图开关状态
+            chat.settings.offlineMode.enableNovelAI = document.getElementById('offline-novelai-toggle').checked;
+
             // presets 的数据在管理函数中直接操作，这里无需保存
             // ▼▼▼ 在这里粘贴下面的新代码 ▼▼▼
             // --- 保存聊天总结设置 ---
@@ -45700,8 +46491,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           }
           // ▲▲▲ 删除功能结束 ▲▲▲
           startGroupSimulation(); // 启动群聊专属的后台时钟
-          // ▲▲▲ 新事件绑定结束 ▲▲▲
-          // ▼▼▼ 步骤3.3：在 init() 的前面粘贴这段新代码 ▼▼▼
+          handleAutoBackupTimer();
           // 使用事件委托，监听整个动态列表的“焦点移出”事件
           document.getElementById('qzone-posts-list').addEventListener('focusout', e => {
             // 如果是评论输入框失去了焦点
@@ -47079,6 +47869,16 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             radio.addEventListener('change', toggleAuroraInputs);
           });
           // ▲▲▲ 修复结束 ▲▲▲
+          // 绑定 GitHub 手动上传按钮
+          const githubBtn = document.getElementById('manual-github-backup-btn');
+          if (githubBtn) {
+            githubBtn.addEventListener('click', () => uploadBackupToGitHub(false));
+          }
+          // 绑定 GitHub 恢复按钮
+          const githubRestoreBtn = document.getElementById('manual-github-restore-btn');
+          if (githubRestoreBtn) {
+            githubRestoreBtn.addEventListener('click', restoreBackupFromGitHub);
+          }
 
           initAuroraDrag(); // 初始化拖拽
 
