@@ -23423,3 +23423,636 @@ body {
   color: #ff3b30; /* 悬停变红 */
   background-color: rgba(255, 59, 48, 0.1);
 }
+/* 约会BGM控制面板专属样式 */
+#dating-bgm-playlist .dating-bgm-item {
+  padding: 12px 15px;
+  border-bottom: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+#dating-bgm-playlist .dating-bgm-item:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+#dating-bgm-playlist .dating-bgm-item.playing {
+  background-color: var(--accent-color-light, #e0f7ff);
+  color: var(--accent-color, #007bff);
+  font-weight: 600;
+}
+
+.dark-mode #dating-bgm-playlist .dating-bgm-item.playing {
+  background-color: rgba(var(--accent-color-rgb), 0.2);
+}
+
+#dating-bgm-playlist .dating-bgm-item .title {
+  font-size: 15px;
+}
+
+#dating-bgm-playlist .dating-bgm-item .artist {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+/* ▼▼▼ 【全新】约会BGM控制面板专属样式 ▼▼▼ */
+
+#dating-bgm-modal .modal-content {
+  background-color: #f7f3f8; /* 和亲密值面板一样的淡紫色 */
+  border: 1px solid #e1dbe6;
+  height: 65% !important; /* 调整高度 */
+  max-width: 320px;
+}
+
+#dating-bgm-modal .modal-header span {
+  color: #6a4c95; /* 深紫色标题 */
+}
+
+/* 按钮容器 */
+#dating-bgm-modal .bgm-controls {
+  margin-bottom: 20px !important;
+}
+
+/* 按钮样式 */
+#dating-bgm-modal .form-button-secondary {
+  border-color: #d8c1e8 !important;
+  background-color: #fff !important;
+  color: #6a4c95 !important;
+  border-radius: 20px !important;
+  font-weight: 600 !important;
+}
+
+#dating-bgm-modal .form-button-secondary:active {
+  background-color: #f7f3f8 !important;
+}
+
+/* 音量滑块 */
+#dating-bgm-modal .form-group label {
+  color: #8e809c;
+}
+#dating-bgm-modal input[type='range'] {
+  -webkit-appearance: none;
+  background: #e1dbe6;
+}
+#dating-bgm-modal input[type='range']::-webkit-slider-thumb {
+  background: #a98bc4; /* 匹配主题的紫色 */
+}
+
+/* 播放列表 */
+#dating-bgm-playlist .dating-bgm-item {
+  border-bottom-color: #e1dbe6;
+  transition: all 0.2s;
+}
+
+#dating-bgm-playlist .dating-bgm-item:hover {
+  background-color: rgba(255, 255, 255, 0.7);
+}
+
+/* 高亮正在播放的歌曲 */
+#dating-bgm-playlist .dating-bgm-item.playing {
+  background-color: #e9e0f3;
+  border-left: 4px solid #a98bc4;
+  padding-left: 11px; /* 补偿边框的宽度 */
+}
+
+#dating-bgm-playlist .dating-bgm-item.playing .title {
+  color: #6a4c95;
+  font-weight: 700;
+}
+
+/* ▲▲▲ 样式结束 ▲▲▲ */
+/* ======================================================= */
+/* === ✨ 约会大作战 UI 美化 V6.0 (粉嫩可爱·少女心版) ✨ === */
+/* ======================================================= */
+
+/* 1. 页面总背景：使用温柔的粉紫色渐变 */
+#date-a-live-screen {
+  background: linear-gradient(135deg, #fff0f5 0%, #e6e6fa 100%) !important;
+}
+
+/* 2. 列表容器：移除背景色，调整间距 */
+#dating-scene-content {
+  background: transparent !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 25px !important; /* 增加卡片间距，不拥挤 */
+  padding: 25px 20px !important; /* 增加内边距 */
+  min-height: 0;
+  flex-grow: 1;
+  overflow-y: auto;
+}
+
+/* 3. 【核心】单个约会场景的卡片样式 */
+.dating-scene-card {
+  /* ★★★ 核心修复：就是加上这一行！★★★ */
+  /* 它会告诉浏览器，padding和border都应该被计算在width之内，这样就不会溢出了！*/
+  box-sizing: border-box !important;
+
+  width: 100% !important; /* 确保它撑满父容器的可用宽度 */
+  background-color: #ffffff !important;
+  border-radius: 20px !important; /* 更大的圆角 */
+  padding: 12px !important;
+  box-shadow: 0 8px 25px rgba(230, 159, 181, 0.25) !important; /* 柔和的粉色阴影 */
+  border: 1px solid rgba(255, 192, 203, 0.5) !important; /* 粉色描边 */
+  position: relative;
+  overflow: visible !important; /* 允许装饰元素超出范围 */
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.dating-scene-card:hover {
+  transform: translateY(-5px) !important;
+  box-shadow: 0 12px 30px rgba(230, 159, 181, 0.35) !important;
+}
+
+/* 4. 可爱的装饰：用伪元素在左上角加一个爱心胶带 */
+.dating-scene-card::before {
+  content: '💖';
+  position: absolute;
+  top: -15px;
+  left: 20px;
+  font-size: 28px;
+  transform: rotate(-20deg);
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  opacity: 0.9;
+}
+
+/* 5. 图片容器的样式 */
+.dating-scene-image-container {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  border-radius: 12px !important; /* 图片圆角 */
+  overflow: hidden;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08) !important;
+  border: 2px solid white; /* 图片内描边 */
+  box-sizing: border-box;
+}
+
+.dating-scene-image-container img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.4s ease;
+}
+
+/* 鼠标悬浮时，图片轻微放大 */
+.dating-scene-card:hover .dating-scene-image-container img {
+  transform: scale(1.05);
+}
+
+/* 6. 信息区域样式 */
+.dating-scene-info {
+  padding: 15px 5px 5px 5px !important; /* 调整内边距 */
+  text-align: center;
+}
+
+.dating-scene-info .name {
+  font-size: 17px !important;
+  font-weight: 700 !important;
+  color: #4a4a4a !important; /* 深灰色文字 */
+}
+
+.dating-scene-info .cost {
+  font-size: 15px !important;
+  color: #ff69b4 !important; /* 甜美的粉红色 */
+  font-weight: bold !important;
+  margin-top: 8px !important;
+}
+.dating-scene-info .cost::after {
+  content: ' 🪙'; /* 在金币后面加个小硬币，更可爱 */
+}
+
+/* 7. 删除按钮样式：小巧精致 */
+.dating-scene-delete-btn {
+  background-color: rgba(255, 255, 255, 0.8) !important;
+  color: #ff8fab !important;
+  border-radius: 50% !important;
+  width: 28px !important;
+  height: 28px !important;
+  font-size: 18px !important;
+  line-height: 28px !important;
+  border: 1px solid rgba(0, 0, 0, 0.05) !important;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1) !important;
+}
+.dating-scene-delete-btn:hover {
+  background-color: #ff69b4 !important;
+  color: white !important;
+}
+
+/* 8. 夜间模式的适配 */
+#phone-screen.dark-mode .dating-scene-card {
+  background-color: #2c1e22 !important;
+  border-color: #583d47 !important;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3) !important;
+}
+#phone-screen.dark-mode .dating-scene-info .name {
+  color: #fce4ec !important;
+}
+/* ========================================================== */
+/* === ✨ 约会游戏界面 V7.0 (清透·可爱·高级·萌系终极版) ✨ === */
+/* ========================================================== */
+
+/* --- 1. 游戏主屏幕容器：深色基调，衬托前景 --- */
+#dating-game-screen {
+  background-color: #000;
+  color: white;
+}
+
+/* --- 2. 动态背景图层：柔和的模糊与暗角效果 --- */
+#dating-game-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-size: cover;
+  background-position: center;
+  transition: all 0.5s ease-in-out;
+  /* 柔和的模糊 + 压暗亮度，营造电影感 */
+  filter: blur(8px) brightness(0.7);
+  transform: scale(1.1); /* 轻微放大，避免模糊后边缘变黑 */
+  z-index: 1;
+}
+
+/* --- 3. 角色立绘层：增加阴影，使其“浮”在背景之上 --- */
+#dating-game-sprite-container {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 80%;
+  height: auto;
+  max-height: 80%;
+  pointer-events: none;
+  transition: all 0.5s ease-in-out;
+  z-index: 2; /* 层级高于背景 */
+}
+#dating-game-sprite-container img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  /* 关键：添加一个自然的投影，让立绘更有立体感 */
+  filter: drop-shadow(0 5px 15px rgba(0, 0, 0, 0.5));
+  transition: opacity 0.3s ease-in-out; /* 为立绘切换添加淡入淡出 */
+}
+
+/* --- 4. UI覆盖层：所有UI元素的容器 --- */
+.dating-game-ui-overlay {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end; /* 将内容推到底部 */
+  padding-bottom: calc(15px + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+  z-index: 3; /* 层级最高，确保在立绘之上 */
+}
+
+/* --- 5. 顶部导航栏：清透毛玻璃效果 --- */
+#dating-game-screen .header {
+  position: absolute;
+  top: 0;
+  width: 100%;
+  box-sizing: border-box;
+  background-color: rgba(0, 0, 0, 0.25); /* 半透明黑色 */
+  backdrop-filter: blur(15px); /* 毛玻璃 */
+  -webkit-backdrop-filter: blur(15px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15); /* 亮色细线 */
+  color: white;
+}
+#dating-game-screen .header .back-btn,
+#dating-game-screen .header .action-btn svg {
+  color: white !important; /* 强制按钮图标为白色 */
+}
+
+/* --- 6. 文本框：【核心美化】--- */
+.dating-game-textbox {
+  /* 外观 */
+  background-color: rgba(255, 255, 255, 0.15); /* 半透明白色 */
+  backdrop-filter: blur(25px) saturate(180%);
+  -webkit-backdrop-filter: blur(25px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 24px; /* 大圆角 */
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+  padding: 20px;
+  margin: 0 15px 15px 15px; /* 与屏幕边缘的间距 */
+
+  /* 布局与文字 */
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  line-height: 1.7; /* 增加行高，阅读更舒适 */
+  font-size: 16px;
+  color: white;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5); /* 文字阴影，保证清晰 */
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.dating-game-textbox #dating-game-text-content {
+  transition: opacity 0.2s ease-in-out;
+}
+.dating-game-textbox #dating-game-text-content.fade-out {
+  opacity: 0;
+}
+
+/* “点击继续”的提示 */
+.dating-game-textbox .continue-indicator {
+  display: block;
+  text-align: right;
+  margin-top: 10px;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.5);
+  animation: pulse-indicator 1.5s infinite;
+}
+@keyframes pulse-indicator {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+/* --- 7. 选项按钮：【核心美化】--- */
+.dating-game-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 12px; /* 按钮之间的间距 */
+  padding: 0 15px;
+  margin-bottom: 15px;
+}
+
+.dating-game-choice-btn {
+  /* 外观 */
+  background-color: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 50px; /* 超大圆角，胶囊形状 */
+  padding: 16px; /* 增加按钮高度 */
+
+  /* 文字 */
+  color: #f2f2f7;
+  font-size: 15px;
+  font-weight: 600;
+
+  /* 交互 */
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.dating-game-choice-btn:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-2px);
+}
+.dating-game-choice-btn:active {
+  transform: scale(0.98);
+}
+
+/* 自定义行动按钮的特殊颜色 */
+.dating-game-choice-btn.input-action {
+  background-color: rgba(255, 136, 178, 0.8); /* 可爱的粉色 */
+  border-color: rgba(255, 136, 178, 1);
+  color: white;
+}
+
+/* --- 8. 数值条与进度条美化 --- */
+#dating-values-container,
+#dating-completion-bar-container {
+  background-color: rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+#dating-values-container {
+  padding: 6px 10px;
+  border-radius: 15px;
+}
+
+#dating-completion-bar-container {
+  height: 12px; /* 进度条变细一点 */
+  border-radius: 6px;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+#dating-completion-bar-fill {
+  background: linear-gradient(90deg, #ff8fab, #fb6f92); /* 粉色渐变 */
+}
+#dating-completion-text {
+  font-size: 10px;
+}
+/* --- naiimag 图片重roll按钮样式 --- */
+.nai-image-container {
+  position: relative;
+  display: inline-block; /* 让容器大小自适应图片 */
+  line-height: 0; /* 移除图片下方的空隙 */
+}
+
+.reroll-nai-button {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  opacity: 0; /* 默认隐藏 */
+  transition: opacity 0.2s ease;
+  z-index: 5;
+}
+
+/* 鼠标悬停在图片上时，显示按钮 */
+.nai-image-container:hover .reroll-nai-button {
+  opacity: 1;
+}
+
+/* 正在加载时，显示动画 */
+.reroll-nai-button.is-loading svg {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+/* ======================================================= */
+/* === ✨ 萌系聊天设置弹窗·终极修复与美化 v2.0 ✨ === */
+/* ======================================================= */
+
+/* 1. 【核心】让设置面板成为按钮的“定位锚点” */
+/* 这行代码告诉浏览器，里面的绝对定位元素都要听它的 */
+.moe-settings-content {
+  position: relative !important;
+}
+
+/* 2. 【核心】把底部按钮栏变成一个“隐形”的容器，它不再负责布局 */
+#chat-settings-modal .modal-footer {
+  position: static !important; /* 移除旧的定位 */
+  padding: 0 !important; /* 移除所有内边距 */
+  border: none !important; /* 移除所有边框 */
+  height: 0 !important; /* 让它不占据任何垂直空间 */
+  pointer-events: none; /* 让鼠标可以“穿透”这个隐形容器 */
+}
+
+/* 3. 【核心】让两个“萌系悬浮球”重新绝对定位，但这次是相对于面板 */
+.moe-fab-save,
+.moe-fab-cancel {
+  position: absolute !important; /* 绝对定位，相对于 .moe-settings-content */
+  bottom: 25px !important; /* 距离面板底部 25px */
+  pointer-events: auto !important; /* 确保按钮自己可以被点击 */
+
+  /* ▼▼▼ 新增：可爱的交互动画！ ▼▼▼ */
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* 4. 按钮们在鼠标放上去时，会可爱地“弹”一下 */
+.moe-fab-save:hover,
+.moe-fab-cancel:hover {
+  transform: scale(1.08) rotate(-5deg);
+}
+
+/* 5. 分别定位左右两个按钮 */
+.moe-fab-save {
+  right: 25px !important; /* 保存按钮乖乖待在右边 */
+}
+
+.moe-fab-cancel {
+  left: 25px !important; /* 取消按钮乖乖待在左边 */
+}
+/* ======================================================= */
+/* === ✨ 约会场景设置 - 萌系美化 V2.0 ✨ === */
+/* ======================================================= */
+
+/* 1. 弹窗主容器：毛玻璃质感 + 超大圆角 */
+#dating-game-settings-modal .modal-content {
+  background-color: rgba(255, 255, 255, 0.8) !important; /* 半透明白色背景 */
+  backdrop-filter: blur(20px); /* 核心：毛玻璃模糊效果 */
+  -webkit-backdrop-filter: blur(20px); /* 兼容 Safari 浏览器 */
+  border-radius: 24px !important; /* 更大的圆角，更可爱 */
+  border: 1px solid rgba(255, 255, 255, 0.5) !important; /* 淡淡的亮色边框，模拟玻璃边缘 */
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1) !important; /* 更柔和的阴影 */
+}
+
+/* 2. 标题美化 */
+#dating-game-settings-modal .modal-header {
+  text-align: center;
+  font-size: 18px;
+  font-weight: 700;
+  color: #a786df; /* 温柔的薰衣草紫色 */
+  border-bottom: 1px dashed #e1dbe6; /* 虚线分割，增加趣味性 */
+  padding-bottom: 15px;
+}
+
+/* 3. 表单与输入框美化 */
+#dating-game-settings-modal .form-group {
+  margin-bottom: 18px; /* 增加表单项之间的间距 */
+}
+
+#dating-game-settings-modal label {
+  font-weight: 600;
+  color: #6a526f; /* 柔和的灰紫色 */
+  font-size: 14px;
+  margin-bottom: 8px;
+  letter-spacing: 0.5px; /* 增加一点字间距 */
+}
+
+/* 统一美化所有输入框和下拉框 */
+#dating-game-settings-modal input[type='text'],
+#dating-game-settings-modal textarea,
+#dating-game-settings-modal select {
+  background-color: #f9f5f6 !important; /* 极淡的粉灰色背景 */
+  border: 1px solid #f0e6e8 !important;
+  border-radius: 12px !important; /* 圆润的边角 */
+  padding: 12px !important;
+  font-size: 14px;
+  color: #555;
+  transition: all 0.3s ease; /* 平滑的过渡动画 */
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.02); /* 轻微的内阴影，增加深度 */
+}
+
+/* 输入框聚焦时的可爱效果 */
+#dating-game-settings-modal input:focus,
+#dating-game-settings-modal textarea:focus,
+#dating-game-settings-modal select:focus {
+  border-color: #ffb7c5 !important; /* 聚焦时边框变粉 */
+  background-color: white !important;
+  /* 一个漂亮的粉色辉光效果 */
+  box-shadow: 0 0 0 3px rgba(255, 183, 197, 0.3) !important;
+  outline: none; /* 移除默认的蓝色轮廓线 */
+}
+
+/* 4. 按钮美化 */
+#dating-game-settings-modal .modal-footer {
+  gap: 12px; /* 增加按钮间距 */
+}
+
+/* 取消按钮：次要样式 */
+#dating-game-settings-modal #cancel-dating-settings-btn {
+  background-color: #f0e6f2;
+  color: #827693;
+  border: none;
+  font-weight: 600;
+  border-radius: 20px;
+  transition: all 0.2s ease;
+}
+
+#dating-game-settings-modal #cancel-dating-settings-btn:hover {
+  background-color: #e1dbe6;
+}
+
+/* 保存按钮：主要样式 */
+#dating-game-settings-modal #save-dating-settings-btn {
+  /* 使用漂亮的粉色到桃色的渐变 */
+  background: linear-gradient(135deg, #ff9a9e 0%, #ffc3a0 100%);
+  color: white;
+  border: none;
+  font-weight: bold;
+  border-radius: 20px;
+  box-shadow: 0 4px 15px rgba(255, 154, 158, 0.4);
+  transition: all 0.2s ease;
+}
+
+/* 按钮点击时的效果 */
+#dating-game-settings-modal .modal-footer button:active {
+  transform: scale(0.97);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* 5. 适配夜间模式 */
+#phone-screen.dark-mode #dating-game-settings-modal .modal-content {
+  background-color: rgba(30, 30, 30, 0.8) !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4) !important;
+}
+
+#phone-screen.dark-mode #dating-game-settings-modal .modal-header {
+  border-bottom-color: #444;
+}
+
+#phone-screen.dark-mode #dating-game-settings-modal input,
+#phone-screen.dark-mode #dating-game-settings-modal textarea,
+#phone-screen.dark-mode #dating-game-settings-modal select {
+  background-color: #2c2c2e !important;
+  border-color: #444 !important;
+  color: #eee;
+}
+
+#phone-screen.dark-mode #dating-game-settings-modal #cancel-dating-settings-btn {
+  background-color: #3e3e42;
+  color: #ccc;
+}

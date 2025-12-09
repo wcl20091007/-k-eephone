@@ -4414,6 +4414,8 @@
 
     <audio id="audio-player" style="display: none"></audio>
 
+    <audio id="dating-bgm-player" loop></audio>
+
     <audio id="tts-audio-player" style="display: none"></audio>
 
     <audio id="ringtone-player" loop></audio>
@@ -6208,28 +6210,32 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           </div>
 
           <!-- 3. 视频模式输入区 -->
-<div id="aurora-video-inputs" class="aurora-input-group">
-  <div class="form-group">
-    <label>视频文件 (mp4, webm)</label>
-    <input type="file" id="aurora-video-file" accept="video/*,.mkv" />
-  </div>
-  <div class="form-group">
-    <label>字幕文件 (可选 .srt, .vtt)</label>
-    <input type="file" id="aurora-sub-file-video" accept=".srt,.vtt,.lrc" />
-    <!-- ★★★ 新增：字幕URL输入框 ★★★ -->
-    <input type="text" id="aurora-sub-url-video" placeholder="或粘贴字幕链接 (SRT/VTT/LRC)" style="margin-top: 5px;" />
-  </div>
-</div>
+          <div id="aurora-video-inputs" class="aurora-input-group">
+            <div class="form-group">
+              <label>视频文件 (mp4, webm)</label>
+              <input type="file" id="aurora-video-file" accept="video/*,.mkv" />
+            </div>
+            <div class="form-group">
+              <label>字幕文件 (可选 .srt, .vtt)</label>
+              <input type="file" id="aurora-sub-file-video" accept=".srt,.vtt,.lrc" />
+              <!-- ★★★ 新增：字幕URL输入框 ★★★ -->
+              <input
+                type="text"
+                id="aurora-sub-url-video"
+                placeholder="或粘贴字幕链接 (SRT/VTT/LRC)"
+                style="margin-top: 5px"
+              />
+            </div>
+          </div>
 
-<div id="aurora-text-inputs" class="aurora-input-group" style="display: none">
-  <div class="form-group">
-    <label>小说/文本文件 (.txt)</label>
-    <input type="file" id="aurora-text-file" accept=".txt" />
-    <!-- ★★★ 新增：小说URL输入框 ★★★ -->
-    <input type="text" id="aurora-text-url" placeholder="或粘贴txt文件链接" style="margin-top: 5px;" />
-  </div>
-</div>
-
+          <div id="aurora-text-inputs" class="aurora-input-group" style="display: none">
+            <div class="form-group">
+              <label>小说/文本文件 (.txt)</label>
+              <input type="file" id="aurora-text-file" accept=".txt" />
+              <!-- ★★★ 新增：小说URL输入框 ★★★ -->
+              <input type="text" id="aurora-text-url" placeholder="或粘贴txt文件链接" style="margin-top: 5px" />
+            </div>
+          </div>
 
           <!-- 5. 自定义模式输入区 -->
           <div id="aurora-custom-inputs" class="aurora-input-group" style="display: none">
@@ -8469,7 +8475,23 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                 <!-- 我们会用JS在这里生成5个黄色心形 -->
               </div>
             </div>
-
+            <span class="action-btn" id="dating-bgm-btn" title="背景音乐">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="22"
+                height="22"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M9 18V5l12-2v13"></path>
+                <circle cx="6" cy="18" r="3"></circle>
+                <circle cx="18" cy="16" r="3"></circle>
+              </svg>
+            </span>
             <span class="action-btn" id="dating-game-settings-btn" title="场景设置">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -8521,6 +8543,51 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
         </div>
       </div>
     </div>
+    <!-- ▼▼▼ 全新：约会BGM控制面板 ▼▼▼ -->
+    <div id="dating-bgm-modal" class="modal">
+      <div class="modal-content" style="height: 70%">
+        <div class="modal-header">
+          <span>选择背景音乐</span>
+        </div>
+        <div class="modal-body" style="padding: 15px">
+          <!-- 控制按钮 -->
+          <div class="bgm-controls" style="display: flex; gap: 10px; margin-bottom: 15px">
+            <button id="dating-bgm-random-btn" class="form-button-secondary" style="flex: 1; margin: 0">
+              随机播放
+            </button>
+            <button
+              id="dating-bgm-stop-btn"
+              class="form-button-secondary"
+              style="flex: 1; margin: 0; background-color: #ffe5e5; color: #ff3b30; border-color: #ffc2d1"
+            >
+              停止播放
+            </button>
+          </div>
+          <!-- 音量控制 -->
+          <div class="form-group">
+            <label for="dating-bgm-volume-slider">音量: <span id="dating-bgm-volume-value">100%</span></label>
+            <input
+              type="range"
+              id="dating-bgm-volume-slider"
+              min="0"
+              max="1"
+              step="0.05"
+              value="1"
+              style="width: 100%"
+            />
+          </div>
+          <hr style="opacity: 0.2" />
+          <!-- 歌曲列表 -->
+          <div id="dating-bgm-playlist" class="list-container" style="padding: 0; height: calc(100% - 130px)">
+            <!-- 曲库将由JS动态生成在这里 -->
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="save" id="dating-bgm-close-btn" style="width: 100%">关闭</button>
+        </div>
+      </div>
+    </div>
+    <!-- ▲▲▲ 新增结束 ▲▲▲ -->
 
     <!-- 借钱对象选择弹窗（带滚动和头像） -->
     <div id="borrow-money-modal" class="modal">
@@ -8598,6 +8665,22 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               <input type="text" id="dating-bg-url-input" placeholder="或粘贴网络图片URL" style="flex-grow: 1" />
             </div>
             <input type="file" id="dating-bg-upload-input" accept="image/*" hidden />
+          </div>
+          <hr style="opacity: 0.2; margin: 15px 0" />
+
+          <div class="form-group">
+            <label>额外挂载世界书 (本次约会)</label>
+            <!-- 复用主设置的样式，非常方便 -->
+            <div class="custom-multiselect" id="dating-wb-multiselect">
+              <div class="select-box moe-input">
+                <span class="selected-options-text">-- 点击选择额外世界观 --</span>
+                <span class="arrow-down">▼</span>
+              </div>
+              <!-- 注意这个容器的 ID 是新的，防止冲突 -->
+              <div id="dating-wb-checkboxes-container" class="checkboxes-container">
+                <!-- 选项将由JS动态生成 -->
+              </div>
+            </div>
           </div>
         </div>
         <div class="modal-footer">
@@ -10801,7 +10884,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
         let newLockscreenWallpaperBase64 = null;
         let newGlobalBgBase64 = null; // 用于暂存新的全局聊天背景
         let newAppWallpaperBase64 = null;
-        let musicState = {
+        window.state.musicState = {
           isActive: false,
           activeChatId: null,
           isPlaying: false,
@@ -11073,17 +11156,17 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             musicSource: finalSource,
           };
 
-          musicState.playlist.push(newSong);
+          state.musicState.playlist.push(newSong);
 
           // 立即保存到数据库
           await saveGlobalPlaylist();
 
           updatePlaylistUI();
 
-          if (musicState.currentIndex === -1) {
-            musicState.currentIndex = musicState.playlist.length - 1;
+          if (state.musicState.currentIndex === -1) {
+            state.musicState.currentIndex = state.musicState.playlist.length - 1;
             // 这里调用 loadSong 确保能触发下面的自动续期逻辑
-            loadSong(musicState.currentIndex);
+            loadSong(state.musicState.currentIndex);
           } else {
             // 如果不是第一首，仅提示
             await showCustomAlert('添加成功', `《${songData.name}》已保存，链接失效时会自动更新。`);
@@ -11226,7 +11309,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           };
 
           // 检查播放列表里是不是已经有这首歌了
-          const existingIndex = musicState.playlist.findIndex(
+          const existingIndex = state.musicState.playlist.findIndex(
             t => t.name === newSong.name && t.artist === newSong.artist,
           );
           if (existingIndex !== -1) {
@@ -11234,13 +11317,13 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             playSong(existingIndex);
           } else {
             // 如果没有，就添加到列表末尾再播放
-            musicState.playlist.push(newSong);
+            state.musicState.playlist.push(newSong);
             updatePlaylistUI(); // 刷新播放列表界面
-            playSong(musicState.playlist.length - 1);
+            playSong(state.musicState.playlist.length - 1);
           }
 
           // 如果“一起听”功能是关闭的，就自动打开它
-          if (!musicState.isActive) {
+          if (!state.musicState.isActive) {
             startListenTogetherSession(state.activeChatId);
           } else {
             // 如果已经是打开的，就直接显示播放器窗口
@@ -14368,16 +14451,16 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           state.worldBooks = worldBooks || [];
           currentDatingScenes = datingScenes || [];
           // 加载播放列表并注入“隐形”保活音频
-          musicState.playlist = musicLib?.playlist || [];
+          window.state.musicState.playlist = musicLib?.playlist || [];
 
           const keepAliveUrl = 'https://files.catbox.moe/7jn7bp.mp3';
 
           // 检查列表中是否已经有这个音频了
-          const existingKeepAliveIndex = musicState.playlist.findIndex(t => t.src === keepAliveUrl);
+          const existingKeepAliveIndex = window.state.musicState.playlist.findIndex(t => t.src === keepAliveUrl);
 
           // 如果已经存在，先删掉旧的，确保它永远在第一位且信息最新
           if (existingKeepAliveIndex > -1) {
-            musicState.playlist.splice(existingKeepAliveIndex, 1);
+            window.state.musicState.playlist.splice(existingKeepAliveIndex, 1);
           }
 
           // 创建保活专用对象
@@ -14397,7 +14480,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           };
 
           // 强制插到播放列表的第 0 位
-          musicState.playlist.unshift(keepAliveTrack);
+          window.state.musicState.playlist.unshift(keepAliveTrack);
 
           state.personaPresets = personaPresets || [];
           state.apiPresets = apiPresets || [];
@@ -14441,7 +14524,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
 
         async function saveGlobalPlaylist() {
           // 1. 在保存前，先从当前播放列表中过滤掉所有被标记为 isTemporary 的歌曲
-          const permanentPlaylist = musicState.playlist.filter(track => !track.isTemporary);
+          const permanentPlaylist = state.musicState.playlist.filter(track => !track.isTemporary);
 
           // 2. 只将这个“永久播放列表”保存到数据库中
           await db.musicLibrary.put({ id: 'main', playlist: permanentPlaylist });
@@ -14530,7 +14613,9 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           // 1. 不再寻找 isTemporary 标签
           // 而是直接找出所有 src 链接来自于 API 服务器的歌曲。
           // 这是一个绝对可靠的识别方法，无论它有没有被正确保存。
-          const songsToCheck = musicState.playlist.filter(track => track.src && track.src.includes('api.vkeys.cn'));
+          const songsToCheck = state.musicState.playlist.filter(
+            track => track.src && track.src.includes('api.vkeys.cn'),
+          );
 
           if (songsToCheck.length === 0) {
             await showCustomAlert('提示', '播放列表中没有需要检查的在线歌曲。');
@@ -14575,26 +14660,27 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           if (!confirmed) return;
 
           // 执行删除...
-          const currentTrack = musicState.currentIndex > -1 ? musicState.playlist[musicState.currentIndex] : null;
-          musicState.playlist = musicState.playlist.filter(track => !songsToDelete.includes(track));
+          const currentTrack =
+            state.musicState.currentIndex > -1 ? state.musicState.playlist[state.musicState.currentIndex] : null;
+          state.musicState.playlist = state.musicState.playlist.filter(track => !songsToDelete.includes(track));
           const newIndex = currentTrack
-            ? musicState.playlist.findIndex(t => t.src === currentTrack.src && t.name === currentTrack.name)
+            ? state.musicState.playlist.findIndex(t => t.src === currentTrack.src && t.name === currentTrack.name)
             : -1;
 
           if (newIndex === -1) {
-            if (musicState.isPlaying) {
+            if (state.musicState.isPlaying) {
               audioPlayer.pause();
               audioPlayer.src = '';
             }
-            musicState.isPlaying = false;
-            if (musicState.playlist.length > 0) {
+            state.musicState.isPlaying = false;
+            if (state.musicState.playlist.length > 0) {
               playSong(0);
             } else {
-              musicState.currentIndex = -1;
+              state.musicState.currentIndex = -1;
               updatePlayerUI();
             }
           } else {
-            musicState.currentIndex = newIndex;
+            state.musicState.currentIndex = newIndex;
             updatePlayerUI();
           }
 
@@ -17153,11 +17239,24 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           } else if (msg.type === 'naiimag') {
             // NovelAI图片渲染（复用realimag样式）
             bubble.classList.add('is-realimag', 'is-card-like');
-            contentHtml = `<img src="${
-              msg.imageUrl
-            }" class="realimag-image" alt="NovelAI图片分享" loading="lazy" onerror="this.src='https://i.postimg.cc/KYr2qRCK/1.jpg'; this.alt='图片加载失败';" title="${
+
+            // 【新增】包裹一个容器，方便定位按钮
+            contentHtml = `
+      <div class="nai-image-container">
+        <img src="${
+          msg.imageUrl
+        }" class="realimag-image" alt="NovelAI图片分享" loading="lazy" onerror="this.src='https://i.postimg.cc/KYr2qRCK/1.jpg'; this.alt='图片加载失败';" title="${
               msg.fullPrompt || msg.prompt || 'NovelAI生成'
-            }">`;
+            }">
+        
+        <button class="reroll-nai-button" data-timestamp="${msg.timestamp}" title="重新生成">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+          </svg>
+        </button>
+      </div>
+    `;
           } else {
             contentHtml = String(msg.content || '').replace(/\n/g, '<br>');
           }
@@ -18133,15 +18232,16 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             const countdownContext = await getCountdownContext(chatId); // <--- 把chatId传进去
             const streakContext = await getStreakContext(chat);
             // 音乐上下文生成（增加保活屏蔽逻辑）
-            if (musicState.isActive && musicState.activeChatId === chatId) {
-              const currentTrack = musicState.currentIndex > -1 ? musicState.playlist[musicState.currentIndex] : null;
+            if (state.musicState.isActive && state.musicState.activeChatId === chatId) {
+              const currentTrack =
+                state.musicState.currentIndex > -1 ? state.musicState.playlist[state.musicState.currentIndex] : null;
 
               // 如果是保活音频，就当做什么都没发生，不生成 context
               if (currentTrack && currentTrack.isKeepAlive) {
                 musicContext = ''; // AI 此时什么都不知道，就像没听歌一样
               } else {
                 // 只有是正常歌曲时，才告诉 AI
-                const playlistInfo = musicState.playlist
+                const playlistInfo = state.musicState.playlist
                   .filter(t => !t.isKeepAlive) // 甚至在列表里也不要让 AI 看到保活音频
                   .map(t => `"${t.name}"`)
                   .join(', ');
@@ -18150,14 +18250,14 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                 let lyricsContext = '';
                 if (
                   currentTrack &&
-                  musicState.parsedLyrics &&
-                  musicState.parsedLyrics.length > 0 &&
-                  musicState.currentLyricIndex > -1
+                  state.musicState.parsedLyrics &&
+                  state.musicState.parsedLyrics.length > 0 &&
+                  state.musicState.currentLyricIndex > -1
                 ) {
-                  const currentLine = musicState.parsedLyrics[musicState.currentLyricIndex];
-                  const upcomingLines = musicState.parsedLyrics.slice(
-                    musicState.currentLyricIndex + 1,
-                    musicState.currentLyricIndex + 3,
+                  const currentLine = state.musicState.parsedLyrics[state.musicState.currentLyricIndex];
+                  const upcomingLines = state.musicState.parsedLyrics.slice(
+                    state.musicState.currentLyricIndex + 1,
+                    state.musicState.currentLyricIndex + 3,
                   );
                   lyricsContext += `- **当前歌词**: "${currentLine.text}"\n`;
                   if (upcomingLines.length > 0) {
@@ -20852,7 +20952,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                     const apiKey = localStorage.getItem('novelai-api-key');
                     const model = localStorage.getItem('novelai-model') || 'nai-diffusion-4-5-full';
                     const settings = getNovelAISettings();
-
+                    const newImageDataUrl = await _internal_generateNaiImage(chatId, aiPrompt);
                     if (!apiKey) {
                       throw new Error('NovelAI API Key未配置。请在NovelAI设置中填写API Key。');
                     }
@@ -21234,17 +21334,17 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                   continue;
 
                 case 'change_music':
-                  if (musicState.isActive && musicState.activeChatId === chatId) {
+                  if (state.musicState.isActive && state.musicState.activeChatId === chatId) {
                     const songNameToFind = msgData.song_name;
 
-                    const targetSongIndex = musicState.playlist.findIndex(
+                    const targetSongIndex = state.musicState.playlist.findIndex(
                       track => track.name.toLowerCase() === songNameToFind.toLowerCase(),
                     );
 
                     if (targetSongIndex > -1) {
                       playSong(targetSongIndex);
 
-                      const track = musicState.playlist[targetSongIndex];
+                      const track = state.musicState.playlist[targetSongIndex];
                       const musicChangeMessage = {
                         role: 'system',
                         type: 'pat_message',
@@ -22151,14 +22251,14 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
 
           const targetChatId = state.activeChatId;
           if (!targetChatId) return;
-          if (!musicState.isActive) {
+          if (!state.musicState.isActive) {
             startListenTogetherSession(targetChatId);
             return;
           }
-          if (musicState.activeChatId === targetChatId) {
+          if (state.musicState.activeChatId === targetChatId) {
             document.getElementById('music-player-overlay').classList.add('visible');
           } else {
-            const oldChatName = state.chats[musicState.activeChatId]?.name || '未知';
+            const oldChatName = state.chats[state.musicState.activeChatId]?.name || '未知';
             const newChatName = state.chats[targetChatId]?.name || '当前';
             const confirmed = await showCustomConfirm(
               '切换听歌对象',
@@ -22176,18 +22276,18 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
         async function startListenTogetherSession(chatId) {
           const chat = state.chats[chatId];
           if (!chat) return;
-          musicState.totalElapsedTime = chat.musicData.totalTime || 0;
-          musicState.isActive = true;
-          musicState.activeChatId = chatId;
-          if (musicState.playlist.length > 0) {
-            musicState.currentIndex = 0;
+          state.musicState.totalElapsedTime = chat.musicData.totalTime || 0;
+          state.musicState.isActive = true;
+          state.musicState.activeChatId = chatId;
+          if (state.musicState.playlist.length > 0) {
+            state.musicState.currentIndex = 0;
           } else {
-            musicState.currentIndex = -1;
+            state.musicState.currentIndex = -1;
           }
-          if (musicState.timerId) clearInterval(musicState.timerId);
-          musicState.timerId = setInterval(() => {
-            if (musicState.isPlaying) {
-              musicState.totalElapsedTime++;
+          if (state.musicState.timerId) clearInterval(state.musicState.timerId);
+          state.musicState.timerId = setInterval(() => {
+            if (state.musicState.isPlaying) {
+              state.musicState.totalElapsedTime++;
               updateElapsedTimeDisplay();
             }
           }, 1000);
@@ -22197,22 +22297,22 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
         }
 
         async function endListenTogetherSession(saveState = true) {
-          if (!musicState.isActive) return;
-          const oldChatId = musicState.activeChatId;
+          if (!state.musicState.isActive) return;
+          const oldChatId = state.musicState.activeChatId;
           const cleanupLogic = async () => {
             document.getElementById('floating-lyrics-bar').style.display = 'none';
 
-            if (musicState.timerId) clearInterval(musicState.timerId);
-            if (musicState.isPlaying) audioPlayer.pause();
+            if (state.musicState.timerId) clearInterval(state.musicState.timerId);
+            if (state.musicState.isPlaying) audioPlayer.pause();
             if (saveState && oldChatId && state.chats[oldChatId]) {
               const chat = state.chats[oldChatId];
-              chat.musicData.totalTime = musicState.totalElapsedTime;
+              chat.musicData.totalTime = state.musicState.totalElapsedTime;
               await db.chats.put(chat);
             }
-            musicState.isActive = false;
-            musicState.activeChatId = null;
-            musicState.totalElapsedTime = 0;
-            musicState.timerId = null;
+            state.musicState.isActive = false;
+            state.musicState.activeChatId = null;
+            state.musicState.totalElapsedTime = 0;
+            state.musicState.timerId = null;
             updateListenTogetherIcon(oldChatId, true);
           };
           closeMusicPlayerWithAnimation(cleanupLogic);
@@ -22220,7 +22320,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
 
         function returnToChat() {
           closeMusicPlayerWithAnimation(() => {
-            if (musicState.isActive && lyricsBarSettings.showOnClose) {
+            if (state.musicState.isActive && lyricsBarSettings.showOnClose) {
               document.getElementById('floating-lyrics-bar').style.display = 'flex';
             }
           });
@@ -22229,25 +22329,25 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
         function updateListenTogetherIcon(chatId, forceReset = false) {
           const iconImg = document.querySelector('#listen-together-btn img');
           if (!iconImg) return;
-          if (forceReset || !musicState.isActive || musicState.activeChatId !== chatId) {
+          if (forceReset || !state.musicState.isActive || state.musicState.activeChatId !== chatId) {
             iconImg.src = 'https://i.postimg.cc/CxjpF6gK/yi-qi-ting.png';
             iconImg.className = '';
             return;
           }
           iconImg.src = 'https://cdn.jsdelivr.net.cn/gh/qdqqd/tc_temp/jli60izy2n.png';
           iconImg.classList.add('rotating');
-          if (musicState.isPlaying) iconImg.classList.remove('paused');
+          if (state.musicState.isPlaying) iconImg.classList.remove('paused');
           else iconImg.classList.add('paused');
         }
         window.updateListenTogetherIconProxy = updateListenTogetherIcon;
 
         function updatePlayerUI() {
-          updateListenTogetherIcon(musicState.activeChatId);
+          updateListenTogetherIcon(state.musicState.activeChatId);
           updateElapsedTimeDisplay();
           const titleEl = document.getElementById('music-player-song-title');
           const artistEl = document.getElementById('music-player-artist');
           const playPauseBtn = document.getElementById('music-play-pause-btn');
-          const chat = state.chats[musicState.activeChatId];
+          const chat = state.chats[state.musicState.activeChatId];
           const charAvatarEl = document.getElementById('music-char-avatar');
           const userAvatarEl = document.getElementById('music-user-avatar');
           const albumCoverEl = document.getElementById('music-album-cover');
@@ -22269,8 +22369,8 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           }
 
           // 2. 更新歌曲信息和封面
-          if (musicState.currentIndex > -1 && musicState.playlist.length > 0) {
-            const track = musicState.playlist[musicState.currentIndex];
+          if (state.musicState.currentIndex > -1 && state.musicState.playlist.length > 0) {
+            const track = state.musicState.playlist[state.musicState.currentIndex];
             titleEl.textContent = track.name;
             artistEl.textContent = track.artist;
             albumCoverEl.src = track.cover || 'https://i.postimg.cc/pT2xKzPz/album-cover-placeholder.png';
@@ -22281,12 +22381,12 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           }
 
           // 3. 控制播放/暂停按钮和头像闪烁
-          playPauseBtn.textContent = musicState.isPlaying ? '❚❚' : '▶';
-          avatarsContainer.classList.toggle('flashing', musicState.isPlaying);
+          playPauseBtn.textContent = state.musicState.isPlaying ? '❚❚' : '▶';
+          avatarsContainer.classList.toggle('flashing', state.musicState.isPlaying);
 
           // 4. 控制唱片旋转和暂停
-          albumCoverEl.classList.toggle('rotating', musicState.currentIndex > -1);
-          albumCoverEl.classList.toggle('paused', !musicState.isPlaying);
+          albumCoverEl.classList.toggle('rotating', state.musicState.currentIndex > -1);
+          albumCoverEl.classList.toggle('paused', !state.musicState.isPlaying);
 
           // 5. 默认显示歌曲封面
           if (displayArea) {
@@ -22295,7 +22395,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
         }
 
         function updateElapsedTimeDisplay() {
-          const hours = (musicState.totalElapsedTime / 3600).toFixed(1);
+          const hours = (state.musicState.totalElapsedTime / 3600).toFixed(1);
           document.getElementById('music-time-counter').textContent = `已经一起听了${hours}小时`;
         }
 
@@ -22305,7 +22405,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
          */
 
         async function handleCoverUpload(index) {
-          if (index < 0 || index >= musicState.playlist.length) return;
+          if (index < 0 || index >= state.musicState.playlist.length) return;
 
           // 1. 弹窗让用户选择来源
           const choice = await showChoiceModal('选择封面来源', [
@@ -22329,10 +22429,10 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
 
           // 3. 如果成功获取到新的封面URL，就更新数据和UI
           if (newCoverUrl) {
-            musicState.playlist[index].cover = newCoverUrl;
+            state.musicState.playlist[index].cover = newCoverUrl;
             await saveGlobalPlaylist();
             updatePlaylistUI();
-            if (musicState.currentIndex === index) {
+            if (state.musicState.currentIndex === index) {
               updatePlayerUI();
             }
             alert('歌曲封面已更新！');
@@ -22342,14 +22442,14 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
         function updatePlaylistUI() {
           const playlistBody = document.getElementById('playlist-body');
           playlistBody.innerHTML = '';
-          if (musicState.playlist.length === 0) {
+          if (state.musicState.playlist.length === 0) {
             playlistBody.innerHTML = '<p style="text-align:center; padding: 20px; color: #888;">播放列表是空的~</p>';
             return;
           }
-          musicState.playlist.forEach((track, index) => {
+          state.musicState.playlist.forEach((track, index) => {
             const item = document.createElement('div');
             item.className = 'playlist-item';
-            if (index === musicState.currentIndex) item.classList.add('playing');
+            if (index === state.musicState.currentIndex) item.classList.add('playing');
             // 新增“封面”按钮
             item.innerHTML = `
 			            <div class="playlist-item-info">
@@ -22371,9 +22471,9 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
          * 加载歌曲，支持自动检测过期并续期URL
          */
         async function loadSong(index) {
-          if (index < 0 || index >= musicState.playlist.length) return;
-          musicState.currentIndex = index;
-          let track = musicState.playlist[index];
+          if (index < 0 || index >= state.musicState.playlist.length) return;
+          state.musicState.currentIndex = index;
+          let track = state.musicState.playlist[index];
 
           if (!track.isLocal && track.musicId && track.musicSource) {
             // 1. 检查当前链接是否有效
@@ -22397,7 +22497,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                   // 3. 更新内存中的链接
                   track.src = res.data.url;
                   // 4. 更新数据库，保存新链接
-                  musicState.playlist[index] = track;
+                  state.musicState.playlist[index] = track;
                   await saveGlobalPlaylist();
                   console.log(`续期成功！新链接: ${track.src}`);
                 }
@@ -22418,8 +22518,8 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           }
 
           // 准备播放
-          musicState.parsedLyrics = parseLRC(track.lrcContent || '');
-          musicState.currentLyricIndex = -1;
+          state.musicState.parsedLyrics = parseLRC(track.lrcContent || '');
+          state.musicState.currentLyricIndex = -1;
           renderLyrics();
 
           if (track.isLocal && track.src instanceof Blob) {
@@ -22437,7 +22537,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
 
           // 尝试播放
           try {
-            if (musicState.isPlaying) {
+            if (state.musicState.isPlaying) {
               await audioPlayer.play();
             }
           } catch (e) {
@@ -22454,11 +22554,11 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           try {
             await audioPlayer.play();
 
-            musicState.isPlaying = true; // 播放成功后，直接设置状态为 true
+            state.musicState.isPlaying = true; // 播放成功后，直接设置状态为 true
             updatePlayerUI(); // 并立即更新UI
           } catch (error) {
             console.error('音频播放失败:', error);
-            musicState.isPlaying = false; // 如果播放失败，也要确保状态正确
+            state.musicState.isPlaying = false; // 如果播放失败，也要确保状态正确
             updatePlayerUI();
           }
         }
@@ -22468,38 +22568,38 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
          */
         function togglePlayPause() {
           if (audioPlayer.paused) {
-            if (musicState.currentIndex > -1) {
-              playSong(musicState.currentIndex);
+            if (state.musicState.currentIndex > -1) {
+              playSong(state.musicState.currentIndex);
             }
           } else {
             audioPlayer.pause();
 
-            musicState.isPlaying = false;
+            state.musicState.isPlaying = false;
             updatePlayerUI();
           }
         }
 
         // 播放下一首（正确跳过保活音频）
         function playNext() {
-          if (musicState.playlist.length === 0) return;
+          if (state.musicState.playlist.length === 0) return;
 
-          let nextIndex = musicState.currentIndex; // 使用临时变量作为起点
+          let nextIndex = state.musicState.currentIndex; // 使用临时变量作为起点
           let attempts = 0; // 防止死循环的安全计数
 
           do {
-            switch (musicState.playMode) {
+            switch (state.musicState.playMode) {
               case 'random':
                 // 随机模式：直接生成一个随机数
-                nextIndex = Math.floor(Math.random() * musicState.playlist.length);
+                nextIndex = Math.floor(Math.random() * state.musicState.playlist.length);
                 break;
               case 'single':
                 // 单曲循环模式：虽然通常由ended触发重播，但在手动点击下一首时，应当切换到下一首
-                nextIndex = (nextIndex + 1) % musicState.playlist.length;
+                nextIndex = (nextIndex + 1) % state.musicState.playlist.length;
                 break;
               case 'order':
               default:
                 // 顺序模式：当前索引 + 1
-                nextIndex = (nextIndex + 1) % musicState.playlist.length;
+                nextIndex = (nextIndex + 1) % state.musicState.playlist.length;
                 break;
             }
 
@@ -22508,9 +22608,9 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             // 如果选中的是保活音频 (isKeepAlive=true)
             // 并且列表里不只有这一首歌
             // 并且没有尝试超过列表长度的2倍（防止全都是保活音频导致死循环）
-            musicState.playlist[nextIndex].isKeepAlive &&
-            musicState.playlist.length > 1 &&
-            attempts < musicState.playlist.length * 2
+            state.musicState.playlist[nextIndex].isKeepAlive &&
+            state.musicState.playlist.length > 1 &&
+            attempts < state.musicState.playlist.length * 2
           );
 
           playSong(nextIndex);
@@ -22518,17 +22618,17 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
 
         // 播放上一首（自动跳过保活音频）
         function playPrev() {
-          if (musicState.playlist.length === 0) return;
-          let newIndex = musicState.currentIndex;
+          if (state.musicState.playlist.length === 0) return;
+          let newIndex = state.musicState.currentIndex;
           let attempts = 0;
 
           do {
-            newIndex = (newIndex - 1 + musicState.playlist.length) % musicState.playlist.length;
+            newIndex = (newIndex - 1 + state.musicState.playlist.length) % state.musicState.playlist.length;
             attempts++;
           } while (
-            musicState.playlist[newIndex].isKeepAlive &&
-            musicState.playlist.length > 1 &&
-            attempts < musicState.playlist.length * 2
+            state.musicState.playlist[newIndex].isKeepAlive &&
+            state.musicState.playlist.length > 1 &&
+            attempts < state.musicState.playlist.length * 2
           );
 
           playSong(newIndex);
@@ -22536,10 +22636,10 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
 
         function changePlayMode() {
           const modes = ['order', 'random', 'single'];
-          const currentModeIndex = modes.indexOf(musicState.playMode);
-          musicState.playMode = modes[(currentModeIndex + 1) % modes.length];
+          const currentModeIndex = modes.indexOf(state.musicState.playMode);
+          state.musicState.playMode = modes[(currentModeIndex + 1) % modes.length];
           document.getElementById('music-mode-btn').textContent = { order: '顺序', random: '随机', single: '单曲' }[
-            musicState.playMode
+            state.musicState.playMode
           ];
         }
 
@@ -22564,7 +22664,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             }
           }
 
-          musicState.playlist.push({
+          state.musicState.playlist.push({
             name,
             artist,
             src: url,
@@ -22576,9 +22676,9 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           await saveGlobalPlaylist();
           updatePlaylistUI();
 
-          if (musicState.currentIndex === -1) {
+          if (state.musicState.currentIndex === -1) {
             // 调用 loadSong 来准备好第一首歌
-            loadSong(musicState.playlist.length - 1);
+            loadSong(state.musicState.playlist.length - 1);
           }
         }
 
@@ -22617,7 +22717,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               });
             }
 
-            musicState.playlist.push({
+            state.musicState.playlist.push({
               name,
               artist,
               src: file,
@@ -22629,7 +22729,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           await saveGlobalPlaylist();
           updatePlaylistUI();
 
-          if (musicState.currentIndex === -1 && musicState.playlist.length > 0) {
+          if (state.musicState.currentIndex === -1 && state.musicState.playlist.length > 0) {
             // 调用 loadSong 来准备好第一首歌
             loadSong(0);
           }
@@ -22637,23 +22737,24 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
         }
 
         async function deleteTrack(index) {
-          if (index < 0 || index >= musicState.playlist.length) return;
-          const track = musicState.playlist[index];
-          const wasPlaying = musicState.isPlaying && musicState.currentIndex === index;
-          if (track.isLocal && audioPlayer.src.startsWith('blob:') && musicState.currentIndex === index)
+          if (index < 0 || index >= state.musicState.playlist.length) return;
+          const track = state.musicState.playlist[index];
+          const wasPlaying = state.musicState.isPlaying && state.musicState.currentIndex === index;
+          if (track.isLocal && audioPlayer.src.startsWith('blob:') && state.musicState.currentIndex === index)
             URL.revokeObjectURL(audioPlayer.src);
-          musicState.playlist.splice(index, 1);
+          state.musicState.playlist.splice(index, 1);
           await saveGlobalPlaylist();
-          if (musicState.playlist.length === 0) {
-            if (musicState.isPlaying) audioPlayer.pause();
+          if (state.musicState.playlist.length === 0) {
+            if (state.musicState.isPlaying) audioPlayer.pause();
             audioPlayer.src = '';
-            musicState.currentIndex = -1;
-            musicState.isPlaying = false;
+            state.musicState.currentIndex = -1;
+            state.musicState.isPlaying = false;
           } else {
             if (wasPlaying) {
               playNext();
             } else {
-              if (musicState.currentIndex >= index) musicState.currentIndex = Math.max(0, musicState.currentIndex - 1);
+              if (state.musicState.currentIndex >= index)
+                state.musicState.currentIndex = Math.max(0, state.musicState.currentIndex - 1);
             }
           }
           updatePlayerUI();
@@ -28007,11 +28108,11 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
         function renderLyrics() {
           const lyricsList = document.getElementById('music-lyrics-list');
           lyricsList.innerHTML = '';
-          if (!musicState.parsedLyrics || musicState.parsedLyrics.length === 0) {
+          if (!state.musicState.parsedLyrics || state.musicState.parsedLyrics.length === 0) {
             lyricsList.innerHTML = '<div class="lyric-line">♪ 暂无歌词 ♪</div>';
             return;
           }
-          musicState.parsedLyrics.forEach((line, index) => {
+          state.musicState.parsedLyrics.forEach((line, index) => {
             const lineEl = document.createElement('div');
             lineEl.className = 'lyric-line';
             lineEl.textContent = line.text;
@@ -28022,17 +28123,17 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
         }
 
         function updateActiveLyric(currentTime) {
-          if (musicState.parsedLyrics.length === 0) return;
+          if (state.musicState.parsedLyrics.length === 0) return;
           let newLyricIndex = -1;
-          for (let i = 0; i < musicState.parsedLyrics.length; i++) {
-            if (currentTime >= musicState.parsedLyrics[i].time) {
+          for (let i = 0; i < state.musicState.parsedLyrics.length; i++) {
+            if (currentTime >= state.musicState.parsedLyrics[i].time) {
               newLyricIndex = i;
             } else {
               break;
             }
           }
-          if (newLyricIndex === musicState.currentLyricIndex) return;
-          musicState.currentLyricIndex = newLyricIndex;
+          if (newLyricIndex === state.musicState.currentLyricIndex) return;
+          state.musicState.currentLyricIndex = newLyricIndex;
           updateLyricsUI();
         }
 
@@ -28041,11 +28142,13 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           const container = document.getElementById('music-lyrics-container');
           const lines = lyricsList.querySelectorAll('.lyric-line');
           lines.forEach(line => line.classList.remove('active'));
-          if (musicState.currentLyricIndex === -1) {
+          if (state.musicState.currentLyricIndex === -1) {
             lyricsList.style.transform = `translateY(0px)`;
             return;
           }
-          const activeLine = lyricsList.querySelector(`.lyric-line[data-index="${musicState.currentLyricIndex}"]`);
+          const activeLine = lyricsList.querySelector(
+            `.lyric-line[data-index="${state.musicState.currentLyricIndex}"]`,
+          );
           if (activeLine) {
             activeLine.classList.add('active');
             const containerHeight = container.offsetHeight;
@@ -28057,7 +28160,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           const floatingLyricText = document.getElementById('floating-lyric-text');
           if (activeLine) {
             floatingLyricText.textContent = activeLine.textContent;
-          } else if (musicState.parsedLyrics.length > 0) {
+          } else if (state.musicState.parsedLyrics.length > 0) {
             floatingLyricText.textContent = '♪ ♪ ♪'; // 歌曲前奏
           } else {
             floatingLyricText.textContent = '♪ 暂无歌词 ♪';
@@ -35169,7 +35272,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           const mainAudioPlayer = document.getElementById('audio-player');
           if (mainAudioPlayer && !mainAudioPlayer.paused) {
             mainAudioPlayer.pause();
-            musicState.isPlaying = false;
+            state.musicState.isPlaying = false;
             updatePlayerUI();
           }
 
@@ -39321,9 +39424,15 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
 
           // 2. 清空所有输入框 (包括新加的URL框)
           const idsToClear = [
-            'aurora-video-file', 'aurora-sub-file-video', 'aurora-sub-url-video',
-            'aurora-text-file', 'aurora-text-url',
-            'aurora-custom-img', 'aurora-custom-audio', 'aurora-sub-file-custom', 'aurora-sub-url-custom'
+            'aurora-video-file',
+            'aurora-sub-file-video',
+            'aurora-sub-url-video',
+            'aurora-text-file',
+            'aurora-text-url',
+            'aurora-custom-img',
+            'aurora-custom-audio',
+            'aurora-sub-file-custom',
+            'aurora-sub-url-custom',
           ];
 
           idsToClear.forEach(id => {
@@ -39341,7 +39450,6 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           // 5. 显示弹窗
           document.getElementById('aurora-setup-modal').classList.add('visible');
         }
-
 
         /**
          * 切换弹窗内的输入显示
@@ -39409,21 +39517,21 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           customAudio.pause();
 
           // --- 辅助函数：处理字幕内容 ---
-          const handleSubtitleContent = (content) => {
-             auroraState.subtitles = parseSRT(content);
-             statusInfo.textContent = `字幕已加载`;
-             // 如果是视频模式，挂载VTT轨道
-             if (mode === 'video') {
-                 const vttContent = 'WEBVTT\n\n' + content.replace(/,/g, '.');
-                 const track = document.createElement('track');
-                 track.kind = 'subtitles';
-                 track.label = 'Chinese';
-                 track.srclang = 'zh';
-                 track.default = true;
-                 track.src = URL.createObjectURL(new Blob([vttContent], { type: 'text/vtt' }));
-                 videoEl.innerHTML = '';
-                 videoEl.appendChild(track);
-             }
+          const handleSubtitleContent = content => {
+            auroraState.subtitles = parseSRT(content);
+            statusInfo.textContent = `字幕已加载`;
+            // 如果是视频模式，挂载VTT轨道
+            if (mode === 'video') {
+              const vttContent = 'WEBVTT\n\n' + content.replace(/,/g, '.');
+              const track = document.createElement('track');
+              track.kind = 'subtitles';
+              track.label = 'Chinese';
+              track.srclang = 'zh';
+              track.default = true;
+              track.src = URL.createObjectURL(new Blob([vttContent], { type: 'text/vtt' }));
+              videoEl.innerHTML = '';
+              videoEl.appendChild(track);
+            }
           };
 
           if (mode === 'video') {
@@ -39455,12 +39563,14 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               reader.onload = e => handleSubtitleContent(e.target.result);
               reader.readAsText(subFile);
             } else if (subUrl) {
-               statusInfo.textContent = '正在下载字幕...';
-               fetch(subUrl).then(r => r.text()).then(txt => handleSubtitleContent(txt)).catch(()=> statusInfo.textContent = '字幕下载失败');
+              statusInfo.textContent = '正在下载字幕...';
+              fetch(subUrl)
+                .then(r => r.text())
+                .then(txt => handleSubtitleContent(txt))
+                .catch(() => (statusInfo.textContent = '字幕下载失败'));
             } else {
               statusInfo.textContent = '无字幕';
             }
-
           } else if (mode === 'text') {
             const textFile = document.getElementById('aurora-text-file').files[0];
             const textUrl = document.getElementById('aurora-text-url').value.trim();
@@ -39473,48 +39583,47 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             textViewer.style.display = 'block';
 
             // --- 辅助函数：处理文本Buffer (解码GBK/UTF8) ---
-            const processTextBuffer = (buffer) => {
-                let text = '';
+            const processTextBuffer = buffer => {
+              let text = '';
+              try {
+                const decoder = new TextDecoder('utf-8', { fatal: true });
+                text = decoder.decode(buffer);
+              } catch (error) {
+                console.log('检测到非UTF-8编码，尝试使用 GB18030 (兼容GBK/ANSI) 解码...');
                 try {
-                    const decoder = new TextDecoder('utf-8', { fatal: true });
-                    text = decoder.decode(buffer);
-                } catch (error) {
-                    console.log('检测到非UTF-8编码，尝试使用 GB18030 (兼容GBK/ANSI) 解码...');
-                    try {
-                        const decoder = new TextDecoder('gb18030');
-                        text = decoder.decode(buffer);
-                    } catch (err2) {
-                        alert('抱歉，无法识别该文件的编码格式。');
-                        return;
-                    }
+                  const decoder = new TextDecoder('gb18030');
+                  text = decoder.decode(buffer);
+                } catch (err2) {
+                  alert('抱歉，无法识别该文件的编码格式。');
+                  return;
                 }
-                auroraState.textContent = text;
-                document.getElementById('aurora-text-body').textContent = auroraState.textContent;
-                const statusInfo = document.getElementById('aurora-info-status');
-                if (statusInfo) statusInfo.textContent = `文档已加载`;
+              }
+              auroraState.textContent = text;
+              document.getElementById('aurora-text-body').textContent = auroraState.textContent;
+              const statusInfo = document.getElementById('aurora-info-status');
+              if (statusInfo) statusInfo.textContent = `文档已加载`;
             };
 
             if (textFile) {
-                const reader = new FileReader();
-                reader.onload = e => processTextBuffer(e.target.result);
-                reader.readAsArrayBuffer(textFile);
+              const reader = new FileReader();
+              reader.onload = e => processTextBuffer(e.target.result);
+              reader.readAsArrayBuffer(textFile);
             } else if (textUrl) {
-                const statusInfo = document.getElementById('aurora-info-status');
-                if (statusInfo) statusInfo.textContent = '正在下载文档...';
-                
-                fetch(textUrl)
-                    .then(res => {
-                        if(!res.ok) throw new Error('网络错误');
-                        return res.arrayBuffer();
-                    })
-                    .then(buffer => processTextBuffer(buffer))
-                    .catch(err => {
-                        console.error(err);
-                        if (statusInfo) statusInfo.textContent = '下载失败';
-                        alert('文档下载失败，请检查链接跨域问题。');
-                    });
-            }
+              const statusInfo = document.getElementById('aurora-info-status');
+              if (statusInfo) statusInfo.textContent = '正在下载文档...';
 
+              fetch(textUrl)
+                .then(res => {
+                  if (!res.ok) throw new Error('网络错误');
+                  return res.arrayBuffer();
+                })
+                .then(buffer => processTextBuffer(buffer))
+                .catch(err => {
+                  console.error(err);
+                  if (statusInfo) statusInfo.textContent = '下载失败';
+                  alert('文档下载失败，请检查链接跨域问题。');
+                });
+            }
           } else if (mode === 'custom') {
             const imgFile = document.getElementById('aurora-custom-img').files[0];
             const audioFile = document.getElementById('aurora-custom-audio').files[0];
@@ -39539,26 +39648,29 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             if (subFile) {
               const reader = new FileReader();
               reader.onload = e => {
-                 handleSubtitleContent(e.target.result);
-                 // 开启监听
-                 customAudio.ontimeupdate = () => {
-                    const curTime = customAudio.currentTime;
-                    const sub = auroraState.subtitles.find(s => curTime >= s.start && curTime <= s.end);
-                    document.getElementById('aurora-custom-subtitle-display').textContent = sub ? sub.text : '';
-                 };
+                handleSubtitleContent(e.target.result);
+                // 开启监听
+                customAudio.ontimeupdate = () => {
+                  const curTime = customAudio.currentTime;
+                  const sub = auroraState.subtitles.find(s => curTime >= s.start && curTime <= s.end);
+                  document.getElementById('aurora-custom-subtitle-display').textContent = sub ? sub.text : '';
+                };
               };
               reader.readAsText(subFile);
             } else if (subUrl) {
-               statusInfo.textContent = '正在下载字幕...';
-               fetch(subUrl).then(r => r.text()).then(txt => {
-                   handleSubtitleContent(txt);
-                   // 开启监听
-                   customAudio.ontimeupdate = () => {
-                      const curTime = customAudio.currentTime;
-                      const sub = auroraState.subtitles.find(s => curTime >= s.start && curTime <= s.end);
-                      document.getElementById('aurora-custom-subtitle-display').textContent = sub ? sub.text : '';
-                   };
-               }).catch(()=> statusInfo.textContent = '字幕下载失败');
+              statusInfo.textContent = '正在下载字幕...';
+              fetch(subUrl)
+                .then(r => r.text())
+                .then(txt => {
+                  handleSubtitleContent(txt);
+                  // 开启监听
+                  customAudio.ontimeupdate = () => {
+                    const curTime = customAudio.currentTime;
+                    const sub = auroraState.subtitles.find(s => curTime >= s.start && curTime <= s.end);
+                    document.getElementById('aurora-custom-subtitle-display').textContent = sub ? sub.text : '';
+                  };
+                })
+                .catch(() => (statusInfo.textContent = '字幕下载失败'));
             } else {
               statusInfo.textContent = '音频无字幕';
             }
@@ -40390,6 +40502,239 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             loadingOverlay.classList.remove('visible');
           }
         }
+        /**
+         * 【全新修正版】可复用的 NovelAI 图片生成“引擎”
+         * @param {string} chatId - 当前聊天ID
+         * @param {string} prompt - 用于生成图片的核心提示词
+         * @param {boolean} isReroll - 【新增】是否为重roll模式，默认为 false
+         * @returns {Promise<string>} - 成功时返回图片的 Base64 Data URL
+         * @throws {Error} - 失败时抛出错误
+         */
+        async function _internal_generateNaiImage(chatId, prompt, isReroll = false) {
+          // 1. 获取所有必要的配置信息 (这部分不变)
+          const chat = window.state.chats[chatId];
+          if (!chat) throw new Error('找不到当前聊天对象');
+
+          const apiKey = localStorage.getItem('novelai-api-key');
+          const model = localStorage.getItem('novelai-model') || 'nai-diffusion-4-5-full';
+          const settings = getNovelAISettings();
+
+          if (!apiKey) throw new Error('未配置NovelAI API Key');
+
+          // 2. ★★★ 核心修改：根据 isReroll 参数，决定如何构建最终的提示词 ★★★
+          const naiPrompts = getCharacterNAIPrompts(chat.id);
+          let finalPositivePrompt;
+          const finalNegativePrompt = naiPrompts.negative; // 负面提示词逻辑不变
+
+          if (isReroll) {
+            // 如果是重roll，直接使用传进来的完整prompt，不再拼接任何东西
+            finalPositivePrompt = prompt;
+            console.log('🔄 [NAI引擎-重roll模式] 使用原始Prompt:', finalPositivePrompt);
+          } else {
+            // 如果是首次生成，执行原来的拼接逻辑
+            finalPositivePrompt = `${prompt}, ${naiPrompts.positive}`;
+            console.log('✨ [NAI引擎-生成模式] 拼接后的Prompt:', finalPositivePrompt);
+          }
+
+          // 3. 构建请求体 (这部分不变)
+          const [width, height] = settings.resolution.split('x').map(Number);
+          let requestBody;
+
+          if (model.includes('nai-diffusion-4')) {
+            requestBody = {
+              input: finalPositivePrompt,
+              model,
+              action: 'generate',
+              parameters: {
+                params_version: 3,
+                width,
+                height,
+                scale: settings.cfg_scale,
+                sampler: settings.sampler,
+                steps: settings.steps,
+                seed: -1, // 重roll时总是使用随机种子
+                n_samples: 1,
+                ucPreset: settings.uc_preset,
+                qualityToggle: settings.quality_toggle,
+                autoSmea: false,
+                dynamic_thresholding: false,
+                controlnet_strength: 1,
+                legacy: false,
+                add_original_image: true,
+                cfg_rescale: 0,
+                noise_schedule: 'karras',
+                legacy_v3_extend: false,
+                skip_cfg_above_sigma: null,
+                use_coords: false,
+                legacy_uc: false,
+                normalize_reference_strength_multiple: true,
+                inpaintImg2ImgStrength: 1,
+                characterPrompts: [],
+                v4_prompt: {
+                  caption: { base_caption: finalPositivePrompt, char_captions: [] },
+                  use_coords: false,
+                  use_order: true,
+                },
+                v4_negative_prompt: {
+                  caption: { base_caption: finalNegativePrompt, char_captions: [] },
+                  legacy_uc: false,
+                },
+                negative_prompt: finalNegativePrompt,
+                deliberate_euler_ancestral_bug: false,
+                prefer_brownian: true,
+              },
+            };
+          } else {
+            requestBody = {
+              input: finalPositivePrompt,
+              model,
+              action: 'generate',
+              parameters: {
+                width,
+                height,
+                scale: settings.cfg_scale,
+                sampler: settings.sampler,
+                steps: settings.steps,
+                seed: -1, // 重roll时总是使用随机种子
+                n_samples: 1,
+                ucPreset: settings.uc_preset,
+                qualityToggle: settings.quality_toggle,
+                sm: settings.smea,
+                sm_dyn: settings.smea_dyn,
+                dynamic_thresholding: false,
+                controlnet_strength: 1,
+                legacy: false,
+                add_original_image: false,
+                cfg_rescale: 0,
+                noise_schedule: 'native',
+                negative_prompt: finalNegativePrompt,
+              },
+            };
+          }
+
+          // 4. 发送请求和处理响应 (这部分不变)
+          let apiUrl = model.includes('nai-diffusion-4')
+            ? 'https://image.novelai.net/ai/generate-image-stream'
+            : 'https://image.novelai.net/ai/generate-image';
+          let corsProxy = settings.cors_proxy === 'custom' ? settings.custom_proxy_url : settings.cors_proxy;
+          if (corsProxy) apiUrl = corsProxy + encodeURIComponent(apiUrl);
+
+          const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + apiKey },
+            body: JSON.stringify(requestBody),
+          });
+
+          if (!response.ok) throw new Error(`NAI API 错误: ${response.status} ${response.statusText}`);
+
+          // 5. 解压并提取图片 (这部分不变)
+          let imageDataUrl = null;
+          let zipBlob = null;
+          const contentType = response.headers.get('content-type');
+
+          if (contentType && contentType.includes('text/event-stream')) {
+            const text = await response.text();
+            const lines = text.trim().split('\n');
+            let base64Data = null;
+            for (let i = lines.length - 1; i >= 0; i--) {
+              const line = lines[i].trim();
+              if (line.startsWith('data: ') && line !== 'data: [DONE]') {
+                const dataContent = line.substring(6);
+                try {
+                  const jsonData = JSON.parse(dataContent);
+                  if (jsonData.event_type === 'final' && jsonData.image) {
+                    base64Data = jsonData.image;
+                    break;
+                  }
+                } catch {
+                  base64Data = dataContent;
+                  break;
+                }
+              }
+            }
+            if (base64Data) {
+              const isPNG = base64Data.startsWith('iVBORw0KGgo');
+              const binaryString = atob(base64Data);
+              const bytes = new Uint8Array(binaryString.length);
+              for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
+              if (isPNG || base64Data.startsWith('/9j/')) {
+                imageDataUrl = await new Promise(resolve => {
+                  const reader = new FileReader();
+                  reader.onloadend = () => resolve(reader.result);
+                  reader.readAsDataURL(new Blob([bytes], { type: isPNG ? 'image/png' : 'image/jpeg' }));
+                });
+              } else {
+                zipBlob = new Blob([bytes]);
+              }
+            }
+          } else {
+            zipBlob = await response.blob();
+          }
+
+          if (!imageDataUrl && zipBlob) {
+            if (typeof JSZip === 'undefined') throw new Error('JSZip库未加载');
+            const zip = await JSZip.loadAsync(zipBlob);
+            const imageFile = Object.values(zip.files).find(f => f.name.endsWith('.png'));
+            if (!imageFile) throw new Error('ZIP中未找到图片');
+            imageDataUrl = await imageFile.async('base64');
+            imageDataUrl = `data:image/png;base64,${imageDataUrl}`;
+          }
+
+          if (!imageDataUrl) throw new Error('无法从API响应中提取图片。');
+
+          return imageDataUrl;
+        }
+
+        /**
+         * 【全新修正版】处理重roll按钮点击的“控制器”
+         * @param {number} timestamp - 被点击按钮对应消息的时间戳
+         */
+        async function handleNaiImageReroll(timestamp) {
+          const chatId = window.state.activeChatId;
+          if (!chatId) return;
+
+          const chat = window.state.chats[chatId];
+          const messageIndex = chat.history.findIndex(m => m.timestamp === timestamp);
+          const originalMessage = chat.history[messageIndex];
+
+          if (
+            !originalMessage ||
+            originalMessage.type !== 'naiimag' ||
+            !(originalMessage.prompt || originalMessage.fullPrompt)
+          ) {
+            alert('无法重roll：找不到原始图片的生成提示词。');
+            return;
+          }
+
+          // 这次我们用 fullPrompt，因为它包含了AI生成这张图的所有信息
+          const promptToUse = originalMessage.fullPrompt || originalMessage.prompt;
+
+          const rerollButton = document.querySelector(`.reroll-nai-button[data-timestamp="${timestamp}"]`);
+          if (rerollButton) {
+            rerollButton.classList.add('is-loading');
+            rerollButton.disabled = true;
+          }
+
+          try {
+            // ★★★ 核心修改：调用引擎函数时，第三个参数传入 true，表示这是重roll ★★★
+            const newImageDataUrl = await _internal_generateNaiImage(chatId, promptToUse, true);
+
+            if (messageIndex > -1) {
+              chat.history[messageIndex].imageUrl = newImageDataUrl;
+
+              await db.chats.put(chat);
+              renderChatInterface(chatId);
+            }
+          } catch (error) {
+            console.error('重roll图片失败:', error);
+            alert(`重roll图片失败: ${error.message}`);
+          } finally {
+            if (rerollButton) {
+              rerollButton.classList.remove('is-loading');
+              rerollButton.disabled = false;
+            }
+          }
+        }
 
         // 4. 初始化函数 init()
         // ===================================================================
@@ -40892,7 +41237,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
 
           // 播放结束监听器（保活音频强制死循环）
           audioPlayer.addEventListener('ended', () => {
-            const currentTrack = musicState.playlist[musicState.currentIndex];
+            const currentTrack = state.musicState.playlist[state.musicState.currentIndex];
 
             // 如果是保活音频，强制重播，无视任何模式
             if (currentTrack && currentTrack.isKeepAlive) {
@@ -40907,7 +41252,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
 
           // 20分钟强制循环监听器
           audioPlayer.addEventListener('timeupdate', () => {
-            const currentTrack = musicState.playlist[musicState.currentIndex];
+            const currentTrack = state.musicState.playlist[state.musicState.currentIndex];
 
             // 检查：1.是否存在当前歌曲 2.是否是保活音频 3.是否超过20分钟(1200秒)
             if (currentTrack && currentTrack.isKeepAlive && audioPlayer.currentTime > 600) {
@@ -41556,6 +41901,17 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           });
 
           document.getElementById('chat-messages').addEventListener('click', async e => {
+            // ▼▼▼ 把下面的代码块，粘贴到这里 ▼▼▼
+            const rerollBtn = e.target.closest('.reroll-nai-button');
+            if (rerollBtn) {
+              e.stopPropagation(); // 阻止事件冒泡，防止触发其他点击效果
+              const timestamp = parseInt(rerollBtn.dataset.timestamp);
+              if (!isNaN(timestamp)) {
+                handleNaiImageReroll(timestamp);
+              }
+              return;
+            }
+
             const voiceBody = e.target.closest('.voice-message-body');
             if (voiceBody) {
               const bubble = voiceBody.closest('.message-bubble');
@@ -44599,14 +44955,14 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           audioPlayer.addEventListener('timeupdate', updateMusicProgressBar);
 
           audioPlayer.addEventListener('pause', () => {
-            if (musicState.isActive) {
-              musicState.isPlaying = false;
+            if (state.musicState.isActive) {
+              state.musicState.isPlaying = false;
               updatePlayerUI();
             }
           });
           audioPlayer.addEventListener('play', () => {
-            if (musicState.isActive) {
-              musicState.isPlaying = true;
+            if (state.musicState.isActive) {
+              state.musicState.isPlaying = true;
               updatePlayerUI();
             }
           });
@@ -44615,7 +44971,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             const target = e.target;
             if (target.classList.contains('delete-track-btn')) {
               const index = parseInt(target.dataset.index);
-              const track = musicState.playlist[index];
+              const track = state.musicState.playlist[index];
               const confirmed = await showCustomConfirm('删除歌曲', `确定要从播放列表中删除《${track.name}》吗？`);
               if (confirmed) {
                 deleteTrack(index);
@@ -44680,11 +45036,11 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
 
               // 3. 如果成功获取到歌词，就保存并更新
               if (lrcContent !== null) {
-                musicState.playlist[index].lrcContent = lrcContent;
+                state.musicState.playlist[index].lrcContent = lrcContent;
                 await saveGlobalPlaylist();
                 alert('歌词导入成功！');
-                if (musicState.currentIndex === index) {
-                  musicState.parsedLyrics = parseLRC(lrcContent);
+                if (state.musicState.currentIndex === index) {
+                  state.musicState.parsedLyrics = parseLRC(lrcContent);
                   renderLyrics();
                 }
               }
@@ -44900,7 +45256,8 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                   { confirmButtonClass: 'btn-danger' },
                 );
                 if (confirmed) {
-                  if (musicState.isActive && musicState.activeChatId === chat.id) await endListenTogetherSession(false);
+                  if (state.musicState.isActive && state.musicState.activeChatId === chat.id)
+                    await endListenTogetherSession(false);
                   delete state.chats[chat.id];
                   if (state.activeChatId === chat.id) state.activeChatId = null;
                   await db.chats.delete(chat.id);
