@@ -1082,6 +1082,18 @@
             </select>
           </div>
 
+          <div class="form-group">
+            <label for="world-book-trigger-keywords-input">触发关键词 (选填)</label>
+            <input
+              type="text"
+              id="world-book-trigger-keywords-input"
+              placeholder="用英文逗号分隔，例如：魔法,magic,法术"
+            />
+            <small style="color: #888; font-size: 12px; display: block; margin-top: 4px;">
+              留空则始终加载此条目。填写关键词后，只有当对话中包含这些关键词时才会加载。
+            </small>
+          </div>
+
           <div class="form-group" style="height: 100%">
             <label for="world-book-content-input">内容</label>
             <textarea
@@ -17405,6 +17417,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                 name: entryName, // 使用我们智能获取到的名字
                 content: entry.content,
                 categoryId: categoryId,
+                triggerKeywords: null, // 【世界书关键词优化】导入时默认为空（全局使用）
               });
             }
           }
@@ -21698,6 +21711,9 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           document.getElementById("world-book-name-input").value = book.name;
           document.getElementById("world-book-content-input").value =
             book.content;
+          // 【世界书关键词优化】加载触发关键词
+          document.getElementById("world-book-trigger-keywords-input").value =
+            book.triggerKeywords || "";
 
           // 填充分类下拉菜单
           const selectEl = document.getElementById(
@@ -23162,21 +23178,44 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
         .join("\n")}
 			`;
           }
-          // 将世界书读取提到这里，确保线下模式也能生效
+          // 【世界书关键词优化】将世界书读取提到这里，确保线下模式也能生效
           let worldBookContext = "";
           if (
             chat.settings.linkedWorldBookIds &&
             chat.settings.linkedWorldBookIds.length > 0
           ) {
+            // 获取最近的对话内容用于关键词匹配
+            const recentMessages = chat.history
+              .slice(-10)
+              .map((msg) => String(msg.content || ""))
+              .join(" ")
+              .toLowerCase();
+            
             const linkedContents = chat.settings.linkedWorldBookIds
               .map((id) => {
                 const book = state.worldBooks.find((b) => b.id === id);
+                if (!book || !book.content) return "";
+                
+                // 【世界书关键词优化】检查是否需要加载此条目
+                if (book.triggerKeywords && book.triggerKeywords.trim()) {
+                  // 如果有关键词，检查是否匹配
+                  const keywords = book.triggerKeywords
+                    .split(",")
+                    .map((k) => k.trim().toLowerCase())
+                    .filter((k) => k);
+                  const hasKeyword = keywords.some((keyword) =>
+                    recentMessages.includes(keyword)
+                  );
+                  if (!hasKeyword) {
+                    // 没有匹配到关键词，跳过此条目
+                    return "";
+                  }
+                }
+                // 如果没有关键词或匹配成功，加载此条目
                 // 这里使用了 stripHtmlAndCode 清理函数，确保纯文本
-                return book && book.content
-                  ? `\n\n## 世界书条目: ${book.name}\n${stripHtmlAndCode(
-                      book.content
-                    )}`
-                  : "";
+                return `\n\n## 世界书条目: ${book.name}\n${stripHtmlAndCode(
+                  book.content
+                )}`;
               })
               .filter(Boolean)
               .join("");
@@ -24113,24 +24152,29 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               timeContext += "\n- **对话状态**: 这是你们的第一次对话。";
             }
 
+            // 【世界书关键词优化】根据关键词过滤世界书
             let worldBookContent = "";
             if (
               chat.settings.linkedWorldBookIds &&
               chat.settings.linkedWorldBookIds.length > 0
             ) {
-              const linkedContents = chat.settings.linkedWorldBookIds
-                .map((bookId) => {
-                  const worldBook = state.worldBooks.find(
-                    (wb) => wb.id === bookId
-                  );
-
-                  return worldBook && worldBook.content
-                    ? `\n\n## 世界书: ${worldBook.name}\n${stripHtmlAndCode(
-                        worldBook.content
-                      )}`
-                    : "";
+              // 获取最近的对话内容用于关键词匹配
+              const recentMessages = chat.history
+                .slice(-10)
+                .map((msg) => String(msg.content || ""))
+                .join(" ");
+              
+              const filteredBooks = filterWorldBooksByKeywords(
+                chat.settings.linkedWorldBookIds,
+                recentMessages
+              );
+              
+              const linkedContents = filteredBooks
+                .map((worldBook) => {
+                  return `\n\n## 世界书: ${worldBook.name}\n${stripHtmlAndCode(
+                    worldBook.content
+                  )}`;
                 })
-                .filter(Boolean)
                 .join("");
               if (linkedContents) {
                 worldBookContent = `\n\n# 核心世界观设定 (必须严格遵守以下所有设定)，里面可能会包含HTML小剧场，在捕获到关键词后输出\n${linkedContents}\n`;
@@ -30550,21 +30594,27 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           const userNickname = state.qzoneSettings.nickname;
           const countdownContext = await getCountdownContext();
 
+          // 【世界书关键词优化】根据关键词过滤世界书
           let worldBookContext = "";
           if (
             chat.settings.linkedWorldBookIds &&
             chat.settings.linkedWorldBookIds.length > 0
           ) {
-            const linkedContents = chat.settings.linkedWorldBookIds
-              .map((bookId) => {
-                const worldBook = state.worldBooks.find(
-                  (wb) => wb.id === bookId
-                );
-                return worldBook && worldBook.content
-                  ? `\n\n## 世界书: ${worldBook.name}\n${worldBook.content}`
-                  : "";
+            // 获取最近的对话内容用于关键词匹配
+            const recentMessages = chat.history
+              .slice(-10)
+              .map((msg) => String(msg.content || ""))
+              .join(" ");
+            
+            const filteredBooks = filterWorldBooksByKeywords(
+              chat.settings.linkedWorldBookIds,
+              recentMessages
+            );
+            
+            const linkedContents = filteredBooks
+              .map((worldBook) => {
+                return `\n\n## 世界书: ${worldBook.name}\n${worldBook.content}`;
               })
-              .filter(Boolean)
               .join("");
             if (linkedContents) {
               worldBookContext = `\n\n# 核心世界观设定 (你必须严格遵守)\n${linkedContents}\n`;
@@ -36436,6 +36486,45 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
         }
 
         /**
+         * 【世界书关键词优化】根据关键词过滤世界书条目
+         * @param {Array<string>} worldBookIds - 世界书ID数组
+         * @param {string} contextText - 用于匹配关键词的文本（通常是最近的对话内容）
+         * @returns {Array<Object>} 过滤后的世界书条目数组
+         */
+        function filterWorldBooksByKeywords(worldBookIds, contextText = "") {
+          if (!worldBookIds || worldBookIds.length === 0) {
+            return [];
+          }
+          
+          const contextLower = contextText.toLowerCase();
+          
+          return worldBookIds
+            .map((id) => {
+              const book = state.worldBooks.find((b) => b.id === id);
+              if (!book || !book.content) return null;
+              
+              // 如果没有关键词，则始终加载（全局使用）
+              if (!book.triggerKeywords || !book.triggerKeywords.trim()) {
+                return book;
+              }
+              
+              // 如果有关键词，检查是否匹配
+              const keywords = book.triggerKeywords
+                .split(",")
+                .map((k) => k.trim().toLowerCase())
+                .filter((k) => k);
+              
+              const hasKeyword = keywords.some((keyword) =>
+                contextLower.includes(keyword)
+              );
+              
+              // 只有匹配到关键词才返回
+              return hasKeyword ? book : null;
+            })
+            .filter(Boolean);
+        }
+
+        /**
          * 打开NPC库管理界面（显示所有NPC，支持为当前角色启用/禁用）
          */
         async function openNpcManager() {
@@ -38903,18 +38992,27 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               linkedMemoryContext = allContexts.filter(Boolean).join("\n");
             }
 
+            // 【世界书关键词优化】根据关键词过滤世界书
             let worldBookContext = "";
             if (
               chat.settings.linkedWorldBookIds &&
               chat.settings.linkedWorldBookIds.length > 0
             ) {
+              // 获取最近的对话内容用于关键词匹配
+              const recentMessages = chat.history
+                .slice(-10)
+                .map((msg) => String(msg.content || ""))
+                .join(" ");
+              
+              const filteredBooks = filterWorldBooksByKeywords(
+                chat.settings.linkedWorldBookIds,
+                recentMessages
+              );
+              
               worldBookContext =
                 "--- 世界观设定 (必须严格遵守) ---\n" +
-                chat.settings.linkedWorldBookIds
-                  .map((id) => {
-                    const book = state.worldBooks.find((b) => b.id === id);
-                    return book ? `[${book.name}]: ${book.content}` : "";
-                  })
+                filteredBooks
+                  .map((book) => `[${book.name}]: ${book.content}`)
                   .join("\n\n");
             }
 
@@ -39327,18 +39425,27 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               "用于生成手机数据的互通聊天记录上下文:",
               linkedMemoryContext
             );
+            // 【世界书关键词优化】根据关键词过滤世界书
             let worldBookContext = "";
             if (
               chat.settings.linkedWorldBookIds &&
               chat.settings.linkedWorldBookIds.length > 0
             ) {
+              // 获取最近的对话内容用于关键词匹配
+              const recentMessages = chat.history
+                .slice(-10)
+                .map((msg) => String(msg.content || ""))
+                .join(" ");
+              
+              const filteredBooks = filterWorldBooksByKeywords(
+                chat.settings.linkedWorldBookIds,
+                recentMessages
+              );
+              
               worldBookContext =
                 "--- 世界观设定 (必须严格遵守) ---\n" +
-                chat.settings.linkedWorldBookIds
-                  .map((id) => {
-                    const book = state.worldBooks.find((b) => b.id === id);
-                    return book ? `[${book.name}]: ${book.content}` : "";
-                  })
+                filteredBooks
+                  .map((book) => `[${book.name}]: ${book.content}`)
                   .join("\n\n");
             }
             const npcLibrary = chat.npcLibrary || [];
@@ -47587,6 +47694,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                         content: entry.content || "", // 内容就是词条的内容
                         categoryId: book_330.categoryId || 0, // 继承原合集的分类ID
                         isEnabled: entry.enabled !== false, // 继承启用状态，默认为true
+                        triggerKeywords: null, // 【世界书关键词优化】导入时默认为空（全局使用）
                       };
 
                       // 5. 将这个全新的独立条目添加到我们的收集中
@@ -52540,6 +52648,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                   id: "wb_" + Date.now(),
                   name: name.trim(),
                   content: "",
+                  triggerKeywords: null, // 【世界书关键词优化】初始化触发关键词
                 };
                 await db.worldBooks.add(newBook);
                 state.worldBooks.push(newBook);
@@ -52571,8 +52680,14 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                 const categoryId = document.getElementById(
                   "world-book-category-select"
                 ).value;
-                // 如果选择了“未分类”，存入 null；否则存入数字ID
+                // 如果选择了"未分类"，存入 null；否则存入数字ID
                 book.categoryId = categoryId ? parseInt(categoryId) : null;
+
+                // 【世界书关键词优化】保存触发关键词
+                const triggerKeywords = document.getElementById(
+                  "world-book-trigger-keywords-input"
+                ).value.trim();
+                book.triggerKeywords = triggerKeywords || null;
 
                 await db.worldBooks.put(book);
                 document.getElementById("world-book-editor-title").textContent =
