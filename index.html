@@ -2278,6 +2278,26 @@
               </svg>
             </button>
             <button
+              id="advance-plot-btn"
+              class="chat-action-icon-btn action-button"
+              title="推进剧情"
+            >
+              <svg
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <polyline points="9 18 15 12 9 6"></polyline>
+                <polyline points="15 18 21 12 15 6"></polyline>
+              </svg>
+            </button>
+            <button
               id="share-link-btn"
               class="chat-action-icon-btn action-button"
               title="分享链接"
@@ -56167,7 +56187,12 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               showScreen("chat-interface-screen");
             });
 
-          // 1. 绑定输入框上方“分享链接”按钮的点击事件
+          // 1. 绑定输入框上方"推进剧情"按钮的点击事件
+          document
+            .getElementById("advance-plot-btn")
+            .addEventListener("click", advancePlot);
+
+          // 2. 绑定输入框上方"分享链接"按钮的点击事件
           document
             .getElementById("share-link-btn")
             .addEventListener("click", openShareLinkModal);
@@ -59692,7 +59717,39 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           }, 300);
         };
 
+        /**
+         * 【推进剧情】处理聊天界面的"推进"请求
+         * - 添加系统指令消息后，直接调用 triggerAiResponse 确保完全同步
+         */
+        async function advancePlot() {
+          const chat = state.chats[state.activeChatId];
+          if (!chat) return;
+
+          try {
+            // 添加一条隐藏的系统指令消息，触发AI主动回复
+            const systemInstruction = {
+              role: "user",
+              content: `[系统指令：用户按下了"推进"按钮，现在轮到你主动行动了，请继续对话。]`,
+              timestamp: Date.now(),
+              isHidden: true, // 隐藏这条消息，不在界面显示
+            };
+
+            chat.history.push(systemInstruction);
+            await db.chats.put(chat);
+
+            // 直接调用 triggerAiResponse，它会处理所有逻辑
+            await triggerAiResponse();
+          } catch (error) {
+            console.error("推进剧情失败:", error);
+            await showCustomAlert(
+              "操作失败",
+              `无法推进剧情: ${error.message}`
+            );
+          }
+        }
+
         window.triggerAiResponse = triggerAiResponse;
+        window.advancePlot = advancePlot;
         window.openLoversSpaceFromCard = openLoversSpaceFromCard;
 
         const avatarFrames = [
