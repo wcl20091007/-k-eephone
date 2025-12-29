@@ -5585,6 +5585,37 @@
                 <input type="checkbox" id="time-perception-toggle" checked />
                 <span class="toggle-switch-slider"></span>
               </label>
+              <div id="timezone-container" style="margin-top: 10px;">
+                <label>时区选择</label>
+                <select id="timezone-select" class="moe-input">
+                  <option value="UTC-12">UTC-12 (国际日期变更线西)</option>
+                  <option value="UTC-11">UTC-11 (夏威夷标准时间)</option>
+                  <option value="UTC-10">UTC-10 (阿拉斯加标准时间)</option>
+                  <option value="UTC-9">UTC-9 (阿拉斯加夏令时)</option>
+                  <option value="UTC-8">UTC-8 (太平洋标准时间)</option>
+                  <option value="UTC-7">UTC-7 (山地标准时间)</option>
+                  <option value="UTC-6">UTC-6 (中部标准时间)</option>
+                  <option value="UTC-5">UTC-5 (东部标准时间)</option>
+                  <option value="UTC-4">UTC-4 (大西洋标准时间)</option>
+                  <option value="UTC-3">UTC-3 (南美东部时间)</option>
+                  <option value="UTC-2">UTC-2 (大西洋中部时间)</option>
+                  <option value="UTC-1">UTC-1 (亚速尔群岛时间)</option>
+                  <option value="UTC+0">UTC+0 (格林威治标准时间)</option>
+                  <option value="UTC+1">UTC+1 (中欧时间)</option>
+                  <option value="UTC+2">UTC+2 (东欧时间)</option>
+                  <option value="UTC+3">UTC+3 (莫斯科时间)</option>
+                  <option value="UTC+4">UTC+4 (海湾标准时间)</option>
+                  <option value="UTC+5">UTC+5 (巴基斯坦标准时间)</option>
+                  <option value="UTC+5.5">UTC+5:30 (印度标准时间)</option>
+                  <option value="UTC+6">UTC+6 (孟加拉标准时间)</option>
+                  <option value="UTC+7">UTC+7 (印度支那时间)</option>
+                  <option value="UTC+8" selected>UTC+8 (中国标准时间/北京时间)</option>
+                  <option value="UTC+9">UTC+9 (日本标准时间)</option>
+                  <option value="UTC+10">UTC+10 (澳大利亚东部标准时间)</option>
+                  <option value="UTC+11">UTC+11 (所罗门群岛时间)</option>
+                  <option value="UTC+12">UTC+12 (新西兰标准时间)</option>
+                </select>
+              </div>
               <div
                 id="custom-time-container"
                 style="display: none; margin-top: 5px"
@@ -17212,6 +17243,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                 presets: [],
               },
               timePerceptionEnabled: true,
+              timezone: "UTC+8", // 默认时区：北京时间
               customTime: "",
               isCoupleAvatar: false,
               coupleAvatarDescription: "",
@@ -23962,25 +23994,42 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             // --- 红包状态播报模块结束 ---
 
             let now;
-            // 2. 检查时间感知开关是否打开 (北京时间转换逻辑)
+            // 2. 检查时间感知开关是否打开 (使用选择的时区转换逻辑)
             if (chat.settings.timePerceptionEnabled ?? true) {
-              // 开关打开，使用真实的北京时间
+              // 开关打开，使用选择的时区
+              const timezone = chat.settings.timezone || "UTC+8"; // 默认使用UTC+8
+              // 解析时区字符串，例如 "UTC+8" -> 8, "UTC-5" -> -5, "UTC+5.5" -> 5.5
+              const timezoneMatch = timezone.match(/UTC([+-])(\d+(?:\.\d+)?)/);
+              let timezoneOffsetHours = 8; // 默认值
+              if (timezoneMatch) {
+                const sign = timezoneMatch[1] === "+" ? 1 : -1;
+                timezoneOffsetHours = sign * parseFloat(timezoneMatch[2]);
+              }
+              
               const localNow = new Date();
               const utcMilliseconds =
                 localNow.getTime() + localNow.getTimezoneOffset() * 60000;
-              const beijingMilliseconds = utcMilliseconds + 3600000 * 8;
-              now = new Date(beijingMilliseconds);
+              const targetTimeMilliseconds = utcMilliseconds + 3600000 * timezoneOffsetHours;
+              now = new Date(targetTimeMilliseconds);
             } else {
               // 开关关闭，尝试使用自定义时间
               if (chat.settings.customTime) {
                 now = new Date(chat.settings.customTime);
               } else {
-                // 如果自定义时间为空，则安全地退回到真实的北京时间
+                // 如果自定义时间为空，则安全地退回到选择的时区时间
+                const timezone = chat.settings.timezone || "UTC+8";
+                const timezoneMatch = timezone.match(/UTC([+-])(\d+(?:\.\d+)?)/);
+                let timezoneOffsetHours = 8;
+                if (timezoneMatch) {
+                  const sign = timezoneMatch[1] === "+" ? 1 : -1;
+                  timezoneOffsetHours = sign * parseFloat(timezoneMatch[2]);
+                }
+                
                 const localNow = new Date();
                 const utcMilliseconds =
                   localNow.getTime() + localNow.getTimezoneOffset() * 60000;
-                const beijingMilliseconds = utcMilliseconds + 3600000 * 8;
-                now = new Date(beijingMilliseconds);
+                const targetTimeMilliseconds = utcMilliseconds + 3600000 * timezoneOffsetHours;
+                now = new Date(targetTimeMilliseconds);
               }
             }
 
@@ -51364,6 +51413,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                       presets: [],
                     }, // 初始化线下模式
                     timePerceptionEnabled: true, // 初始化时间感知
+                    timezone: "UTC+8", // 初始化时区：北京时间
                     customTime: "", // 初始化自定义时间
                     isCoupleAvatar: false, // 初始化情侣头像开关
                     coupleAvatarDescription: "", // 初始化情侣头像描述
@@ -53090,11 +53140,14 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               );
               const customTimeInput =
                 document.getElementById("custom-time-input");
+              const timezoneSelect = document.getElementById("timezone-select");
 
               // 如果是旧聊天，给一个默认值 true（开启）
               const isTimeEnabled = chat.settings.timePerceptionEnabled ?? true;
               timeToggle.checked = isTimeEnabled;
               customTimeInput.value = chat.settings.customTime || "";
+              // 恢复时区选择，如果没有设置则使用默认值 UTC+8
+              timezoneSelect.value = chat.settings.timezone || "UTC+8";
 
               // 根据开关状态，决定是否显示自定义时间输入框
               customTimeContainer.style.display = isTimeEnabled
@@ -53673,6 +53726,8 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               chat.settings.timePerceptionEnabled = document.getElementById(
                 "time-perception-toggle"
               ).checked;
+              chat.settings.timezone =
+                document.getElementById("timezone-select").value;
               chat.settings.customTime =
                 document.getElementById("custom-time-input").value;
 
