@@ -17560,12 +17560,31 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             renderWorldBookScreen();
           }
 
+          // 【锁屏修复】如果锁屏已启用，不要移除锁屏的active类
           document
             .querySelectorAll(".screen")
-            .forEach((s) => s.classList.remove("active"));
+            .forEach((s) => {
+              // 如果锁屏已启用且当前屏幕是锁屏，保留它的active类
+              if (s.id === "lock-screen" && isLocked) {
+                console.log("锁屏已启用，保留锁屏的active类");
+                return; // 跳过锁屏，不移除它的active类
+              }
+              s.classList.remove("active");
+              s.style.opacity = "0";
+              s.style.visibility = "hidden";
+            });
+          
+          // 如果锁屏已启用，不显示其他屏幕
+          if (isLocked && screenId !== "lock-screen") {
+            console.log("锁屏已启用，阻止显示其他屏幕:", screenId);
+            return; // 阻止显示其他屏幕
+          }
+          
           const screenToShow = document.getElementById(screenId);
           if (screenToShow) {
             screenToShow.classList.add("active");
+            screenToShow.style.opacity = "1";
+            screenToShow.style.visibility = "visible";
           }
 
           if (screenId === "chat-interface-screen") {
@@ -38291,11 +38310,34 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
          */
         function applyLockscreenWallpaper() {
           const lockScreen = document.getElementById("lock-screen");
+          if (!lockScreen) {
+            console.error("锁屏元素不存在，无法应用壁纸");
+            return;
+          }
+          
           const wallpaper = state.globalSettings.lockscreenWallpaper;
-          if (wallpaper && wallpaper.startsWith("data:image")) {
-            lockScreen.style.backgroundImage = `url(${wallpaper})`;
-          } else if (wallpaper) {
-            lockScreen.style.backgroundImage = wallpaper;
+          console.log("应用锁屏壁纸，wallpaper:", wallpaper ? "存在" : "不存在");
+          
+          if (wallpaper) {
+            // 支持多种格式：data:image、URL、gradient等
+            if (wallpaper.startsWith("data:image") || wallpaper.startsWith("http://") || wallpaper.startsWith("https://")) {
+              lockScreen.style.backgroundImage = `url(${wallpaper})`;
+              lockScreen.style.backgroundSize = "cover";
+              lockScreen.style.backgroundPosition = "center";
+              lockScreen.style.backgroundRepeat = "no-repeat";
+            } else {
+              // 可能是gradient或其他CSS值
+              lockScreen.style.backgroundImage = wallpaper;
+              lockScreen.style.backgroundSize = "cover";
+              lockScreen.style.backgroundPosition = "center";
+            }
+            console.log("锁屏壁纸已应用:", wallpaper.substring(0, 50) + "...");
+          } else {
+            // 如果没有设置壁纸，使用默认渐变
+            lockScreen.style.backgroundImage = "linear-gradient(135deg, #764ba2, #667eea)";
+            lockScreen.style.backgroundSize = "cover";
+            lockScreen.style.backgroundPosition = "center";
+            console.log("使用默认锁屏壁纸");
           }
         }
 
@@ -38306,18 +38348,54 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           console.log("正在锁定手机...");
           isLocked = true;
           const lockScreen = document.getElementById("lock-screen");
-          if (lockScreen) {
-            // 应用锁屏壁纸
-            applyLockscreenWallpaper();
-            // 显示锁屏
-            lockScreen.classList.add("active");
-            // 隐藏其他所有屏幕
-            document
-              .querySelectorAll(".screen:not(#lock-screen)")
-              .forEach((s) => s.classList.remove("active"));
-            // 确保锁屏在最上层
-            lockScreen.style.zIndex = "999";
+          if (!lockScreen) {
+            console.error("锁屏元素不存在！");
+            return;
           }
+          
+          // 应用锁屏壁纸
+          applyLockscreenWallpaper();
+          
+          // 隐藏其他所有屏幕
+          document
+            .querySelectorAll(".screen:not(#lock-screen)")
+            .forEach((s) => {
+              s.classList.remove("active");
+              s.style.opacity = "0";
+              s.style.visibility = "hidden";
+            });
+          
+          // 显示锁屏 - 使用强制样式确保显示，但保留背景图片
+          const currentBg = lockScreen.style.backgroundImage || window.getComputedStyle(lockScreen).backgroundImage;
+          lockScreen.style.cssText = `
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+            z-index: 999 !important;
+            opacity: 1 !important;
+            visibility: visible !important;
+            display: flex !important;
+            background-size: cover !important;
+            background-position: center !important;
+            background-repeat: no-repeat !important;
+          `;
+          // 重新应用背景图片（因为cssText会覆盖它）
+          if (currentBg && currentBg !== 'none') {
+            lockScreen.style.backgroundImage = currentBg;
+          }
+          lockScreen.classList.add("active");
+          
+          console.log("锁屏已显示，isLocked:", isLocked);
+          console.log("锁屏元素:", lockScreen);
+          console.log("锁屏active类:", lockScreen.classList.contains("active"));
+          console.log("锁屏computed style:", window.getComputedStyle(lockScreen).display);
+          console.log("锁屏computed opacity:", window.getComputedStyle(lockScreen).opacity);
+          console.log("锁屏computed visibility:", window.getComputedStyle(lockScreen).visibility);
+          console.log("锁屏computed z-index:", window.getComputedStyle(lockScreen).zIndex);
         }
 
         /**
@@ -60365,17 +60443,24 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           // ===================================================================
           // 5. 启动！
 
-          // 应用壁纸并更新所有时钟
+          // 先应用壁纸（在显示锁屏之前）
           applyLockscreenWallpaper();
+          // 更新所有时钟
           updateLockClock();
 
-          // 1. 读取、应用并监听“启用锁屏”设置
+          // 1. 读取、应用并监听"启用锁屏"设置
           const enableLockScreenToggle = document.getElementById(
             "enable-lock-screen-toggle"
           );
+          if (!enableLockScreenToggle) {
+            console.error("锁屏开关元素不存在！");
+          }
           const lockScreenEnabled =
             localStorage.getItem("lockScreenEnabled") !== "false";
-          enableLockScreenToggle.checked = lockScreenEnabled;
+          console.log("读取锁屏设置，lockScreenEnabled:", lockScreenEnabled);
+          if (enableLockScreenToggle) {
+            enableLockScreenToggle.checked = lockScreenEnabled;
+          }
 
           // 2. 读取、应用并监听“显示状态栏”设置
           const showStatusBarToggle = document.getElementById(
@@ -60404,11 +60489,59 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           });
 
           // 4. 根据最终的锁屏设置，决定应用启动时第一个显示的屏幕
+          // 先隐藏所有屏幕（除了锁屏，如果它应该显示的话）
+          document.querySelectorAll(".screen").forEach((s) => {
+            if (s.id === "lock-screen" && lockScreenEnabled) {
+              // 如果锁屏应该显示，先不隐藏它
+              return;
+            }
+            s.classList.remove("active");
+            s.style.opacity = "0";
+            s.style.visibility = "hidden";
+          });
+          
           if (lockScreenEnabled) {
+            console.log("锁屏已启用，准备显示锁屏...");
             // 应用锁屏壁纸
             applyLockscreenWallpaper();
+            // 立即显示锁屏，不延迟
+            // 确保isLocked在lockPhone之前设置
+            isLocked = true;
+            // 直接设置锁屏显示，不使用showScreen
+            const lockScreen = document.getElementById("lock-screen");
+            if (lockScreen) {
+              // 先应用壁纸
+              applyLockscreenWallpaper();
+              // 然后设置显示样式，但保留背景
+              const currentBg = lockScreen.style.backgroundImage || window.getComputedStyle(lockScreen).backgroundImage;
+              lockScreen.style.cssText = `
+                position: absolute !important;
+                top: 0 !important;
+                left: 0 !important;
+                right: 0 !important;
+                bottom: 0 !important;
+                width: 100% !important;
+                height: 100% !important;
+                z-index: 999 !important;
+                opacity: 1 !important;
+                visibility: visible !important;
+                display: flex !important;
+                background-size: cover !important;
+                background-position: center !important;
+                background-repeat: no-repeat !important;
+              `;
+              // 重新应用背景图片
+              if (currentBg && currentBg !== 'none') {
+                lockScreen.style.backgroundImage = currentBg;
+              }
+              lockScreen.classList.add("active");
+              console.log("锁屏已直接显示");
+            }
             lockPhone(); // 如果设置是"启用"，就锁定手机
+            console.log("lockPhone已调用，isLocked:", isLocked);
           } else {
+            console.log("锁屏未启用，显示主屏幕...");
+            isLocked = false;
             showScreen("home-screen"); // 否则，直接进入主屏幕
           }
           
@@ -60425,7 +60558,53 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           });
         }
 
-        init();
+        // 确保在init完成后，如果锁屏启用，再次检查并显示锁屏（优化延迟）
+        init().then(() => {
+          const lockScreenEnabled = localStorage.getItem("lockScreenEnabled") !== "false";
+          console.log("init完成后检查锁屏，lockScreenEnabled:", lockScreenEnabled, "isLocked:", isLocked);
+          if (lockScreenEnabled) {
+            console.log("初始化完成后，再次检查锁屏状态，准备显示锁屏...");
+            // 减少延迟，立即检查
+            requestAnimationFrame(() => {
+              if (!isLocked) {
+                console.log("检测到锁屏未锁定，强制锁定...");
+                lockPhone();
+              } else {
+                console.log("锁屏已锁定，确保显示和壁纸...");
+                const lockScreen = document.getElementById("lock-screen");
+                if (lockScreen) {
+                  // 确保壁纸已应用
+                  applyLockscreenWallpaper();
+                  // 确保显示
+                  const currentBg = lockScreen.style.backgroundImage || window.getComputedStyle(lockScreen).backgroundImage;
+                  lockScreen.style.cssText = `
+                    position: absolute !important;
+                    top: 0 !important;
+                    left: 0 !important;
+                    right: 0 !important;
+                    bottom: 0 !important;
+                    width: 100% !important;
+                    height: 100% !important;
+                    z-index: 999 !important;
+                    opacity: 1 !important;
+                    visibility: visible !important;
+                    display: flex !important;
+                    background-size: cover !important;
+                    background-position: center !important;
+                    background-repeat: no-repeat !important;
+                  `;
+                  // 重新应用背景图片
+                  if (currentBg && currentBg !== 'none') {
+                    lockScreen.style.backgroundImage = currentBg;
+                  }
+                  lockScreen.classList.add("active");
+                }
+              }
+            });
+          }
+        }).catch((error) => {
+          console.error("init函数执行出错:", error);
+        });
 
         /*
          * ===================================================================

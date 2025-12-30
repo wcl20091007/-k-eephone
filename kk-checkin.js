@@ -79,10 +79,7 @@ async function generateHouseData(charId, includeComputer = true) {
         return `${sender}: ${msg.content}`;
       })
       .join('\n');
-    const worldBookByPosition = window.buildWorldBookContentByPosition(chat, recentMessages, false);
-    const worldBookContext = worldBookByPosition.all ? worldBookByPosition.all.replace(/# 核心世界观设定/g, '--- 世界观设定 (必须严格遵守) ---') : '';
     const userNickname = chat.settings.myNickname || '我';
-
     const recentHistory = chat.history
       .slice(-chat.settings.maxMemory || 20)
       .map(msg => {
@@ -90,6 +87,8 @@ async function generateHouseData(charId, includeComputer = true) {
         return `${sender}: ${msg.content}`;
       })
       .join('\n');
+    const worldBookByPosition = window.buildWorldBookContentByPosition(chat, recentHistory, false);
+    const worldBookContext = worldBookByPosition.all ? worldBookByPosition.all.replace(/# 核心世界观设定/g, '--- 世界观设定 (必须严格遵守) ---') : '';
 
     let linkedMemoryContext = '';
     if (chat.settings.linkedMemories && chat.settings.linkedMemories.length > 0) {
@@ -989,14 +988,6 @@ async function generateInitialSurveillanceFeeds(charId) {
       .join('\n');
     const worldBookByPosition = window.buildWorldBookContentByPosition(chat, recentHistory, false);
     const worldBookContext = worldBookByPosition.all || '';
-
-    const recentHistory = chat.history
-      .slice(-10)
-      .map(msg => {
-        const sender = msg.role === 'user' ? chat.settings.myNickname || '我' : chat.name;
-        return `${sender}: ${msg.content}`;
-      })
-      .join('\n');
 
     const userPersona = state.chats[charId]?.settings?.myPersona || '一个普通的观察者。';
 
@@ -2233,3 +2224,6 @@ function showHistoryDetail(entry) {
 
   modal.classList.add('visible');
 }
+
+// 暴露openKkCheckin到全局作用域
+window.openKkCheckin = openKkCheckin;

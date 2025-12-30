@@ -132,6 +132,10 @@ body {
   visibility: visible;
   z-index: 1;
 }
+/* 【锁屏修复】确保锁屏在active状态下有足够高的z-index */
+#lock-screen.active {
+  z-index: 999 !important;
+}
 .header {
   position: relative;
   z-index: 15;
