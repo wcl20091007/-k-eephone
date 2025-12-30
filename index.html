@@ -1094,6 +1094,33 @@
             </small>
           </div>
 
+          <div class="form-group">
+            <label>
+              <input
+                type="checkbox"
+                id="world-book-is-global-input"
+                style="margin-right: 8px;"
+              />
+              全局世界书（自动绑定所有角色，无需在角色设置中手动绑定）
+            </label>
+            <small style="color: #888; font-size: 12px; display: block; margin-top: 4px;">
+              开启后，此世界书将自动应用到所有角色，无需在每个角色的聊天设置中单独绑定。
+            </small>
+          </div>
+
+          <div class="form-group">
+            <label for="world-book-insert-position-select">插入位置</label>
+            <select id="world-book-insert-position-select">
+              <option value="top">顶部（最先发送）</option>
+              <option value="before_character">角色前（在角色人设之前）</option>
+              <option value="after_character">角色后（在角色人设之后）</option>
+              <option value="bottom">底部（最后发送）</option>
+            </select>
+            <small style="color: #888; font-size: 12px; display: block; margin-top: 4px;">
+              控制此世界书内容在发送给AI时的顺序位置。角色人设位于"角色前"和"角色后"之间。
+            </small>
+          </div>
+
           <div class="form-group" style="height: 100%">
             <label for="world-book-content-input">内容</label>
             <textarea
@@ -21783,6 +21810,16 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           document.getElementById("world-book-trigger-keywords-input").value =
             book.triggerKeywords || "";
 
+          // 【全局世界书优化】加载全局开关
+          document.getElementById("world-book-is-global-input").checked =
+            book.isGlobal || false;
+
+          // 【插入位置优化】加载插入位置
+          const insertPositionSelect = document.getElementById(
+            "world-book-insert-position-select"
+          );
+          insertPositionSelect.value = book.insertPosition || "after_character";
+
           // 填充分类下拉菜单
           const selectEl = document.getElementById(
             "world-book-category-select"
@@ -23246,46 +23283,26 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
         .join("\n")}
 			`;
           }
-          // 【世界书关键词优化】将世界书读取提到这里，确保线下模式也能生效
+          // 【全局世界书优化】将世界书读取提到这里，确保线下模式也能生效
           let worldBookContext = "";
-          if (
-            chat.settings.linkedWorldBookIds &&
-            chat.settings.linkedWorldBookIds.length > 0
-          ) {
-            // 获取最近的对话内容用于关键词匹配
-            const recentMessages = chat.history
-              .slice(-10)
-              .map((msg) => String(msg.content || ""))
-              .join(" ")
-              .toLowerCase();
-            
-            const linkedContents = chat.settings.linkedWorldBookIds
-              .map((id) => {
-                const book = state.worldBooks.find((b) => b.id === id);
-                if (!book || !book.content) return "";
-                
-                // 【世界书关键词优化】检查是否需要加载此条目
-                if (book.triggerKeywords && book.triggerKeywords.trim()) {
-                  // 如果有关键词，检查是否匹配
-                  const keywords = book.triggerKeywords
-                    .split(",")
-                    .map((k) => k.trim().toLowerCase())
-                    .filter((k) => k);
-                  const hasKeyword = keywords.some((keyword) =>
-                    recentMessages.includes(keyword)
-                  );
-                  if (!hasKeyword) {
-                    // 没有匹配到关键词，跳过此条目
-                    return "";
-                  }
-                }
-                // 如果没有关键词或匹配成功，加载此条目
+          // 获取最近的对话内容用于关键词匹配
+          const recentMessages = chat.history
+            .slice(-10)
+            .map((msg) => String(msg.content || ""))
+            .join(" ");
+          
+          // 使用新的收集和排序函数
+          const sortedWorldBooks = collectAndSortWorldBooks(chat, recentMessages);
+          
+          if (sortedWorldBooks.length > 0) {
+            const linkedContents = sortedWorldBooks
+              .map((item) => {
+                const book = item.book;
                 // 这里使用了 stripHtmlAndCode 清理函数，确保纯文本
                 return `\n\n## 世界书条目: ${book.name}\n${stripHtmlAndCode(
                   book.content
                 )}`;
               })
-              .filter(Boolean)
               .join("");
             if (linkedContents) {
               worldBookContext = `\n\n# 核心世界观设定 (必须严格遵守以下所有设定)\n${linkedContents}\n`;
@@ -24243,34 +24260,14 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               timeContext += "\n- **对话状态**: 这是你们的第一次对话。";
             }
 
-            // 【世界书关键词优化】根据关键词过滤世界书
-            let worldBookContent = "";
-            if (
-              chat.settings.linkedWorldBookIds &&
-              chat.settings.linkedWorldBookIds.length > 0
-            ) {
-              // 获取最近的对话内容用于关键词匹配
-              const recentMessages = chat.history
-                .slice(-10)
-                .map((msg) => String(msg.content || ""))
-                .join(" ");
-              
-              const filteredBooks = filterWorldBooksByKeywords(
-                chat.settings.linkedWorldBookIds,
-                recentMessages
-              );
-              
-              const linkedContents = filteredBooks
-                .map((worldBook) => {
-                  return `\n\n## 世界书: ${worldBook.name}\n${stripHtmlAndCode(
-                    worldBook.content
-                  )}`;
-                })
-                .join("");
-              if (linkedContents) {
-                worldBookContent = `\n\n# 核心世界观设定 (必须严格遵守以下所有设定)，里面可能会包含HTML小剧场，在捕获到关键词后输出\n${linkedContents}\n`;
-              }
-            }
+            // 【全局世界书优化】根据插入位置构建世界书内容
+            const recentMessages = chat.history
+              .slice(-10)
+              .map((msg) => String(msg.content || ""))
+              .join(" ");
+            const worldBookByPosition = buildWorldBookContentByPosition(chat, recentMessages, true);
+            // 对于群聊，我们使用all（所有位置合并），因为群聊的结构不同
+            const worldBookContent = worldBookByPosition.all;
             let musicContext = "";
             const countdownContext = await getCountdownContext(chatId); // <--- 把chatId传进去
             const streakContext = await getStreakContext(chat);
@@ -24871,12 +24868,21 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                 elemeContext += "【注意：饿了么菜单加载失败。】";
               }
 
-              systemPrompt = `### **【第一部分：角色核心设定】**
+              // 【全局世界书优化】构建按位置分组的世界书内容
+              const recentMessagesForWB = chat.history
+                .slice(-10)
+                .map((msg) => String(msg.content || ""))
+                .join(" ");
+              const worldBookByPosition = buildWorldBookContentByPosition(chat, recentMessagesForWB, false);
 
-			你现在将扮演一个名为“**${chat.name}**”的角色。
+              systemPrompt = `### **【第一部分：角色核心设定】**
+			${worldBookByPosition.top}
+			你现在将扮演一个名为"**${chat.name}**"的角色。
 
 			**1. 角色基本设定:**
+			${worldBookByPosition.beforeCharacter}
 			- **核心人设**: ${chat.settings.aiPersona}
+			${worldBookByPosition.afterCharacter}
 			- **总结**:${summaryContext}
 			- **情侣头像**: ${coupleAvatarContext}
 			- **世界观/NPC**: ${npcContext}
@@ -25142,7 +25148,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
 			${weiboContextForActiveChat}
 
 			- **世界观设定集**:
-			${worldBookContent}
+			${worldBookByPosition.bottom}
 			${weatherContext}
 			${linkedMemoryContext}
 			${elemeContext}
@@ -30688,32 +30694,13 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           const userNickname = state.qzoneSettings.nickname;
           const countdownContext = await getCountdownContext();
 
-          // 【世界书关键词优化】根据关键词过滤世界书
-          let worldBookContext = "";
-          if (
-            chat.settings.linkedWorldBookIds &&
-            chat.settings.linkedWorldBookIds.length > 0
-          ) {
-            // 获取最近的对话内容用于关键词匹配
-            const recentMessages = chat.history
-              .slice(-10)
-              .map((msg) => String(msg.content || ""))
-              .join(" ");
-            
-            const filteredBooks = filterWorldBooksByKeywords(
-              chat.settings.linkedWorldBookIds,
-              recentMessages
-            );
-            
-            const linkedContents = filteredBooks
-              .map((worldBook) => {
-                return `\n\n## 世界书: ${worldBook.name}\n${worldBook.content}`;
-              })
-              .join("");
-            if (linkedContents) {
-              worldBookContext = `\n\n# 核心世界观设定 (你必须严格遵守)\n${linkedContents}\n`;
-            }
-          }
+          // 【全局世界书优化】根据插入位置构建世界书内容
+          const recentMessages = chat.history
+            .slice(-10)
+            .map((msg) => String(msg.content || ""))
+            .join(" ");
+          const worldBookByPosition = buildWorldBookContentByPosition(chat, recentMessages, false);
+          const worldBookContext = worldBookByPosition.all;
 
           // 【NPC库优化】从全局NPC库获取启用的NPC
           const npcLibrary = await getEnabledNpcs(chat);
@@ -33674,26 +33661,13 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
 
           const userNickname = chat.settings.myNickname || "我";
 
-          let worldBookContent = "";
-          if (
-            chat.settings.linkedWorldBookIds &&
-            chat.settings.linkedWorldBookIds.length > 0
-          ) {
-            const linkedContents = chat.settings.linkedWorldBookIds
-              .map((bookId) => {
-                const worldBook = state.worldBooks.find(
-                  (wb) => wb.id === bookId
-                );
-                return worldBook && worldBook.content
-                  ? `\n\n## 世界书: ${worldBook.name}\n${worldBook.content}`
-                  : "";
-              })
-              .filter(Boolean)
-              .join("");
-            if (linkedContents) {
-              worldBookContent = `\n\n# 核心世界观设定 (你必须严格遵守)\n${linkedContents}\n`;
-            }
-          }
+          // 【全局世界书优化】根据插入位置构建世界书内容
+          const recentMessages = videoCallState.callHistory
+            .slice(-10)
+            .map((msg) => String(msg.content || ""))
+            .join(" ");
+          const worldBookByPosition = buildWorldBookContentByPosition(chat, recentMessages, false);
+          const worldBookContent = worldBookByPosition.all;
 
           if (userInput && videoCallState.isUserParticipating) {
             if (isVisualMode) {
@@ -34223,34 +34197,20 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             })
             .join("\n");
 
-          let worldBookContent = "";
-          if (
-            chat.settings.linkedWorldBookIds &&
-            chat.settings.linkedWorldBookIds.length > 0
-          ) {
-            const linkedContents = chat.settings.linkedWorldBookIds
-              .map((bookId) => {
-                const worldBook = state.worldBooks.find(
-                  (wb) => wb.id === bookId
-                );
-                return worldBook && worldBook.content
-                  ? `\n\n## 世界书: ${worldBook.name}\n${worldBook.content}`
-                  : "";
-              })
-              .filter(Boolean)
-              .join("");
-            if (linkedContents) {
-              worldBookContent = `\n\n# 核心世界观设定 (请参考)\n${linkedContents}\n`;
-            }
-          }
+          // 【全局世界书优化】根据插入位置构建世界书内容
+          const recentMessages = contextSummary || "";
+          const worldBookByPosition = buildWorldBookContentByPosition(chat, recentMessages, false);
 
           const systemPrompt = `
 			# 你的任务
-			你现在是角色“${chat.name}”。你之前被用户（你的聊天对象）拉黑了，你们已经有一段时间没有联系了。
-			现在，你非常希望能够和好，重新和用户聊天。请你仔细分析下面的“被拉黑前的对话摘要”，理解当时发生了什么，然后思考一个真诚的、符合你人设、并且【针对具体事件】的申请理由。
+			你现在是角色"${chat.name}"。你之前被用户（你的聊天对象）拉黑了，你们已经有一段时间没有联系了。
+			现在，你非常希望能够和好，重新和用户聊天。请你仔细分析下面的"被拉黑前的对话摘要"，理解当时发生了什么，然后思考一个真诚的、符合你人设、并且【针对具体事件】的申请理由。
+			${worldBookByPosition.top}
 			# 你的角色设定
+			${worldBookByPosition.beforeCharacter}
 			${chat.settings.aiPersona}
-			${worldBookContent} // <--【核心】在这里注入世界书内容
+			${worldBookByPosition.afterCharacter}
+			${worldBookByPosition.bottom} // <--【核心】在这里注入世界书内容
 			# 被拉黑前的对话摘要 (这是你被拉黑的关键原因)
 			${contextSummary}
 			# 指令格式
@@ -35289,26 +35249,14 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               .join("\n");
             const myNickname = chat.settings.myNickname || "我";
 
-            let worldBookContent = "";
-            if (
-              chat.settings.linkedWorldBookIds &&
-              chat.settings.linkedWorldBookIds.length > 0
-            ) {
-              const linkedContents = chat.settings.linkedWorldBookIds
-                .map((bookId) => {
-                  const worldBook = state.worldBooks.find(
-                    (wb) => wb.id === bookId
-                  );
-                  return worldBook && worldBook.content
-                    ? `\n\n## 世界书: ${worldBook.name}\n${worldBook.content}`
-                    : "";
-                })
-                .filter(Boolean)
-                .join("");
-              if (linkedContents) {
-                worldBookContent = `\n\n# 核心世界观设定 (你必须严格遵守)\n${linkedContents}\n`;
-              }
-            }
+            // 【全局世界书优化】根据插入位置构建世界书内容
+            // 对于后台群聊，使用所有位置合并的内容
+            const recentMessages = chat.history
+              .slice(-10)
+              .map((msg) => String(msg.content || ""))
+              .join(" ");
+            const worldBookByPosition = buildWorldBookContentByPosition(chat, recentMessages, false);
+            const worldBookContent = worldBookByPosition.all;
             let musicContext = "";
             // 注意：后台群聊活动通常不与特定的“一起听歌”会话绑定，因此这里我们提供一个空的音乐上下文。
             // 如果未来需要更复杂的功能，可以在此扩展。
@@ -36617,6 +36565,151 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             })
             .filter(Boolean);
         }
+
+        /**
+         * 【全局世界书优化】收集并排序世界书
+         * @param {Object} chat - 聊天对象
+         * @param {string} contextText - 用于关键词匹配的上下文文本
+         * @returns {Array} 排序后的世界书数组，包含 {book, position} 对象
+         */
+        function collectAndSortWorldBooks(chat, contextText = "") {
+          const contextLower = contextText.toLowerCase();
+          const allWorldBooks = [];
+          
+          // 1. 收集角色绑定的世界书
+          if (chat.settings.linkedWorldBookIds && chat.settings.linkedWorldBookIds.length > 0) {
+            chat.settings.linkedWorldBookIds.forEach((id) => {
+              const book = state.worldBooks.find((b) => b.id === id);
+              if (!book || !book.content) return;
+              
+              // 检查关键词匹配
+              if (book.triggerKeywords && book.triggerKeywords.trim()) {
+                const keywords = book.triggerKeywords
+                  .split(",")
+                  .map((k) => k.trim().toLowerCase())
+                  .filter((k) => k);
+                const hasKeyword = keywords.some((keyword) =>
+                  contextLower.includes(keyword)
+                );
+                if (!hasKeyword) return; // 不匹配关键词，跳过
+              }
+              
+              allWorldBooks.push({
+                book: book,
+                position: book.insertPosition || "after_character"
+              });
+            });
+          }
+          
+          // 2. 收集全局世界书（自动绑定所有角色）
+          state.worldBooks.forEach((book) => {
+            if (!book.isGlobal || !book.content) return;
+            
+            // 检查关键词匹配
+            if (book.triggerKeywords && book.triggerKeywords.trim()) {
+              const keywords = book.triggerKeywords
+                .split(",")
+                .map((k) => k.trim().toLowerCase())
+                .filter((k) => k);
+              const hasKeyword = keywords.some((keyword) =>
+                contextLower.includes(keyword)
+              );
+              if (!hasKeyword) return; // 不匹配关键词，跳过
+            }
+            
+            // 避免重复添加（如果角色已经绑定了这个全局世界书）
+            const alreadyAdded = allWorldBooks.some(
+              (item) => item.book.id === book.id
+            );
+            if (!alreadyAdded) {
+              allWorldBooks.push({
+                book: book,
+                position: book.insertPosition || "after_character"
+              });
+            }
+          });
+          
+          // 3. 根据插入位置排序
+          const positionOrder = {
+            "top": 0,
+            "before_character": 1,
+            "after_character": 2,
+            "bottom": 3
+          };
+          
+          return allWorldBooks.sort((a, b) => {
+            return (positionOrder[a.position] || 2) - (positionOrder[b.position] || 2);
+          });
+        }
+
+        /**
+         * 【全局世界书优化】根据插入位置构建世界书内容字符串
+         * @param {Object} chat - 聊天对象
+         * @param {string} contextText - 用于关键词匹配的上下文文本
+         * @param {boolean} useStripHtml - 是否使用stripHtmlAndCode清理函数
+         * @returns {Object} 包含按位置分组的世界书内容对象 {top, beforeCharacter, afterCharacter, bottom, all}
+         */
+        function buildWorldBookContentByPosition(chat, contextText = "", useStripHtml = false) {
+          const sortedWorldBooks = collectAndSortWorldBooks(chat, contextText);
+          
+          const byPosition = {
+            top: [],
+            beforeCharacter: [],
+            afterCharacter: [],
+            bottom: [],
+            all: []
+          };
+          
+          sortedWorldBooks.forEach((item) => {
+            const book = item.book;
+            const content = useStripHtml 
+              ? stripHtmlAndCode(book.content)
+              : book.content;
+            const bookContent = `\n\n## 世界书条目: ${book.name}\n${content}`;
+            
+            byPosition.all.push(bookContent);
+            
+            switch (item.position) {
+              case "top":
+                byPosition.top.push(bookContent);
+                break;
+              case "before_character":
+                byPosition.beforeCharacter.push(bookContent);
+                break;
+              case "after_character":
+                byPosition.afterCharacter.push(bookContent);
+                break;
+              case "bottom":
+                byPosition.bottom.push(bookContent);
+                break;
+              default:
+                byPosition.afterCharacter.push(bookContent);
+            }
+          });
+          
+          // 构建各部分的内容字符串
+          const result = {
+            top: byPosition.top.length > 0 
+              ? `\n\n# 核心世界观设定 (必须严格遵守以下所有设定)\n${byPosition.top.join("")}\n`
+              : "",
+            beforeCharacter: byPosition.beforeCharacter.length > 0
+              ? `\n\n# 核心世界观设定 (必须严格遵守以下所有设定)\n${byPosition.beforeCharacter.join("")}\n`
+              : "",
+            afterCharacter: byPosition.afterCharacter.length > 0
+              ? `\n\n# 核心世界观设定 (必须严格遵守以下所有设定)\n${byPosition.afterCharacter.join("")}\n`
+              : "",
+            bottom: byPosition.bottom.length > 0
+              ? `\n\n# 核心世界观设定 (必须严格遵守以下所有设定)\n${byPosition.bottom.join("")}\n`
+              : "",
+            all: byPosition.all.length > 0
+              ? `\n\n# 核心世界观设定 (必须严格遵守以下所有设定)\n${byPosition.all.join("")}\n`
+              : ""
+          };
+          
+          return result;
+        }
+        // 将函数暴露到全局作用域，供其他文件使用
+        window.buildWorldBookContentByPosition = buildWorldBookContentByPosition;
 
         /**
          * 【实时天气感知】搜索城市地理位置
@@ -52875,6 +52968,8 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                   name: name.trim(),
                   content: "",
                   triggerKeywords: null, // 【世界书关键词优化】初始化触发关键词
+                  isGlobal: false, // 【全局世界书优化】默认非全局
+                  insertPosition: "after_character", // 【插入位置优化】默认在角色后
                 };
                 await db.worldBooks.add(newBook);
                 state.worldBooks.push(newBook);
@@ -52914,6 +53009,16 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                   "world-book-trigger-keywords-input"
                 ).value.trim();
                 book.triggerKeywords = triggerKeywords || null;
+
+                // 【全局世界书优化】保存全局开关
+                book.isGlobal = document.getElementById(
+                  "world-book-is-global-input"
+                ).checked;
+
+                // 【插入位置优化】保存插入位置
+                book.insertPosition = document.getElementById(
+                  "world-book-insert-position-select"
+                ).value;
 
                 await db.worldBooks.put(book);
                 document.getElementById("world-book-editor-title").textContent =

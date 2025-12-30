@@ -948,28 +948,24 @@ async function triggerDatingStory(userAction) {
 ${recentChatHistory}
 `;
 
-  // 2. 获取所有需要加载的世界书内容
-  let worldBookContext = '';
+  // 2. 【全局世界书优化】获取所有需要加载的世界书内容
+  // 合并所有世界书ID（包括角色绑定、约会设置和临时挂载的）
   const allWorldBookIds = new Set([
     ...(chat.settings.linkedWorldBookIds || []), // 角色自身绑定的世界书
     ...(chat.settings.datingUISettings?.linkedWorldBookIds || []),
     ...(datingGameState.extraWorldBookIds || []), // 本次约会临时挂载的世界书
   ]);
-
-  if (allWorldBookIds.size > 0) {
-    const linkedContents = Array.from(allWorldBookIds)
-      .map(bookId => {
-        // 注意：这里的 state.worldBooks 需要能被 date.js 访问，请确保它在 main-app.js 中是全局的
-        const worldBook = window.state.worldBooks.find(wb => wb.id === bookId);
-        return worldBook && worldBook.content ? `\n## 世界书: ${worldBook.name}\n${worldBook.content}` : '';
-      })
-      .filter(Boolean)
-      .join('\n');
-
-    if (linkedContents) {
-      worldBookContext = `\n# 核心世界观设定 (你必须严格遵守)\n${linkedContents}\n`;
-    }
-  }
+  
+  // 临时扩展chat.settings.linkedWorldBookIds以包含所有ID，用于收集全局世界书
+  const originalLinkedIds = chat.settings.linkedWorldBookIds || [];
+  chat.settings.linkedWorldBookIds = Array.from(allWorldBookIds);
+  
+  const recentMessages = storyHistory.join(' ') || '';
+  const worldBookByPosition = window.buildWorldBookContentByPosition(chat, recentMessages, false);
+  let worldBookContext = worldBookByPosition.all || '';
+  
+  // 恢复原始设置
+  chat.settings.linkedWorldBookIds = originalLinkedIds;
 
   // 新增代码块结束 ▲▲▲
 

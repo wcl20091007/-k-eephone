@@ -71,17 +71,16 @@ async function generateHouseData(charId, includeComputer = true) {
     const { proxyUrl, apiKey, model } = state.apiConfig;
     if (!proxyUrl || !apiKey || !model) throw new Error('API未配置');
 
-    let worldBookContext = '';
-    if (chat.settings.linkedWorldBookIds && chat.settings.linkedWorldBookIds.length > 0) {
-      worldBookContext =
-        '--- 世界观设定 (必须严格遵守) ---\n' +
-        chat.settings.linkedWorldBookIds
-          .map(id => {
-            const book = state.worldBooks.find(b => b.id === id);
-            return book ? `[${book.name}]: ${book.content}` : '';
-          })
-          .join('\n\n');
-    }
+    // 【全局世界书优化】根据插入位置构建世界书内容
+    const recentMessages = chat.history
+      .slice(-chat.settings.maxMemory || 20)
+      .map(msg => {
+        const sender = msg.role === 'user' ? userNickname : chat.name;
+        return `${sender}: ${msg.content}`;
+      })
+      .join('\n');
+    const worldBookByPosition = window.buildWorldBookContentByPosition(chat, recentMessages, false);
+    const worldBookContext = worldBookByPosition.all ? worldBookByPosition.all.replace(/# 核心世界观设定/g, '--- 世界观设定 (必须严格遵守) ---') : '';
     const userNickname = chat.settings.myNickname || '我';
 
     const recentHistory = chat.history
@@ -980,15 +979,16 @@ async function generateInitialSurveillanceFeeds(charId) {
     const { proxyUrl, apiKey, model } = state.apiConfig;
     if (!proxyUrl || !apiKey || !model) throw new Error('API未配置');
 
-    // 提取世界书、聊天记录和用户人设作为上下文
-    const worldBookContext = (
-      await Promise.all(
-        (chat.settings.linkedWorldBookIds || []).map(async id => {
-          const book = await db.worldBooks.get(id);
-          return book ? `\n## 世界书: ${book.name}\n${book.content}` : '';
-        }),
-      )
-    ).join('');
+    // 【全局世界书优化】根据插入位置构建世界书内容
+    const recentHistory = chat.history
+      .slice(-10)
+      .map(msg => {
+        const sender = msg.role === 'user' ? chat.settings.myNickname || '我' : chat.name;
+        return `${sender}: ${msg.content}`;
+      })
+      .join('\n');
+    const worldBookByPosition = window.buildWorldBookContentByPosition(chat, recentHistory, false);
+    const worldBookContext = worldBookByPosition.all || '';
 
     const recentHistory = chat.history
       .slice(-10)
