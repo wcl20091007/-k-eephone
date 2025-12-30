@@ -1095,13 +1095,10 @@
           </div>
 
           <div class="form-group">
-            <label>
-              <input
-                type="checkbox"
-                id="world-book-is-global-input"
-                style="margin-right: 8px;"
-              />
-              全局世界书（自动绑定所有角色，无需在角色设置中手动绑定）
+            <label class="toggle-switch-label" style="display: flex; justify-content: space-between; align-items: center;">
+              <span>全局世界书（自动绑定所有角色，无需在角色设置中手动绑定）</span>
+              <input type="checkbox" id="world-book-is-global-input" />
+              <span class="toggle-switch-slider"></span>
             </label>
             <small style="color: #888; font-size: 12px; display: block; margin-top: 4px;">
               开启后，此世界书将自动应用到所有角色，无需在每个角色的聊天设置中单独绑定。
@@ -5644,7 +5641,7 @@
                 <input type="checkbox" id="time-perception-toggle" checked />
                 <span class="toggle-switch-slider"></span>
               </label>
-              <div id="timezone-container" style="margin-top: 10px;">
+              <div id="timezone-container" style="margin-top: 10px; display: none;">
                 <label>时区选择</label>
                 <select id="timezone-select" class="moe-input">
                   <option value="UTC-12">UTC-12 (国际日期变更线西)</option>
@@ -5675,12 +5672,25 @@
                   <option value="UTC+12">UTC+12 (新西兰标准时间)</option>
                 </select>
               </div>
+              
+              <div
+                id="custom-time-container"
+                style="display: none; margin-top: 10px"
+              >
+                <label>自定义时间</label>
+                <input
+                  type="datetime-local"
+                  id="custom-time-input"
+                  class="moe-input"
+                />
+              </div>
 
               <!-- 【实时天气感知】天气感知设置 -->
-              <div id="weather-perception-container" style="margin-top: 15px;">
-                <label style="display: flex; align-items: center; gap: 8px;">
-                  <input type="checkbox" id="weather-perception-toggle" style="width: auto;">
+              <div id="weather-perception-container" style="margin-top: 30px;">
+                <label class="toggle-switch-label" style="display: flex; justify-content: space-between; align-items: center;">
                   <span>实时天气感知</span>
+                  <input type="checkbox" id="weather-perception-toggle" />
+                  <span class="toggle-switch-slider"></span>
                 </label>
                 
                 <div id="weather-location-settings" style="margin-top: 10px; display: none;">
@@ -5742,17 +5752,6 @@
                     <div id="user-location-result" style="font-size: 12px; color: #888; margin-top: 4px;"></div>
                   </div>
                 </div>
-              </div>
-              <div
-                id="custom-time-container"
-                style="display: none; margin-top: 5px"
-              >
-                <label>自定义时间</label>
-                <input
-                  type="datetime-local"
-                  id="custom-time-input"
-                  class="moe-input"
-                />
               </div>
             </div>
           </div>
@@ -38306,10 +38305,19 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
         function lockPhone() {
           console.log("正在锁定手机...");
           isLocked = true;
-          document.getElementById("lock-screen").classList.add("active");
-          document
-            .querySelectorAll(".screen:not(#lock-screen)")
-            .forEach((s) => s.classList.remove("active"));
+          const lockScreen = document.getElementById("lock-screen");
+          if (lockScreen) {
+            // 应用锁屏壁纸
+            applyLockscreenWallpaper();
+            // 显示锁屏
+            lockScreen.classList.add("active");
+            // 隐藏其他所有屏幕
+            document
+              .querySelectorAll(".screen:not(#lock-screen)")
+              .forEach((s) => s.classList.remove("active"));
+            // 确保锁屏在最上层
+            lockScreen.style.zIndex = "999";
+          }
         }
 
         /**
@@ -53845,10 +53853,26 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                 window.weatherToggleBound = true;
               }
 
-              // 根据开关状态，决定是否显示自定义时间输入框
+              // 【时区选择优化】根据开关状态，决定是否显示时区选择和自定义时间输入框
+              const timezoneContainer = document.getElementById("timezone-container");
+              if (timezoneContainer) {
+                timezoneContainer.style.display = isTimeEnabled ? "block" : "none";
+              }
               customTimeContainer.style.display = isTimeEnabled
                 ? "none"
                 : "block";
+              
+              // 绑定实时时间感知开关事件
+              if (!window.timeToggleBound) {
+                timeToggle.addEventListener("change", () => {
+                  const enabled = timeToggle.checked;
+                  if (timezoneContainer) {
+                    timezoneContainer.style.display = enabled ? "block" : "none";
+                  }
+                  customTimeContainer.style.display = enabled ? "none" : "block";
+                });
+                window.timeToggleBound = true;
+              }
 
               const bgPreview = document.getElementById("bg-preview");
               const removeBgBtn = document.getElementById("remove-bg-btn");
@@ -53999,21 +54023,23 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               const categories = await db.worldBookCategories.toArray();
               const books = state.worldBooks;
 
-              // 如果存在未分类的书籍，就创建一个“虚拟分类”
-              const hasUncategorized = books.some((book) => !book.categoryId);
+              // 如果存在未分类的书籍，就创建一个"虚拟分类"（排除全局世界书）
+              const hasUncategorized = books.some((book) => !book.categoryId && !book.isGlobal);
               if (hasUncategorized) {
                 categories.push({ id: "uncategorized", name: "未分类" });
               }
 
-              // 2. 将书籍按分类ID进行分组
-              const booksByCategoryId = books.reduce((acc, book) => {
-                const categoryId = book.categoryId || "uncategorized";
-                if (!acc[categoryId]) {
-                  acc[categoryId] = [];
-                }
-                acc[categoryId].push(book);
-                return acc;
-              }, {});
+              // 2. 将书籍按分类ID进行分组（过滤掉全局世界书）
+              const booksByCategoryId = books
+                .filter((book) => !book.isGlobal) // 【全局世界书优化】过滤掉全局世界书
+                .reduce((acc, book) => {
+                  const categoryId = book.categoryId || "uncategorized";
+                  if (!acc[categoryId]) {
+                    acc[categoryId] = [];
+                  }
+                  acc[categoryId].push(book);
+                  return acc;
+                }, {});
 
               // 3. 遍历分类，创建带折叠功能的列表
               categories.forEach((category) => {
@@ -54038,6 +54064,9 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                   bookContainer.dataset.containerFor = category.id;
 
                   booksInCategory.forEach((book) => {
+                    // 【全局世界书优化】过滤掉全局世界书，避免重复显示
+                    if (book.isGlobal) return;
+                    
                     const isChecked = linkedIds.has(book.id);
                     const label = document.createElement("label");
                     // 给书名包一个span，方便CSS做省略号处理
@@ -60376,10 +60405,24 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
 
           // 4. 根据最终的锁屏设置，决定应用启动时第一个显示的屏幕
           if (lockScreenEnabled) {
-            lockPhone(); // 如果设置是“启用”，就锁定手机
+            // 应用锁屏壁纸
+            applyLockscreenWallpaper();
+            lockPhone(); // 如果设置是"启用"，就锁定手机
           } else {
             showScreen("home-screen"); // 否则，直接进入主屏幕
           }
+          
+          // 5. 绑定锁屏开关事件
+          enableLockScreenToggle.addEventListener("change", (e) => {
+            const isEnabled = e.target.checked;
+            localStorage.setItem("lockScreenEnabled", isEnabled);
+            state.globalSettings.enableLockScreen = isEnabled;
+            if (isEnabled) {
+              lockPhone();
+            } else {
+              unlockPhone();
+            }
+          });
         }
 
         init();
