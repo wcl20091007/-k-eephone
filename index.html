@@ -24193,7 +24193,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             });
             let timeContext = `\n- **当前时间**: ${currentTime}`;
             
-            // 【实时天气感知】获取天气信息（优化版 - 每个角色独立）
+            // 【实时天气感知】获取天气信息（参考时间感知的简洁写法）
             let weatherContext = "";
             if (chat.settings.weatherPerceptionEnabled) {
               const charWeather = chat.settings.charLocation 
@@ -24204,46 +24204,14 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                 : null;
               
               if (charWeather || userWeather) {
-                weatherContext = "\n\n# 实时天气感知 (你必须主动感知并做出反应)\n";
-                
                 if (charWeather) {
                   const charLocationName = charWeather.locationName;
-                  weatherContext += `- **你所在地区(${charLocationName})的天气**: ${charWeather.emoji} ${charWeather.description}，温度 ${charWeather.temperature}°C，湿度 ${charWeather.humidity}%，风速 ${charWeather.windSpeed} km/h`;
-                  if (charWeather.needsUmbrella) {
-                    weatherContext += " 【需要带伞】";
-                  }
-                  if (charWeather.needsWarmClothes) {
-                    weatherContext += " 【需要加衣保暖】";
-                  }
-                  if (charWeather.isHot) {
-                    weatherContext += " 【天气炎热，注意防暑】";
-                  }
-                  weatherContext += "\n";
+                  weatherContext += `\n- **你所在地区(${charLocationName})的天气**: ${charWeather.emoji} ${charWeather.description}，${charWeather.temperature}°C`;
                 }
-                
                 if (userWeather) {
                   const userLocationName = userWeather.locationName;
-                  weatherContext += `- **对方所在地区(${userLocationName})的天气**: ${userWeather.emoji} ${userWeather.description}，温度 ${userWeather.temperature}°C，湿度 ${userWeather.humidity}%，风速 ${userWeather.windSpeed} km/h`;
-                  if (userWeather.needsUmbrella) {
-                    weatherContext += " 【对方可能需要带伞】";
-                  }
-                  if (userWeather.needsWarmClothes) {
-                    weatherContext += " 【对方可能需要加衣保暖】";
-                  }
-                  if (userWeather.isHot) {
-                    weatherContext += " 【对方所在地区天气炎热】";
-                  }
-                  weatherContext += "\n";
+                  weatherContext += `\n- **对方所在地区(${userLocationName})的天气**: ${userWeather.emoji} ${userWeather.description}，${userWeather.temperature}°C`;
                 }
-                
-                weatherContext += "\n## 【【【天气感知反应规则（必须严格遵守）】】】\n";
-                weatherContext += "1. **主动关心**: 你必须像感知时间一样主动感知天气，并根据天气情况自然地表达关心或建议。\n";
-                weatherContext += "2. **下雨反应**: 如果对方所在地区在下雨，你应该主动提醒对方带伞、注意安全，例如：'对方那边在下雨，记得带伞哦'、'外面在下雨，出门小心路滑'等。\n";
-                weatherContext += "3. **寒冷反应**: 如果对方所在地区温度较低或下雪，你应该主动关心对方保暖，例如：'那边天气很冷，记得多穿点衣服'、'下雪了，注意保暖'等。\n";
-                weatherContext += "4. **炎热反应**: 如果对方所在地区天气炎热，你可以提醒对方注意防暑，例如：'那边很热，记得多喝水'、'天气这么热，注意防暑降温'等。\n";
-                weatherContext += "5. **自己天气**: 你也可以自然地提及自己所在地区的天气，例如：'我这里也在下雨'、'我这边天气不错'等。\n";
-                weatherContext += "6. **自然融入**: 这些天气相关的关心应该自然地融入对话中，不要显得生硬或刻意。根据你们的关系和对话内容，选择合适的表达方式。\n";
-                weatherContext += "7. **时机选择**: 可以在对话开始时提及，也可以在对话过程中自然地插入，但不要每句话都提天气。\n";
               }
             }
             
@@ -25164,8 +25132,6 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
 			${timeContext}
 			${weatherContext}
 			${streakContext}
-			
-			**重要提醒**: 你必须像感知时间一样主动感知天气。如果天气信息显示对方所在地区在下雨、寒冷或炎热，你应该主动表达关心或给出建议（例如提醒带伞、加衣、防暑等）。这些关心应该自然地融入对话，不要显得生硬。
 			- **当前音乐情景**:
 			${musicContext}
 
