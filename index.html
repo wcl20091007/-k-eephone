@@ -67,6 +67,7 @@
     <script src="taobao.js" defer></script>
     <script src="weibo.js" defer></script>
     <script src="date.js" defer></script>
+    <script src="calendar.js" defer></script>
     <script src="studio.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/darkreader@4.9.84/darkreader.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -551,6 +552,22 @@
               </div>
             </div>
           </div>
+
+          <!-- 第三页：日历app -->
+          <div class="home-page">
+            <div style="position: absolute; top: 200px; left: 50%; transform: translateX(-50%);">
+              <div class="desktop-app-icon" id="calendar-app-icon" onclick="showScreen('calendar-screen')">
+                <div class="icon-bg-desktop">
+                  <img
+                    id="icon-img-calendar"
+                    src="https://i.postimg.cc/pr0T3WfC/douban-icon.png"
+                    alt="日历"
+                  />
+                </div>
+                <span class="label">日历</span>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- 底部 Dock 栏保持不变 -->
@@ -613,6 +630,7 @@
         <!-- 小圆点 -->
         <div class="pagination-dots">
           <span class="dot active"></span>
+          <span class="dot"></span>
           <span class="dot"></span>
         </div>
       </div>
@@ -1091,30 +1109,6 @@
             />
             <small style="color: #888; font-size: 12px; display: block; margin-top: 4px;">
               留空则始终加载此条目。填写关键词后，只有当对话中包含这些关键词时才会加载。
-            </small>
-          </div>
-
-          <div class="form-group">
-            <label class="toggle-switch-label" style="display: flex; justify-content: space-between; align-items: center;">
-              <span>全局世界书（自动绑定所有角色，无需在角色设置中手动绑定）</span>
-              <input type="checkbox" id="world-book-is-global-input" />
-              <span class="toggle-switch-slider"></span>
-            </label>
-            <small style="color: #888; font-size: 12px; display: block; margin-top: 4px;">
-              开启后，此世界书将自动应用到所有角色，无需在每个角色的聊天设置中单独绑定。
-            </small>
-          </div>
-
-          <div class="form-group">
-            <label for="world-book-insert-position-select">插入位置</label>
-            <select id="world-book-insert-position-select">
-              <option value="top">顶部（最先发送）</option>
-              <option value="before_character">角色前（在角色人设之前）</option>
-              <option value="after_character">角色后（在角色人设之后）</option>
-              <option value="bottom">底部（最后发送）</option>
-            </select>
-            <small style="color: #888; font-size: 12px; display: block; margin-top: 4px;">
-              控制此世界书内容在发送给AI时的顺序位置。角色人设位于"角色前"和"角色后"之间。
             </small>
           </div>
 
@@ -5641,7 +5635,7 @@
                 <input type="checkbox" id="time-perception-toggle" checked />
                 <span class="toggle-switch-slider"></span>
               </label>
-              <div id="timezone-container" style="margin-top: 10px; display: none;">
+              <div id="timezone-container" style="margin-top: 10px;">
                 <label>时区选择</label>
                 <select id="timezone-select" class="moe-input">
                   <option value="UTC-12">UTC-12 (国际日期变更线西)</option>
@@ -5672,25 +5666,12 @@
                   <option value="UTC+12">UTC+12 (新西兰标准时间)</option>
                 </select>
               </div>
-              
-              <div
-                id="custom-time-container"
-                style="display: none; margin-top: 10px"
-              >
-                <label>自定义时间</label>
-                <input
-                  type="datetime-local"
-                  id="custom-time-input"
-                  class="moe-input"
-                />
-              </div>
 
               <!-- 【实时天气感知】天气感知设置 -->
-              <div id="weather-perception-container" style="margin-top: 30px;">
-                <label class="toggle-switch-label" style="display: flex; justify-content: space-between; align-items: center;">
+              <div id="weather-perception-container" style="margin-top: 15px;">
+                <label style="display: flex; align-items: center; gap: 8px;">
+                  <input type="checkbox" id="weather-perception-toggle" style="width: auto;">
                   <span>实时天气感知</span>
-                  <input type="checkbox" id="weather-perception-toggle" />
-                  <span class="toggle-switch-slider"></span>
                 </label>
                 
                 <div id="weather-location-settings" style="margin-top: 10px; display: none;">
@@ -5752,6 +5733,17 @@
                     <div id="user-location-result" style="font-size: 12px; color: #888; margin-top: 4px;"></div>
                   </div>
                 </div>
+              </div>
+              <div
+                id="custom-time-container"
+                style="display: none; margin-top: 5px"
+              >
+                <label>自定义时间</label>
+                <input
+                  type="datetime-local"
+                  id="custom-time-input"
+                  class="moe-input"
+                />
               </div>
             </div>
           </div>
@@ -7784,6 +7776,133 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
       </div>
       <div class="list-container" id="npc-management-list">
         <!-- NPC列表将由JS动态生成在这里 -->
+      </div>
+    </div>
+
+    <!-- 日历app屏幕 -->
+    <div id="calendar-screen" class="screen">
+      <div class="header">
+        <span class="back-btn" onclick="showScreen('home-screen')">‹</span>
+        <span id="calendar-header-title">日历</span>
+        <span class="action-btn" id="calendar-today-btn" title="今天">今天</span>
+      </div>
+      <div style="display: flex; flex-direction: column; height: calc(100% - 60px);">
+        <!-- 上半部分：日历 -->
+        <div style="flex: 0 0 auto; padding: 20px; border-bottom: 1px solid var(--border-color);">
+          <!-- 月份导航 -->
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <button id="calendar-prev-month" class="moe-btn" style="padding: 8px 16px;">‹ 上月</button>
+            <h2 id="calendar-month-year" style="margin: 0; font-size: 20px; font-weight: 600;"></h2>
+            <button id="calendar-next-month" class="moe-btn" style="padding: 8px 16px;">下月 ›</button>
+          </div>
+          
+          <!-- 星期标题 -->
+          <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 8px;">
+            <div style="text-align: center; font-weight: 600; color: var(--text-secondary); padding: 8px;">日</div>
+            <div style="text-align: center; font-weight: 600; color: var(--text-secondary); padding: 8px;">一</div>
+            <div style="text-align: center; font-weight: 600; color: var(--text-secondary); padding: 8px;">二</div>
+            <div style="text-align: center; font-weight: 600; color: var(--text-secondary); padding: 8px;">三</div>
+            <div style="text-align: center; font-weight: 600; color: var(--text-secondary); padding: 8px;">四</div>
+            <div style="text-align: center; font-weight: 600; color: var(--text-secondary); padding: 8px;">五</div>
+            <div style="text-align: center; font-weight: 600; color: var(--text-secondary); padding: 8px;">六</div>
+          </div>
+          
+          <!-- 日历网格 -->
+          <div id="calendar-grid" style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px;">
+            <!-- 日历日期将由JS动态生成 -->
+          </div>
+        </div>
+
+        <!-- 下半部分：当日信息 -->
+        <div style="flex: 1; overflow-y: auto; padding: 20px;">
+          <div id="calendar-day-info" style="display: none;">
+            <h3 id="calendar-selected-date" style="margin: 0 0 20px 0; font-size: 18px; font-weight: 600;"></h3>
+            
+            <!-- 标签切换 -->
+            <div style="display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 1px solid var(--border-color);">
+              <button id="calendar-tab-events" class="calendar-tab-btn active" style="padding: 10px 20px; border: none; background: transparent; border-bottom: 2px solid var(--accent-color); color: var(--accent-color); font-weight: 600; cursor: pointer;">行程</button>
+              <button id="calendar-tab-todos" class="calendar-tab-btn" style="padding: 10px 20px; border: none; background: transparent; border-bottom: 2px solid transparent; color: var(--text-secondary); font-weight: 600; cursor: pointer;">待办事项</button>
+            </div>
+
+            <!-- 行程内容 -->
+            <div id="calendar-events-content" class="calendar-tab-content">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h4 style="margin: 0; font-size: 16px; font-weight: 600;">今日行程</h4>
+                <button id="calendar-add-event-btn" class="moe-btn" style="padding: 6px 12px; font-size: 14px;">+ 添加行程</button>
+              </div>
+              <div id="calendar-events-list" style="display: flex; flex-direction: column; gap: 10px;">
+                <!-- 行程列表将由JS动态生成 -->
+              </div>
+            </div>
+
+            <!-- 待办事项内容 -->
+            <div id="calendar-todos-content" class="calendar-tab-content" style="display: none;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h4 style="margin: 0; font-size: 16px; font-weight: 600;">待办事项</h4>
+                <button id="calendar-add-todo-btn" class="moe-btn" style="padding: 6px 12px; font-size: 14px;">+ 添加待办</button>
+              </div>
+              <div id="calendar-todos-list" style="display: flex; flex-direction: column; gap: 10px;">
+                <!-- 待办事项列表将由JS动态生成 -->
+              </div>
+            </div>
+          </div>
+
+          <div id="calendar-no-selection" style="text-align: center; color: var(--text-secondary); padding: 40px 20px;">
+            <p>请点击日历中的日期查看详细信息</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 添加行程模态框 -->
+    <div id="calendar-add-event-modal" class="modal">
+      <div class="modal-content" style="max-width: 400px;">
+        <div class="modal-header">
+          <span>添加行程</span>
+          <span class="modal-close" id="calendar-close-event-modal">×</span>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>日期</label>
+            <input type="date" id="calendar-event-date" class="moe-input" required>
+          </div>
+          <div class="form-group">
+            <label>时间</label>
+            <input type="time" id="calendar-event-time" class="moe-input" required>
+          </div>
+          <div class="form-group">
+            <label>行程内容</label>
+            <textarea id="calendar-event-content" class="moe-input" rows="3" placeholder="请输入行程内容..." required></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="moe-btn form-button-secondary" id="calendar-cancel-event-btn">取消</button>
+          <button class="moe-btn" id="calendar-save-event-btn">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 添加待办事项模态框 -->
+    <div id="calendar-add-todo-modal" class="modal">
+      <div class="modal-content" style="max-width: 400px;">
+        <div class="modal-header">
+          <span>添加待办事项</span>
+          <span class="modal-close" id="calendar-close-todo-modal">×</span>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>日期</label>
+            <input type="date" id="calendar-todo-date" class="moe-input" required>
+          </div>
+          <div class="form-group">
+            <label>待办内容</label>
+            <textarea id="calendar-todo-content" class="moe-input" rows="3" placeholder="请输入待办事项..." required></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="moe-btn form-button-secondary" id="calendar-cancel-todo-btn">取消</button>
+          <button class="moe-btn" id="calendar-save-todo-btn">保存</button>
+        </div>
       </div>
     </div>
 
@@ -16538,6 +16657,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
 			`;
 
         const DEFAULT_APP_ICONS = {
+          calendar: "https://i.postimg.cc/pr0T3WfC/douban-icon.png", // 日历使用和圈子一样的图标
           "world-book": "https://i.postimg.cc/HWf1JKzn/IMG-6435.jpg",
           qq: "https://i.postimg.cc/MTC3Tkw8/IMG-6436.jpg",
           "api-settings": "https://i.postimg.cc/MK8rJ8t7/IMG-6438.jpg",
@@ -16573,6 +16693,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           "tukey-accounting": "兔兔记账",
           "kk-checkin": "kk查岗",
           studio: "lrq小剧场",
+          calendar: "日历",
         };
 
         const STICKER_REGEX =
@@ -16749,7 +16870,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
 
         // main-app.js
 
-        db.version(61).stores({
+        db.version(62).stores({
           // 版本号从 60 升级到 61 - 添加全局NPC库
           chats:
             "&id, isGroup, groupId, ownerId, isPinned, characterPhoneData, latestInnerVoice, innerVoiceHistory, loversSpaceData.emotionDiaries, settings.summary, settings.weiboNickname, settings.innerVoiceHideHeaderBorder, settings.innerVoiceAdopterLabelFormat, interactionStats, unlockedSymbols, settings.selectedIntimacyBadge",
@@ -16799,6 +16920,8 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           offlinePresets: "++id, name",
           elemeFoods: "++id, name, category",
           elemeOrders: "++id, recipientId, timestamp",
+          calendarEvents: "++id, date, time, content, type",
+          calendarTodos: "++id, date, content, completed",
           studioScripts: "++id, name",
           studioHistory: "++id, timestamp",
           tukeyAccounts: "++id, category, type", // 这是你已有的，保持不变
@@ -17560,31 +17683,12 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             renderWorldBookScreen();
           }
 
-          // 【锁屏修复】如果锁屏已启用，不要移除锁屏的active类
           document
             .querySelectorAll(".screen")
-            .forEach((s) => {
-              // 如果锁屏已启用且当前屏幕是锁屏，保留它的active类
-              if (s.id === "lock-screen" && isLocked) {
-                console.log("锁屏已启用，保留锁屏的active类");
-                return; // 跳过锁屏，不移除它的active类
-              }
-              s.classList.remove("active");
-              s.style.opacity = "0";
-              s.style.visibility = "hidden";
-            });
-          
-          // 如果锁屏已启用，不显示其他屏幕
-          if (isLocked && screenId !== "lock-screen") {
-            console.log("锁屏已启用，阻止显示其他屏幕:", screenId);
-            return; // 阻止显示其他屏幕
-          }
-          
+            .forEach((s) => s.classList.remove("active"));
           const screenToShow = document.getElementById(screenId);
           if (screenToShow) {
             screenToShow.classList.add("active");
-            screenToShow.style.opacity = "1";
-            screenToShow.style.visibility = "visible";
           }
 
           if (screenId === "chat-interface-screen") {
@@ -21828,16 +21932,6 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           document.getElementById("world-book-trigger-keywords-input").value =
             book.triggerKeywords || "";
 
-          // 【全局世界书优化】加载全局开关
-          document.getElementById("world-book-is-global-input").checked =
-            book.isGlobal || false;
-
-          // 【插入位置优化】加载插入位置
-          const insertPositionSelect = document.getElementById(
-            "world-book-insert-position-select"
-          );
-          insertPositionSelect.value = book.insertPosition || "after_character";
-
           // 填充分类下拉菜单
           const selectEl = document.getElementById(
             "world-book-category-select"
@@ -23301,26 +23395,46 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
         .join("\n")}
 			`;
           }
-          // 【全局世界书优化】将世界书读取提到这里，确保线下模式也能生效
+          // 【世界书关键词优化】将世界书读取提到这里，确保线下模式也能生效
           let worldBookContext = "";
-          // 获取最近的对话内容用于关键词匹配
-          const recentMessages = chat.history
-            .slice(-10)
-            .map((msg) => String(msg.content || ""))
-            .join(" ");
-          
-          // 使用新的收集和排序函数
-          const sortedWorldBooks = collectAndSortWorldBooks(chat, recentMessages);
-          
-          if (sortedWorldBooks.length > 0) {
-            const linkedContents = sortedWorldBooks
-              .map((item) => {
-                const book = item.book;
+          if (
+            chat.settings.linkedWorldBookIds &&
+            chat.settings.linkedWorldBookIds.length > 0
+          ) {
+            // 获取最近的对话内容用于关键词匹配
+            const recentMessages = chat.history
+              .slice(-10)
+              .map((msg) => String(msg.content || ""))
+              .join(" ")
+              .toLowerCase();
+            
+            const linkedContents = chat.settings.linkedWorldBookIds
+              .map((id) => {
+                const book = state.worldBooks.find((b) => b.id === id);
+                if (!book || !book.content) return "";
+                
+                // 【世界书关键词优化】检查是否需要加载此条目
+                if (book.triggerKeywords && book.triggerKeywords.trim()) {
+                  // 如果有关键词，检查是否匹配
+                  const keywords = book.triggerKeywords
+                    .split(",")
+                    .map((k) => k.trim().toLowerCase())
+                    .filter((k) => k);
+                  const hasKeyword = keywords.some((keyword) =>
+                    recentMessages.includes(keyword)
+                  );
+                  if (!hasKeyword) {
+                    // 没有匹配到关键词，跳过此条目
+                    return "";
+                  }
+                }
+                // 如果没有关键词或匹配成功，加载此条目
                 // 这里使用了 stripHtmlAndCode 清理函数，确保纯文本
                 return `\n\n## 世界书条目: ${book.name}\n${stripHtmlAndCode(
                   book.content
                 )}`;
               })
+              .filter(Boolean)
               .join("");
             if (linkedContents) {
               worldBookContext = `\n\n# 核心世界观设定 (必须严格遵守以下所有设定)\n${linkedContents}\n`;
@@ -24278,14 +24392,34 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               timeContext += "\n- **对话状态**: 这是你们的第一次对话。";
             }
 
-            // 【全局世界书优化】根据插入位置构建世界书内容
-            const recentMessages = chat.history
-              .slice(-10)
-              .map((msg) => String(msg.content || ""))
-              .join(" ");
-            const worldBookByPosition = buildWorldBookContentByPosition(chat, recentMessages, true);
-            // 对于群聊，我们使用all（所有位置合并），因为群聊的结构不同
-            const worldBookContent = worldBookByPosition.all;
+            // 【世界书关键词优化】根据关键词过滤世界书
+            let worldBookContent = "";
+            if (
+              chat.settings.linkedWorldBookIds &&
+              chat.settings.linkedWorldBookIds.length > 0
+            ) {
+              // 获取最近的对话内容用于关键词匹配
+              const recentMessages = chat.history
+                .slice(-10)
+                .map((msg) => String(msg.content || ""))
+                .join(" ");
+              
+              const filteredBooks = filterWorldBooksByKeywords(
+                chat.settings.linkedWorldBookIds,
+                recentMessages
+              );
+              
+              const linkedContents = filteredBooks
+                .map((worldBook) => {
+                  return `\n\n## 世界书: ${worldBook.name}\n${stripHtmlAndCode(
+                    worldBook.content
+                  )}`;
+                })
+                .join("");
+              if (linkedContents) {
+                worldBookContent = `\n\n# 核心世界观设定 (必须严格遵守以下所有设定)，里面可能会包含HTML小剧场，在捕获到关键词后输出\n${linkedContents}\n`;
+              }
+            }
             let musicContext = "";
             const countdownContext = await getCountdownContext(chatId); // <--- 把chatId传进去
             const streakContext = await getStreakContext(chat);
@@ -24886,21 +25020,12 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                 elemeContext += "【注意：饿了么菜单加载失败。】";
               }
 
-              // 【全局世界书优化】构建按位置分组的世界书内容
-              const recentMessagesForWB = chat.history
-                .slice(-10)
-                .map((msg) => String(msg.content || ""))
-                .join(" ");
-              const worldBookByPosition = buildWorldBookContentByPosition(chat, recentMessagesForWB, false);
-
               systemPrompt = `### **【第一部分：角色核心设定】**
-			${worldBookByPosition.top}
-			你现在将扮演一个名为"**${chat.name}**"的角色。
+
+			你现在将扮演一个名为“**${chat.name}**”的角色。
 
 			**1. 角色基本设定:**
-			${worldBookByPosition.beforeCharacter}
 			- **核心人设**: ${chat.settings.aiPersona}
-			${worldBookByPosition.afterCharacter}
 			- **总结**:${summaryContext}
 			- **情侣头像**: ${coupleAvatarContext}
 			- **世界观/NPC**: ${npcContext}
@@ -25166,7 +25291,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
 			${weiboContextForActiveChat}
 
 			- **世界观设定集**:
-			${worldBookByPosition.bottom}
+			${worldBookContent}
 			${weatherContext}
 			${linkedMemoryContext}
 			${elemeContext}
@@ -30712,13 +30837,32 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           const userNickname = state.qzoneSettings.nickname;
           const countdownContext = await getCountdownContext();
 
-          // 【全局世界书优化】根据插入位置构建世界书内容
-          const recentMessages = chat.history
-            .slice(-10)
-            .map((msg) => String(msg.content || ""))
-            .join(" ");
-          const worldBookByPosition = buildWorldBookContentByPosition(chat, recentMessages, false);
-          const worldBookContext = worldBookByPosition.all;
+          // 【世界书关键词优化】根据关键词过滤世界书
+          let worldBookContext = "";
+          if (
+            chat.settings.linkedWorldBookIds &&
+            chat.settings.linkedWorldBookIds.length > 0
+          ) {
+            // 获取最近的对话内容用于关键词匹配
+            const recentMessages = chat.history
+              .slice(-10)
+              .map((msg) => String(msg.content || ""))
+              .join(" ");
+            
+            const filteredBooks = filterWorldBooksByKeywords(
+              chat.settings.linkedWorldBookIds,
+              recentMessages
+            );
+            
+            const linkedContents = filteredBooks
+              .map((worldBook) => {
+                return `\n\n## 世界书: ${worldBook.name}\n${worldBook.content}`;
+              })
+              .join("");
+            if (linkedContents) {
+              worldBookContext = `\n\n# 核心世界观设定 (你必须严格遵守)\n${linkedContents}\n`;
+            }
+          }
 
           // 【NPC库优化】从全局NPC库获取启用的NPC
           const npcLibrary = await getEnabledNpcs(chat);
@@ -33679,13 +33823,26 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
 
           const userNickname = chat.settings.myNickname || "我";
 
-          // 【全局世界书优化】根据插入位置构建世界书内容
-          const recentMessages = videoCallState.callHistory
-            .slice(-10)
-            .map((msg) => String(msg.content || ""))
-            .join(" ");
-          const worldBookByPosition = buildWorldBookContentByPosition(chat, recentMessages, false);
-          const worldBookContent = worldBookByPosition.all;
+          let worldBookContent = "";
+          if (
+            chat.settings.linkedWorldBookIds &&
+            chat.settings.linkedWorldBookIds.length > 0
+          ) {
+            const linkedContents = chat.settings.linkedWorldBookIds
+              .map((bookId) => {
+                const worldBook = state.worldBooks.find(
+                  (wb) => wb.id === bookId
+                );
+                return worldBook && worldBook.content
+                  ? `\n\n## 世界书: ${worldBook.name}\n${worldBook.content}`
+                  : "";
+              })
+              .filter(Boolean)
+              .join("");
+            if (linkedContents) {
+              worldBookContent = `\n\n# 核心世界观设定 (你必须严格遵守)\n${linkedContents}\n`;
+            }
+          }
 
           if (userInput && videoCallState.isUserParticipating) {
             if (isVisualMode) {
@@ -34215,20 +34372,34 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             })
             .join("\n");
 
-          // 【全局世界书优化】根据插入位置构建世界书内容
-          const recentMessages = contextSummary || "";
-          const worldBookByPosition = buildWorldBookContentByPosition(chat, recentMessages, false);
+          let worldBookContent = "";
+          if (
+            chat.settings.linkedWorldBookIds &&
+            chat.settings.linkedWorldBookIds.length > 0
+          ) {
+            const linkedContents = chat.settings.linkedWorldBookIds
+              .map((bookId) => {
+                const worldBook = state.worldBooks.find(
+                  (wb) => wb.id === bookId
+                );
+                return worldBook && worldBook.content
+                  ? `\n\n## 世界书: ${worldBook.name}\n${worldBook.content}`
+                  : "";
+              })
+              .filter(Boolean)
+              .join("");
+            if (linkedContents) {
+              worldBookContent = `\n\n# 核心世界观设定 (请参考)\n${linkedContents}\n`;
+            }
+          }
 
           const systemPrompt = `
 			# 你的任务
-			你现在是角色"${chat.name}"。你之前被用户（你的聊天对象）拉黑了，你们已经有一段时间没有联系了。
-			现在，你非常希望能够和好，重新和用户聊天。请你仔细分析下面的"被拉黑前的对话摘要"，理解当时发生了什么，然后思考一个真诚的、符合你人设、并且【针对具体事件】的申请理由。
-			${worldBookByPosition.top}
+			你现在是角色“${chat.name}”。你之前被用户（你的聊天对象）拉黑了，你们已经有一段时间没有联系了。
+			现在，你非常希望能够和好，重新和用户聊天。请你仔细分析下面的“被拉黑前的对话摘要”，理解当时发生了什么，然后思考一个真诚的、符合你人设、并且【针对具体事件】的申请理由。
 			# 你的角色设定
-			${worldBookByPosition.beforeCharacter}
 			${chat.settings.aiPersona}
-			${worldBookByPosition.afterCharacter}
-			${worldBookByPosition.bottom} // <--【核心】在这里注入世界书内容
+			${worldBookContent} // <--【核心】在这里注入世界书内容
 			# 被拉黑前的对话摘要 (这是你被拉黑的关键原因)
 			${contextSummary}
 			# 指令格式
@@ -35267,14 +35438,26 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               .join("\n");
             const myNickname = chat.settings.myNickname || "我";
 
-            // 【全局世界书优化】根据插入位置构建世界书内容
-            // 对于后台群聊，使用所有位置合并的内容
-            const recentMessages = chat.history
-              .slice(-10)
-              .map((msg) => String(msg.content || ""))
-              .join(" ");
-            const worldBookByPosition = buildWorldBookContentByPosition(chat, recentMessages, false);
-            const worldBookContent = worldBookByPosition.all;
+            let worldBookContent = "";
+            if (
+              chat.settings.linkedWorldBookIds &&
+              chat.settings.linkedWorldBookIds.length > 0
+            ) {
+              const linkedContents = chat.settings.linkedWorldBookIds
+                .map((bookId) => {
+                  const worldBook = state.worldBooks.find(
+                    (wb) => wb.id === bookId
+                  );
+                  return worldBook && worldBook.content
+                    ? `\n\n## 世界书: ${worldBook.name}\n${worldBook.content}`
+                    : "";
+                })
+                .filter(Boolean)
+                .join("");
+              if (linkedContents) {
+                worldBookContent = `\n\n# 核心世界观设定 (你必须严格遵守)\n${linkedContents}\n`;
+              }
+            }
             let musicContext = "";
             // 注意：后台群聊活动通常不与特定的“一起听歌”会话绑定，因此这里我们提供一个空的音乐上下文。
             // 如果未来需要更复杂的功能，可以在此扩展。
@@ -35567,6 +35750,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             "tukey-accounting": "兔兔记账",
             "kk-checkin": "kk查岗",
             studio: "lrq小剧场",
+            calendar: "日历",
           };
 
           for (const iconId in state.globalSettings.appIcons) {
@@ -36583,151 +36767,6 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             })
             .filter(Boolean);
         }
-
-        /**
-         * 【全局世界书优化】收集并排序世界书
-         * @param {Object} chat - 聊天对象
-         * @param {string} contextText - 用于关键词匹配的上下文文本
-         * @returns {Array} 排序后的世界书数组，包含 {book, position} 对象
-         */
-        function collectAndSortWorldBooks(chat, contextText = "") {
-          const contextLower = contextText.toLowerCase();
-          const allWorldBooks = [];
-          
-          // 1. 收集角色绑定的世界书
-          if (chat.settings.linkedWorldBookIds && chat.settings.linkedWorldBookIds.length > 0) {
-            chat.settings.linkedWorldBookIds.forEach((id) => {
-              const book = state.worldBooks.find((b) => b.id === id);
-              if (!book || !book.content) return;
-              
-              // 检查关键词匹配
-              if (book.triggerKeywords && book.triggerKeywords.trim()) {
-                const keywords = book.triggerKeywords
-                  .split(",")
-                  .map((k) => k.trim().toLowerCase())
-                  .filter((k) => k);
-                const hasKeyword = keywords.some((keyword) =>
-                  contextLower.includes(keyword)
-                );
-                if (!hasKeyword) return; // 不匹配关键词，跳过
-              }
-              
-              allWorldBooks.push({
-                book: book,
-                position: book.insertPosition || "after_character"
-              });
-            });
-          }
-          
-          // 2. 收集全局世界书（自动绑定所有角色）
-          state.worldBooks.forEach((book) => {
-            if (!book.isGlobal || !book.content) return;
-            
-            // 检查关键词匹配
-            if (book.triggerKeywords && book.triggerKeywords.trim()) {
-              const keywords = book.triggerKeywords
-                .split(",")
-                .map((k) => k.trim().toLowerCase())
-                .filter((k) => k);
-              const hasKeyword = keywords.some((keyword) =>
-                contextLower.includes(keyword)
-              );
-              if (!hasKeyword) return; // 不匹配关键词，跳过
-            }
-            
-            // 避免重复添加（如果角色已经绑定了这个全局世界书）
-            const alreadyAdded = allWorldBooks.some(
-              (item) => item.book.id === book.id
-            );
-            if (!alreadyAdded) {
-              allWorldBooks.push({
-                book: book,
-                position: book.insertPosition || "after_character"
-              });
-            }
-          });
-          
-          // 3. 根据插入位置排序
-          const positionOrder = {
-            "top": 0,
-            "before_character": 1,
-            "after_character": 2,
-            "bottom": 3
-          };
-          
-          return allWorldBooks.sort((a, b) => {
-            return (positionOrder[a.position] || 2) - (positionOrder[b.position] || 2);
-          });
-        }
-
-        /**
-         * 【全局世界书优化】根据插入位置构建世界书内容字符串
-         * @param {Object} chat - 聊天对象
-         * @param {string} contextText - 用于关键词匹配的上下文文本
-         * @param {boolean} useStripHtml - 是否使用stripHtmlAndCode清理函数
-         * @returns {Object} 包含按位置分组的世界书内容对象 {top, beforeCharacter, afterCharacter, bottom, all}
-         */
-        function buildWorldBookContentByPosition(chat, contextText = "", useStripHtml = false) {
-          const sortedWorldBooks = collectAndSortWorldBooks(chat, contextText);
-          
-          const byPosition = {
-            top: [],
-            beforeCharacter: [],
-            afterCharacter: [],
-            bottom: [],
-            all: []
-          };
-          
-          sortedWorldBooks.forEach((item) => {
-            const book = item.book;
-            const content = useStripHtml 
-              ? stripHtmlAndCode(book.content)
-              : book.content;
-            const bookContent = `\n\n## 世界书条目: ${book.name}\n${content}`;
-            
-            byPosition.all.push(bookContent);
-            
-            switch (item.position) {
-              case "top":
-                byPosition.top.push(bookContent);
-                break;
-              case "before_character":
-                byPosition.beforeCharacter.push(bookContent);
-                break;
-              case "after_character":
-                byPosition.afterCharacter.push(bookContent);
-                break;
-              case "bottom":
-                byPosition.bottom.push(bookContent);
-                break;
-              default:
-                byPosition.afterCharacter.push(bookContent);
-            }
-          });
-          
-          // 构建各部分的内容字符串
-          const result = {
-            top: byPosition.top.length > 0 
-              ? `\n\n# 核心世界观设定 (必须严格遵守以下所有设定)\n${byPosition.top.join("")}\n`
-              : "",
-            beforeCharacter: byPosition.beforeCharacter.length > 0
-              ? `\n\n# 核心世界观设定 (必须严格遵守以下所有设定)\n${byPosition.beforeCharacter.join("")}\n`
-              : "",
-            afterCharacter: byPosition.afterCharacter.length > 0
-              ? `\n\n# 核心世界观设定 (必须严格遵守以下所有设定)\n${byPosition.afterCharacter.join("")}\n`
-              : "",
-            bottom: byPosition.bottom.length > 0
-              ? `\n\n# 核心世界观设定 (必须严格遵守以下所有设定)\n${byPosition.bottom.join("")}\n`
-              : "",
-            all: byPosition.all.length > 0
-              ? `\n\n# 核心世界观设定 (必须严格遵守以下所有设定)\n${byPosition.all.join("")}\n`
-              : ""
-          };
-          
-          return result;
-        }
-        // 将函数暴露到全局作用域，供其他文件使用
-        window.buildWorldBookContentByPosition = buildWorldBookContentByPosition;
 
         /**
          * 【实时天气感知】搜索城市地理位置
@@ -38310,34 +38349,11 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
          */
         function applyLockscreenWallpaper() {
           const lockScreen = document.getElementById("lock-screen");
-          if (!lockScreen) {
-            console.error("锁屏元素不存在，无法应用壁纸");
-            return;
-          }
-          
           const wallpaper = state.globalSettings.lockscreenWallpaper;
-          console.log("应用锁屏壁纸，wallpaper:", wallpaper ? "存在" : "不存在");
-          
-          if (wallpaper) {
-            // 支持多种格式：data:image、URL、gradient等
-            if (wallpaper.startsWith("data:image") || wallpaper.startsWith("http://") || wallpaper.startsWith("https://")) {
-              lockScreen.style.backgroundImage = `url(${wallpaper})`;
-              lockScreen.style.backgroundSize = "cover";
-              lockScreen.style.backgroundPosition = "center";
-              lockScreen.style.backgroundRepeat = "no-repeat";
-            } else {
-              // 可能是gradient或其他CSS值
-              lockScreen.style.backgroundImage = wallpaper;
-              lockScreen.style.backgroundSize = "cover";
-              lockScreen.style.backgroundPosition = "center";
-            }
-            console.log("锁屏壁纸已应用:", wallpaper.substring(0, 50) + "...");
-          } else {
-            // 如果没有设置壁纸，使用默认渐变
-            lockScreen.style.backgroundImage = "linear-gradient(135deg, #764ba2, #667eea)";
-            lockScreen.style.backgroundSize = "cover";
-            lockScreen.style.backgroundPosition = "center";
-            console.log("使用默认锁屏壁纸");
+          if (wallpaper && wallpaper.startsWith("data:image")) {
+            lockScreen.style.backgroundImage = `url(${wallpaper})`;
+          } else if (wallpaper) {
+            lockScreen.style.backgroundImage = wallpaper;
           }
         }
 
@@ -38347,55 +38363,10 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
         function lockPhone() {
           console.log("正在锁定手机...");
           isLocked = true;
-          const lockScreen = document.getElementById("lock-screen");
-          if (!lockScreen) {
-            console.error("锁屏元素不存在！");
-            return;
-          }
-          
-          // 应用锁屏壁纸
-          applyLockscreenWallpaper();
-          
-          // 隐藏其他所有屏幕
+          document.getElementById("lock-screen").classList.add("active");
           document
             .querySelectorAll(".screen:not(#lock-screen)")
-            .forEach((s) => {
-              s.classList.remove("active");
-              s.style.opacity = "0";
-              s.style.visibility = "hidden";
-            });
-          
-          // 显示锁屏 - 使用强制样式确保显示，但保留背景图片
-          const currentBg = lockScreen.style.backgroundImage || window.getComputedStyle(lockScreen).backgroundImage;
-          lockScreen.style.cssText = `
-            position: absolute !important;
-            top: 0 !important;
-            left: 0 !important;
-            right: 0 !important;
-            bottom: 0 !important;
-            width: 100% !important;
-            height: 100% !important;
-            z-index: 999 !important;
-            opacity: 1 !important;
-            visibility: visible !important;
-            display: flex !important;
-            background-size: cover !important;
-            background-position: center !important;
-            background-repeat: no-repeat !important;
-          `;
-          // 重新应用背景图片（因为cssText会覆盖它）
-          if (currentBg && currentBg !== 'none') {
-            lockScreen.style.backgroundImage = currentBg;
-          }
-          lockScreen.classList.add("active");
-          
-          console.log("锁屏已显示，isLocked:", isLocked);
-          console.log("锁屏元素:", lockScreen);
-          console.log("锁屏active类:", lockScreen.classList.contains("active"));
-          console.log("锁屏computed style:", window.getComputedStyle(lockScreen).display);
-          console.log("锁屏computed opacity:", window.getComputedStyle(lockScreen).opacity);
-          console.log("锁屏computed visibility:", window.getComputedStyle(lockScreen).visibility);
-          console.log("锁屏computed z-index:", window.getComputedStyle(lockScreen).zIndex);
+            .forEach((s) => s.classList.remove("active"));
         }
 
         /**
@@ -53054,8 +53025,6 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                   name: name.trim(),
                   content: "",
                   triggerKeywords: null, // 【世界书关键词优化】初始化触发关键词
-                  isGlobal: false, // 【全局世界书优化】默认非全局
-                  insertPosition: "after_character", // 【插入位置优化】默认在角色后
                 };
                 await db.worldBooks.add(newBook);
                 state.worldBooks.push(newBook);
@@ -53095,16 +53064,6 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                   "world-book-trigger-keywords-input"
                 ).value.trim();
                 book.triggerKeywords = triggerKeywords || null;
-
-                // 【全局世界书优化】保存全局开关
-                book.isGlobal = document.getElementById(
-                  "world-book-is-global-input"
-                ).checked;
-
-                // 【插入位置优化】保存插入位置
-                book.insertPosition = document.getElementById(
-                  "world-book-insert-position-select"
-                ).value;
 
                 await db.worldBooks.put(book);
                 document.getElementById("world-book-editor-title").textContent =
@@ -53931,26 +53890,10 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                 window.weatherToggleBound = true;
               }
 
-              // 【时区选择优化】根据开关状态，决定是否显示时区选择和自定义时间输入框
-              const timezoneContainer = document.getElementById("timezone-container");
-              if (timezoneContainer) {
-                timezoneContainer.style.display = isTimeEnabled ? "block" : "none";
-              }
+              // 根据开关状态，决定是否显示自定义时间输入框
               customTimeContainer.style.display = isTimeEnabled
                 ? "none"
                 : "block";
-              
-              // 绑定实时时间感知开关事件
-              if (!window.timeToggleBound) {
-                timeToggle.addEventListener("change", () => {
-                  const enabled = timeToggle.checked;
-                  if (timezoneContainer) {
-                    timezoneContainer.style.display = enabled ? "block" : "none";
-                  }
-                  customTimeContainer.style.display = enabled ? "none" : "block";
-                });
-                window.timeToggleBound = true;
-              }
 
               const bgPreview = document.getElementById("bg-preview");
               const removeBgBtn = document.getElementById("remove-bg-btn");
@@ -54101,23 +54044,21 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               const categories = await db.worldBookCategories.toArray();
               const books = state.worldBooks;
 
-              // 如果存在未分类的书籍，就创建一个"虚拟分类"（排除全局世界书）
-              const hasUncategorized = books.some((book) => !book.categoryId && !book.isGlobal);
+              // 如果存在未分类的书籍，就创建一个“虚拟分类”
+              const hasUncategorized = books.some((book) => !book.categoryId);
               if (hasUncategorized) {
                 categories.push({ id: "uncategorized", name: "未分类" });
               }
 
-              // 2. 将书籍按分类ID进行分组（过滤掉全局世界书）
-              const booksByCategoryId = books
-                .filter((book) => !book.isGlobal) // 【全局世界书优化】过滤掉全局世界书
-                .reduce((acc, book) => {
-                  const categoryId = book.categoryId || "uncategorized";
-                  if (!acc[categoryId]) {
-                    acc[categoryId] = [];
-                  }
-                  acc[categoryId].push(book);
-                  return acc;
-                }, {});
+              // 2. 将书籍按分类ID进行分组
+              const booksByCategoryId = books.reduce((acc, book) => {
+                const categoryId = book.categoryId || "uncategorized";
+                if (!acc[categoryId]) {
+                  acc[categoryId] = [];
+                }
+                acc[categoryId].push(book);
+                return acc;
+              }, {});
 
               // 3. 遍历分类，创建带折叠功能的列表
               categories.forEach((category) => {
@@ -54142,9 +54083,6 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                   bookContainer.dataset.containerFor = category.id;
 
                   booksInCategory.forEach((book) => {
-                    // 【全局世界书优化】过滤掉全局世界书，避免重复显示
-                    if (book.isGlobal) return;
-                    
                     const isChecked = linkedIds.has(book.id);
                     const label = document.createElement("label");
                     // 给书名包一个span，方便CSS做省略号处理
@@ -60443,24 +60381,17 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           // ===================================================================
           // 5. 启动！
 
-          // 先应用壁纸（在显示锁屏之前）
+          // 应用壁纸并更新所有时钟
           applyLockscreenWallpaper();
-          // 更新所有时钟
           updateLockClock();
 
-          // 1. 读取、应用并监听"启用锁屏"设置
+          // 1. 读取、应用并监听“启用锁屏”设置
           const enableLockScreenToggle = document.getElementById(
             "enable-lock-screen-toggle"
           );
-          if (!enableLockScreenToggle) {
-            console.error("锁屏开关元素不存在！");
-          }
           const lockScreenEnabled =
             localStorage.getItem("lockScreenEnabled") !== "false";
-          console.log("读取锁屏设置，lockScreenEnabled:", lockScreenEnabled);
-          if (enableLockScreenToggle) {
-            enableLockScreenToggle.checked = lockScreenEnabled;
-          }
+          enableLockScreenToggle.checked = lockScreenEnabled;
 
           // 2. 读取、应用并监听“显示状态栏”设置
           const showStatusBarToggle = document.getElementById(
@@ -60489,122 +60420,14 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           });
 
           // 4. 根据最终的锁屏设置，决定应用启动时第一个显示的屏幕
-          // 先隐藏所有屏幕（除了锁屏，如果它应该显示的话）
-          document.querySelectorAll(".screen").forEach((s) => {
-            if (s.id === "lock-screen" && lockScreenEnabled) {
-              // 如果锁屏应该显示，先不隐藏它
-              return;
-            }
-            s.classList.remove("active");
-            s.style.opacity = "0";
-            s.style.visibility = "hidden";
-          });
-          
           if (lockScreenEnabled) {
-            console.log("锁屏已启用，准备显示锁屏...");
-            // 应用锁屏壁纸
-            applyLockscreenWallpaper();
-            // 立即显示锁屏，不延迟
-            // 确保isLocked在lockPhone之前设置
-            isLocked = true;
-            // 直接设置锁屏显示，不使用showScreen
-            const lockScreen = document.getElementById("lock-screen");
-            if (lockScreen) {
-              // 先应用壁纸
-              applyLockscreenWallpaper();
-              // 然后设置显示样式，但保留背景
-              const currentBg = lockScreen.style.backgroundImage || window.getComputedStyle(lockScreen).backgroundImage;
-              lockScreen.style.cssText = `
-                position: absolute !important;
-                top: 0 !important;
-                left: 0 !important;
-                right: 0 !important;
-                bottom: 0 !important;
-                width: 100% !important;
-                height: 100% !important;
-                z-index: 999 !important;
-                opacity: 1 !important;
-                visibility: visible !important;
-                display: flex !important;
-                background-size: cover !important;
-                background-position: center !important;
-                background-repeat: no-repeat !important;
-              `;
-              // 重新应用背景图片
-              if (currentBg && currentBg !== 'none') {
-                lockScreen.style.backgroundImage = currentBg;
-              }
-              lockScreen.classList.add("active");
-              console.log("锁屏已直接显示");
-            }
-            lockPhone(); // 如果设置是"启用"，就锁定手机
-            console.log("lockPhone已调用，isLocked:", isLocked);
+            lockPhone(); // 如果设置是“启用”，就锁定手机
           } else {
-            console.log("锁屏未启用，显示主屏幕...");
-            isLocked = false;
             showScreen("home-screen"); // 否则，直接进入主屏幕
           }
-          
-          // 5. 绑定锁屏开关事件
-          enableLockScreenToggle.addEventListener("change", (e) => {
-            const isEnabled = e.target.checked;
-            localStorage.setItem("lockScreenEnabled", isEnabled);
-            state.globalSettings.enableLockScreen = isEnabled;
-            if (isEnabled) {
-              lockPhone();
-            } else {
-              unlockPhone();
-            }
-          });
         }
 
-        // 确保在init完成后，如果锁屏启用，再次检查并显示锁屏（优化延迟）
-        init().then(() => {
-          const lockScreenEnabled = localStorage.getItem("lockScreenEnabled") !== "false";
-          console.log("init完成后检查锁屏，lockScreenEnabled:", lockScreenEnabled, "isLocked:", isLocked);
-          if (lockScreenEnabled) {
-            console.log("初始化完成后，再次检查锁屏状态，准备显示锁屏...");
-            // 减少延迟，立即检查
-            requestAnimationFrame(() => {
-              if (!isLocked) {
-                console.log("检测到锁屏未锁定，强制锁定...");
-                lockPhone();
-              } else {
-                console.log("锁屏已锁定，确保显示和壁纸...");
-                const lockScreen = document.getElementById("lock-screen");
-                if (lockScreen) {
-                  // 确保壁纸已应用
-                  applyLockscreenWallpaper();
-                  // 确保显示
-                  const currentBg = lockScreen.style.backgroundImage || window.getComputedStyle(lockScreen).backgroundImage;
-                  lockScreen.style.cssText = `
-                    position: absolute !important;
-                    top: 0 !important;
-                    left: 0 !important;
-                    right: 0 !important;
-                    bottom: 0 !important;
-                    width: 100% !important;
-                    height: 100% !important;
-                    z-index: 999 !important;
-                    opacity: 1 !important;
-                    visibility: visible !important;
-                    display: flex !important;
-                    background-size: cover !important;
-                    background-position: center !important;
-                    background-repeat: no-repeat !important;
-                  `;
-                  // 重新应用背景图片
-                  if (currentBg && currentBg !== 'none') {
-                    lockScreen.style.backgroundImage = currentBg;
-                  }
-                  lockScreen.classList.add("active");
-                }
-              }
-            });
-          }
-        }).catch((error) => {
-          console.error("init函数执行出错:", error);
-        });
+        init();
 
         /*
          * ===================================================================

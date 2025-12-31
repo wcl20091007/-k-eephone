@@ -785,6 +785,16 @@ body {
   justify-content: space-between;
   align-items: center;
 }
+.modal-close {
+  font-size: 24px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  line-height: 1;
+  padding: 0 5px;
+}
+.modal-close:hover {
+  color: var(--text-primary);
+}
 .modal-body {
   padding: 15px;
   overflow-y: auto;
@@ -7902,9 +7912,11 @@ body {
   padding: 15px 25px;
   display: flex;
   justify-content: center;
+  align-items: center;
   gap: 30px;
   width: fit-content; /* 宽度自适应内容 */
   flex-shrink: 0;
+  margin: 0 auto; /* 确保Dock栏本身居中 */
 }
 
 /* --- 7. 【核心功能】为可编辑元素添加视觉反馈 --- */
@@ -23127,6 +23139,74 @@ body {
   background-color: #2c2c2e !important;
   border-color: #444 !important;
   color: #eee;
+}
+
+/* 6.5. 边距滑块样式 */
+#top-margin-slider,
+#bottom-margin-slider {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: #e1e5e9;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+#top-margin-slider::-webkit-slider-thumb,
+#bottom-margin-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--accent-color);
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: all 0.2s ease;
+}
+
+#top-margin-slider::-webkit-slider-thumb:hover,
+#bottom-margin-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.3);
+}
+
+#top-margin-slider::-moz-range-thumb,
+#bottom-margin-slider::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--accent-color);
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: all 0.2s ease;
+}
+
+#top-margin-slider::-moz-range-thumb:hover,
+#bottom-margin-slider::-moz-range-thumb:hover {
+  transform: scale(1.1);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.3);
+}
+
+#top-margin-value,
+#bottom-margin-value {
+  font-size: 14px;
+  color: var(--accent-color);
+  font-weight: 600;
+  min-width: 50px;
+  text-align: right;
+}
+
+#phone-screen.dark-mode #top-margin-slider,
+#phone-screen.dark-mode #bottom-margin-slider {
+  background: #444;
+}
+
+#phone-screen.dark-mode #top-margin-value,
+#phone-screen.dark-mode #bottom-margin-value {
+  color: var(--accent-color);
 }
 
 /* 7. 布局辅助 */
