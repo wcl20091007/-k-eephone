@@ -24759,6 +24759,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
 			-   **【新】修改群公告**: \`{"type": "set_group_announcement", "name": "你的角色名", "content": "新的公告内容..."}\` (仅群主或管理员可用)
 			-   **【新】添加行程**: \`{"type": "calendar_add_event", "date": "YYYY-MM-DD", "startTime": "HH:mm", "endTime": "HH:mm", "content": "行程内容"}\` (当用户提到未被记录的行程或要求你帮忙记下时使用，startTime必填，endTime可选)
 			-   **【新】添加待办事项**: \`{"type": "calendar_add_todo", "date": "YYYY-MM-DD", "content": "待办内容"}\` (当用户提到未被记录的待办或要求你帮忙记下时使用)
+			-   **【新】更新待办事项状态**: \`{"type": "calendar_update_todo", "content": "待办内容", "completed": true/false, "date": "YYYY-MM-DD"}\` (当用户提到某个待办已完成或要求你标记为已完成时使用，date可选)
 
 			# 如何区分图片与表情:
 			-   **图片 (ai_image)**: 指的是【模拟真实相机拍摄的照片】，比如风景、自拍、美食等。指令: \`{"type": "ai_image", "description": "图片的详细文字描述..."}\`
@@ -25262,6 +25263,11 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
 			- **添加待办事项**: \`{"type": "calendar_add_todo", "date": "YYYY-MM-DD", "content": "待办内容"}\` 
 			  - **使用场景**: 当用户提到未被记录的待办事项（例如"我明天要买牛奶"）或明确要求你帮忙记下时使用
 			  - **日期格式**: date必须是"YYYY-MM-DD"格式，如果用户只说"明天"、"后天"等，请根据当前时间计算具体日期
+			- **更新待办事项状态**: \`{"type": "calendar_update_todo", "content": "待办内容", "completed": true/false, "date": "YYYY-MM-DD"}\`
+			  - **使用场景**: 当用户提到某个待办事项已完成（例如"我已经买完牛奶了"、"买牛奶完成了"）或要求你标记为已完成时使用
+			  - **content**: 待办事项的内容（可以是部分匹配，例如"买牛奶"可以匹配"明天要买牛奶"）
+			  - **completed**: true表示已完成，false表示未完成
+			  - **date**: 可选，如果提供则只搜索该日期的待办事项，如果不提供则搜索最近30天的待办事项
 			- **回应好友申请**: \`{"type": "friend_request_response", "decision": "accept" or "reject"}\`
 			- **分享链接**: \`{"type": "share_link", "title": "文章标题", "description": "摘要...", "source_name": "来源", "content": "文章【完整】正文..."}\`
 			- **拉黑用户**: \`{"type": "block_user"}\`
@@ -26652,6 +26658,83 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                     aiMessage = {
                       ...baseMessage,
                       content: '抱歉，我尝试帮你记下待办事项，但好像出了点问题...',
+                    };
+                  }
+                  break;
+                }
+
+                case "calendar_update_todo": {
+                  // AI帮助用户更新待办事项状态
+                  const { content, completed, date } = msgData;
+                  
+                  if (content === undefined || completed === undefined) {
+                    console.warn("AI尝试更新待办事项状态，但指令格式不正确:", msgData);
+                    continue;
+                  }
+
+                  try {
+                    if (db && db.calendarTodos && typeof findTodosByContent === 'function') {
+                      // 根据内容查找匹配的待办事项
+                      const matchedTodos = await findTodosByContent(content.trim(), date || null);
+                      
+                      if (matchedTodos.length === 0) {
+                        // 没有找到匹配的待办事项
+                        aiMessage = {
+                          ...baseMessage,
+                          content: `抱歉，我没有找到"${content.trim()}"相关的待办事项...`,
+                        };
+                      } else if (matchedTodos.length === 1) {
+                        // 找到唯一匹配的待办事项，直接更新
+                        const todo = matchedTodos[0];
+                        await db.calendarTodos.update(todo.id, { completed: completed === true });
+                        
+                        const statusText = completed ? '已完成' : '未完成';
+                        aiMessage = {
+                          ...baseMessage,
+                          content: `好的，我已经把"${todo.content}"标记为${statusText}了~`,
+                        };
+                        
+                        // 如果当前正在查看该日期的日历，刷新显示
+                        if (selectedDate === todo.date) {
+                          if (typeof loadTodos === 'function') {
+                            await loadTodos(todo.date);
+                          }
+                        }
+                      } else {
+                        // 找到多个匹配的待办事项，更新所有匹配的
+                        const updatePromises = matchedTodos.map(todo => 
+                          db.calendarTodos.update(todo.id, { completed: completed === true })
+                        );
+                        await Promise.all(updatePromises);
+                        
+                        const statusText = completed ? '已完成' : '未完成';
+                        const todoContents = matchedTodos.map(t => t.content).join('、');
+                        aiMessage = {
+                          ...baseMessage,
+                          content: `好的，我已经把找到的${matchedTodos.length}个相关待办事项（${todoContents}）都标记为${statusText}了~`,
+                        };
+                        
+                        // 刷新所有相关日期的显示
+                        const affectedDates = [...new Set(matchedTodos.map(t => t.date))];
+                        for (const affectedDate of affectedDates) {
+                          if (selectedDate === affectedDate && typeof loadTodos === 'function') {
+                            await loadTodos(affectedDate);
+                          }
+                        }
+                      }
+                      
+                      // 如果当前正在查看日历，刷新日历显示
+                      if (document.getElementById('calendar-screen')?.classList.contains('active')) {
+                        if (typeof renderCalendar === 'function' && typeof currentCalendarDate !== 'undefined') {
+                          await renderCalendar(currentCalendarDate);
+                        }
+                      }
+                    }
+                  } catch (error) {
+                    console.error('更新待办事项状态失败:', error);
+                    aiMessage = {
+                      ...baseMessage,
+                      content: '抱歉，我尝试更新待办事项状态，但好像出了点问题...',
                     };
                   }
                   break;
@@ -52516,6 +52599,10 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                 /(今日|今天|今天.*行程|今天.*待办|行程|待办|日程|安排|计划)/.test(contentLower) ||
                 /(\d{1,2}月\d{1,2}日|\d{4}年\d{1,2}月\d{1,2}日)/.test(content);
               
+              // 【日历集成】检测用户是否提到待办事项已完成
+              const isMentioningTodoCompletion = 
+                /(已完成|完成了|做完了|搞定了|完成了.*待办|待办.*完成了|待办.*已完成)/.test(contentLower);
+              
               if (isAskingCalendar && typeof getCalendarDataForDate === 'function' && typeof formatCalendarDataForAI === 'function') {
                 try {
                   let targetDate = new Date();
@@ -52546,6 +52633,27 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                   chat.history.push(calendarSystemMsg);
                 } catch (error) {
                   console.warn('读取日历数据失败:', error);
+                }
+              }
+              
+              // 【日历集成】如果用户提到待办事项已完成，添加系统提示让AI知道可以更新状态
+              if (isMentioningTodoCompletion && typeof getTodayCalendarData === 'function') {
+                try {
+                  const { todos } = await getTodayCalendarData();
+                  const uncompletedTodos = todos.filter(t => !t.completed);
+                  
+                  if (uncompletedTodos.length > 0) {
+                    const todosText = uncompletedTodos.map(t => t.content).join('、');
+                    const completionSystemMsg = {
+                      role: "system",
+                      content: `[系统提示：用户提到待办事项已完成。当前未完成的待办事项有：${todosText}。请根据用户的消息内容，判断用户指的是哪个待办事项，并使用 'calendar_update_todo' 指令将其标记为已完成。如果用户没有明确提到具体待办事项，你可以询问用户指的是哪一个。]`,
+                      timestamp: Date.now(),
+                      isHidden: true,
+                    };
+                    chat.history.push(completionSystemMsg);
+                  }
+                } catch (error) {
+                  console.warn('检测待办事项完成状态失败:', error);
                 }
               }
               

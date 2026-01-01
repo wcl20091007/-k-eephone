@@ -923,6 +923,52 @@ async function getCurrentOngoingEvents(currentTime = new Date()) {
 }
 
 /**
+ * 根据内容查找待办事项（用于AI更新状态）
+ * @param {string} content - 待办事项的内容（可以是部分匹配）
+ * @param {string} dateStr - 日期字符串（可选，如果不提供则搜索所有日期）
+ * @returns {Promise<Array>} 返回匹配的待办事项数组
+ */
+async function findTodosByContent(content, dateStr = null) {
+  try {
+    if (!db || !db.calendarTodos) {
+      return [];
+    }
+
+    let todos;
+    if (dateStr) {
+      // 如果指定了日期，只搜索该日期
+      todos = await db.calendarTodos
+        .where('date')
+        .equals(dateStr)
+        .toArray();
+    } else {
+      // 如果没有指定日期，搜索最近30天的待办事项
+      const today = new Date();
+      const thirtyDaysAgo = new Date(today);
+      thirtyDaysAgo.setDate(today.getDate() - 30);
+      
+      const startDate = formatDate(thirtyDaysAgo);
+      const endDate = formatDate(today);
+      
+      todos = await db.calendarTodos
+        .where('date')
+        .between(startDate, endDate, true, true)
+        .toArray();
+    }
+
+    // 根据内容匹配（支持部分匹配）
+    const contentLower = content.toLowerCase().trim();
+    return todos.filter(todo => {
+      const todoContentLower = todo.content.toLowerCase();
+      return todoContentLower.includes(contentLower) || contentLower.includes(todoContentLower);
+    });
+  } catch (error) {
+    console.warn('查找待办事项失败:', error);
+    return [];
+  }
+}
+
+/**
  * 格式化日历数据为文本，用于发送给AI
  * @param {Array} events - 行程数组
  * @param {Array} todos - 待办事项数组
