@@ -318,7 +318,7 @@ async function loadEvents(dateStr) {
   const events = await db.calendarEvents
     .where('date')
     .equals(dateStr)
-    .sortBy('time');
+    .sortBy('startTime');
 
   const eventsList = document.getElementById('calendar-events-list');
   eventsList.innerHTML = '';
@@ -345,7 +345,15 @@ async function loadEvents(dateStr) {
     timeDiv.style.fontWeight = '600';
     timeDiv.style.color = 'var(--accent-color)';
     timeDiv.style.marginBottom = '8px';
-    timeDiv.textContent = event.time;
+    
+    // 显示时间范围：开始时间 - 结束时间
+    const startTime = event.startTime || event.time || ''; // 兼容旧数据
+    const endTime = event.endTime || '';
+    if (endTime) {
+      timeDiv.textContent = `${startTime} - ${endTime}`;
+    } else {
+      timeDiv.textContent = startTime;
+    }
 
     const contentDiv = document.createElement('div');
     contentDiv.style.fontSize = '14px';
@@ -459,7 +467,22 @@ function openAddEventModal() {
   
   // 设置默认日期为选中的日期
   document.getElementById('calendar-event-date').value = selectedDate || formatDate(new Date());
-  document.getElementById('calendar-event-time').value = '';
+  
+  // 兼容新旧表单字段
+  const startTimeInput = document.getElementById('calendar-event-start-time');
+  const timeInput = document.getElementById('calendar-event-time');
+  const endTimeInput = document.getElementById('calendar-event-end-time');
+  
+  if (startTimeInput) {
+    startTimeInput.value = '';
+  } else if (timeInput) {
+    timeInput.value = '';
+  }
+  
+  if (endTimeInput) {
+    endTimeInput.value = '';
+  }
+  
   document.getElementById('calendar-event-content').value = '';
   
   // 重置标题
@@ -479,17 +502,20 @@ function closeAddEventModal() {
  */
 async function saveEvent() {
   const date = document.getElementById('calendar-event-date').value;
-  const time = document.getElementById('calendar-event-time').value;
+  const startTime = document.getElementById('calendar-event-start-time').value;
+  const endTime = document.getElementById('calendar-event-end-time').value;
   const content = document.getElementById('calendar-event-content').value.trim();
 
-  if (!date || !time || !content) {
-    alert('请填写完整信息');
+  if (!date || !startTime || !content) {
+    alert('请填写完整信息（日期、开始时间和内容为必填项）');
     return;
   }
 
   await db.calendarEvents.add({
     date,
-    time,
+    startTime,
+    endTime: endTime || null, // 结束时间为可选
+    time: startTime, // 保留time字段用于兼容旧代码
     content,
     type: 'event'
   });
@@ -642,11 +668,12 @@ function openEditTodoModal(todo) {
  */
 async function saveEvent() {
   const date = document.getElementById('calendar-event-date').value;
-  const time = document.getElementById('calendar-event-time').value;
+  const startTime = document.getElementById('calendar-event-start-time')?.value || document.getElementById('calendar-event-time')?.value;
+  const endTime = document.getElementById('calendar-event-end-time')?.value || '';
   const content = document.getElementById('calendar-event-content').value.trim();
 
-  if (!date || !time || !content) {
-    alert('请填写完整信息');
+  if (!date || !startTime || !content) {
+    alert('请填写完整信息（日期、开始时间和内容为必填项）');
     return;
   }
 
@@ -654,7 +681,9 @@ async function saveEvent() {
     // 编辑模式
     await db.calendarEvents.update(editingEventId, {
       date,
-      time,
+      startTime,
+      endTime: endTime || null,
+      time: startTime, // 保留time字段用于兼容
       content
     });
     editingEventId = null;
@@ -663,7 +692,9 @@ async function saveEvent() {
     // 新建模式
     await db.calendarEvents.add({
       date,
-      time,
+      startTime,
+      endTime: endTime || null,
+      time: startTime, // 保留time字段用于兼容
       content,
       type: 'event'
     });
@@ -759,7 +790,14 @@ async function getCalendarDataForDate(dateStr) {
     const events = await db.calendarEvents
       .where('date')
       .equals(dateStr)
-      .sortBy('time');
+      .toArray();
+    
+    // 手动排序（因为可能有些旧数据没有startTime字段）
+    events.sort((a, b) => {
+      const aTime = a.startTime || a.time || '';
+      const bTime = b.startTime || b.time || '';
+      return aTime.localeCompare(bTime);
+    });
     
     const todos = await db.calendarTodos
       .where('date')
@@ -803,12 +841,20 @@ async function getNearbyCalendarData(targetTime, timeRangeMinutes = 30) {
     const allEvents = await db.calendarEvents
       .where('date')
       .equals(targetDateStr)
-      .sortBy('time');
+      .toArray();
+    
+    // 手动排序（因为可能有些旧数据没有startTime字段）
+    allEvents.sort((a, b) => {
+      const aTime = a.startTime || a.time || '';
+      const bTime = b.startTime || b.time || '';
+      return aTime.localeCompare(bTime);
+    });
 
     // 筛选出时间相近的行程（在时间范围内）
     const nearbyEvents = allEvents.filter(event => {
-      if (!event.time) return false;
-      const [hour, minute] = event.time.split(':').map(Number);
+      const startTime = event.startTime || event.time;
+      if (!startTime) return false;
+      const [hour, minute] = startTime.split(':').map(Number);
       const eventTimeMinutes = hour * 60 + minute;
       const timeDiff = Math.abs(eventTimeMinutes - targetTimeMinutes);
       return timeDiff <= timeRangeMinutes;
@@ -825,6 +871,54 @@ async function getNearbyCalendarData(targetTime, timeRangeMinutes = 30) {
   } catch (error) {
     console.warn('读取相近时间日历数据失败:', error);
     return { events: [], todos: [] };
+  }
+}
+
+/**
+ * 检测用户当前正在进行的行程
+ * @param {Date} currentTime - 当前时间（可选，默认为现在）
+ * @returns {Promise<Array>} 返回正在进行的行程数组
+ */
+async function getCurrentOngoingEvents(currentTime = new Date()) {
+  try {
+    if (!db || !db.calendarEvents) {
+      return [];
+    }
+
+    const todayStr = formatDate(currentTime);
+    const currentHour = currentTime.getHours();
+    const currentMinute = currentTime.getMinutes();
+    const currentTimeMinutes = currentHour * 60 + currentMinute;
+
+    // 获取当天的所有行程
+    const allEvents = await db.calendarEvents
+      .where('date')
+      .equals(todayStr)
+      .toArray();
+
+    // 筛选出正在进行的行程（当前时间在开始时间和结束时间之间）
+    const ongoingEvents = allEvents.filter(event => {
+      const startTime = event.startTime || event.time;
+      if (!startTime) return false;
+      
+      const [startHour, startMinute] = startTime.split(':').map(Number);
+      const startTimeMinutes = startHour * 60 + startMinute;
+      
+      // 如果有结束时间，检查是否在时间范围内
+      if (event.endTime) {
+        const [endHour, endMinute] = event.endTime.split(':').map(Number);
+        const endTimeMinutes = endHour * 60 + endMinute;
+        return currentTimeMinutes >= startTimeMinutes && currentTimeMinutes <= endTimeMinutes;
+      } else {
+        // 如果没有结束时间，只检查是否在开始时间之后（默认持续1小时）
+        return currentTimeMinutes >= startTimeMinutes && currentTimeMinutes < startTimeMinutes + 60;
+      }
+    });
+
+    return ongoingEvents;
+  } catch (error) {
+    console.warn('检测当前正在进行的行程失败:', error);
+    return [];
   }
 }
 
@@ -846,7 +940,13 @@ function formatCalendarDataForAI(events, todos, dateStr) {
   if (events.length > 0) {
     text += `📅 行程安排：\n`;
     events.forEach(event => {
-      text += `  • ${event.time} - ${event.content}\n`;
+      const startTime = event.startTime || event.time || '';
+      const endTime = event.endTime || '';
+      if (endTime) {
+        text += `  • ${startTime} - ${endTime} ${event.content}\n`;
+      } else {
+        text += `  • ${startTime} ${event.content}\n`;
+      }
     });
     text += '\n';
   } else {

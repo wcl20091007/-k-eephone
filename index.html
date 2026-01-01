@@ -7867,8 +7867,12 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             <input type="date" id="calendar-event-date" class="moe-input" required>
           </div>
           <div class="form-group">
-            <label>时间</label>
-            <input type="time" id="calendar-event-time" class="moe-input" required>
+            <label>开始时间</label>
+            <input type="time" id="calendar-event-start-time" class="moe-input" required>
+          </div>
+          <div class="form-group">
+            <label>结束时间（可选）</label>
+            <input type="time" id="calendar-event-end-time" class="moe-input">
           </div>
           <div class="form-group">
             <label>行程内容</label>
@@ -24065,19 +24069,37 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             console.error("生成微博主动聊天上下文时出错:", e);
           }
 
-          // 【日历集成】检查相近时间的行程和待办事项（用于AI主动提醒）
+          // 【日历集成】检查当前正在进行的行程和相近时间的行程和待办事项（用于AI主动提醒）
           let calendarContextForActiveChat = "";
           try {
-            if (typeof getNearbyCalendarData === 'function' && typeof formatCalendarDataForAI === 'function') {
+            if (typeof getCurrentOngoingEvents === 'function' && typeof getNearbyCalendarData === 'function' && typeof formatCalendarDataForAI === 'function') {
               const now = new Date();
-              const { events, todos } = await getNearbyCalendarData(now, 30); // 检查30分钟内的行程
+              
+              // 1. 检查当前正在进行的行程
+              const ongoingEvents = await getCurrentOngoingEvents(now);
+              
+              // 2. 检查相近时间的行程（30分钟内）
+              const { events: nearbyEvents, todos } = await getNearbyCalendarData(now, 30);
+              
+              // 3. 合并当前正在进行的行程和相近时间的行程
+              const allRelevantEvents = [...ongoingEvents];
+              nearbyEvents.forEach(event => {
+                if (!allRelevantEvents.find(e => e.id === event.id)) {
+                  allRelevantEvents.push(event);
+                }
+              });
               
               // 只有当有行程或待办时才添加提醒
-              if (events.length > 0 || todos.length > 0) {
+              if (allRelevantEvents.length > 0 || todos.length > 0) {
                 const todayStr = formatDate(now);
-                const calendarText = formatCalendarDataForAI(events, todos, todayStr);
+                const calendarText = formatCalendarDataForAI(allRelevantEvents, todos, todayStr);
                 
-                calendarContextForActiveChat = `\n\n# 用户当前的日程提醒\n${calendarText}\n\n【重要提示】你可以根据用户的行程和待办事项做出提醒和评价。如果没有行程或者根据你的人设有其他更重要的话题，就不需要提及行程或待办等信息。`;
+                let ongoingText = '';
+                if (ongoingEvents.length > 0) {
+                  ongoingText = `\n【特别提醒】用户当前正在进行以下行程：\n${ongoingEvents.map(e => `  • ${e.startTime || e.time}${e.endTime ? ` - ${e.endTime}` : ''} ${e.content}`).join('\n')}\n`;
+                }
+                
+                calendarContextForActiveChat = `\n\n# 用户当前的日程提醒${ongoingText}\n${calendarText}\n\n【重要提示】你可以根据用户的行程和待办事项做出提醒和评价。如果用户当前正在进行某个行程，你可以根据聊天内容和人设决定是否提及。如果没有行程或者根据你的人设有其他更重要的话题，就不需要提及行程或待办等信息。`;
               }
             }
           } catch (e) {
@@ -24735,6 +24757,8 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
 			-   **【新】设置/取消管理员**: \`{"type": "set_group_admin", "name": "你的角色名", "targetName": "目标角色名", "isAdmin": true/false}\`(仅群主可用, true为设置, false为取消)
 			-   **【新】设置群头衔**: \`{"type": "set_group_title", "name": "你的角色名", "targetName": "目标角色名", "title": "新头衔"}\` (仅群主或管理员可用)
 			-   **【新】修改群公告**: \`{"type": "set_group_announcement", "name": "你的角色名", "content": "新的公告内容..."}\` (仅群主或管理员可用)
+			-   **【新】添加行程**: \`{"type": "calendar_add_event", "date": "YYYY-MM-DD", "startTime": "HH:mm", "endTime": "HH:mm", "content": "行程内容"}\` (当用户提到未被记录的行程或要求你帮忙记下时使用，startTime必填，endTime可选)
+			-   **【新】添加待办事项**: \`{"type": "calendar_add_todo", "date": "YYYY-MM-DD", "content": "待办内容"}\` (当用户提到未被记录的待办或要求你帮忙记下时使用)
 
 			# 如何区分图片与表情:
 			-   **图片 (ai_image)**: 指的是【模拟真实相机拍摄的照片】，比如风景、自拍、美食等。指令: \`{"type": "ai_image", "description": "图片的详细文字描述..."}\`
@@ -25230,6 +25254,14 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
 			**三、 社交与关系指令**
 			- **记录回忆**: \`{"type": "create_memory", "description": "用你的话记录下这个特殊瞬间。"}\` (此为秘密日记，用户不可见)
 			- **创建约定/倒计时**: \`{"type": "create_countdown", "title": "约定的标题", "date": "YYYY-MM-DDTHH:mm:ss"}\`
+			- **添加行程**: \`{"type": "calendar_add_event", "date": "YYYY-MM-DD", "startTime": "HH:mm", "endTime": "HH:mm", "content": "行程内容"}\` 
+			  - **使用场景**: 当用户提到未被记录的行程（例如"我明天下午3点到5点要开会"）或明确要求你帮忙记下时使用
+			  - **日期格式**: date必须是"YYYY-MM-DD"格式，如果用户只说"明天"、"后天"等，请根据当前时间计算具体日期
+			  - **开始时间**: startTime必须是"HH:mm"格式（24小时制），例如"14:30"表示下午2点30分（必填）
+			  - **结束时间**: endTime必须是"HH:mm"格式（24小时制），例如"16:00"表示下午4点（可选，但如果用户提到了结束时间，请务必填写）
+			- **添加待办事项**: \`{"type": "calendar_add_todo", "date": "YYYY-MM-DD", "content": "待办内容"}\` 
+			  - **使用场景**: 当用户提到未被记录的待办事项（例如"我明天要买牛奶"）或明确要求你帮忙记下时使用
+			  - **日期格式**: date必须是"YYYY-MM-DD"格式，如果用户只说"明天"、"后天"等，请根据当前时间计算具体日期
 			- **回应好友申请**: \`{"type": "friend_request_response", "decision": "accept" or "reject"}\`
 			- **分享链接**: \`{"type": "share_link", "title": "文章标题", "description": "摘要...", "source_name": "来源", "content": "文章【完整】正文..."}\`
 			- **拉黑用户**: \`{"type": "block_user"}\`
@@ -26536,6 +26568,93 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                   }
 
                   continue; // 这是后台操作，用 continue 跳过
+                }
+
+                case "calendar_add_event": {
+                  // AI帮助用户添加行程
+                  const { date, startTime, endTime, time, content } = msgData;
+                  
+                  // 兼容旧格式（只有time字段）
+                  const finalStartTime = startTime || time;
+                  
+                  if (!date || !finalStartTime || !content) {
+                    console.warn("AI尝试添加行程，但指令格式不正确:", msgData);
+                    continue;
+                  }
+
+                  try {
+                    if (db && db.calendarEvents) {
+                      await db.calendarEvents.add({
+                        date,
+                        startTime: finalStartTime,
+                        endTime: endTime || null,
+                        time: finalStartTime, // 保留time字段用于兼容
+                        content: content.trim(),
+                        type: 'event'
+                      });
+                      
+                      // 创建一条文本消息，告诉用户已经帮忙记下了
+                      const timeText = endTime ? `${finalStartTime} - ${endTime}` : finalStartTime;
+                      aiMessage = {
+                        ...baseMessage,
+                        content: `好的，我已经帮你把"${content.trim()}"记在${date} ${timeText}的行程里了~`,
+                      };
+                      
+                      // 如果当前正在查看日历，刷新日历显示
+                      if (document.getElementById('calendar-screen')?.classList.contains('active')) {
+                        if (typeof renderCalendar === 'function' && typeof currentCalendarDate !== 'undefined') {
+                          await renderCalendar(currentCalendarDate);
+                        }
+                      }
+                    }
+                  } catch (error) {
+                    console.error('添加行程失败:', error);
+                    aiMessage = {
+                      ...baseMessage,
+                      content: '抱歉，我尝试帮你记下行程，但好像出了点问题...',
+                    };
+                  }
+                  break;
+                }
+
+                case "calendar_add_todo": {
+                  // AI帮助用户添加待办事项
+                  const { date, content } = msgData;
+                  
+                  if (!date || !content) {
+                    console.warn("AI尝试添加待办事项，但指令格式不正确:", msgData);
+                    continue;
+                  }
+
+                  try {
+                    if (db && db.calendarTodos) {
+                      await db.calendarTodos.add({
+                        date,
+                        content: content.trim(),
+                        completed: false
+                      });
+                      
+                      // 创建一条文本消息，告诉用户已经帮忙记下了
+                      aiMessage = {
+                        ...baseMessage,
+                        content: `好的，我已经帮你把"${content.trim()}"记在${date}的待办事项里了~`,
+                      };
+                      
+                      // 如果当前正在查看日历，刷新日历显示
+                      if (document.getElementById('calendar-screen')?.classList.contains('active')) {
+                        if (typeof renderCalendar === 'function' && typeof currentCalendarDate !== 'undefined') {
+                          await renderCalendar(currentCalendarDate);
+                        }
+                      }
+                    }
+                  } catch (error) {
+                    console.error('添加待办事项失败:', error);
+                    aiMessage = {
+                      ...baseMessage,
+                      content: '抱歉，我尝试帮你记下待办事项，但好像出了点问题...',
+                    };
+                  }
+                  break;
                 }
 
                 case "weibo_comment": {
