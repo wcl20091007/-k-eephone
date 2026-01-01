@@ -98,9 +98,17 @@ async function renderCalendar(date) {
   const today = new Date();
   const isCurrentMonth = year === today.getFullYear() && month === today.getMonth();
 
+  // 检查DOM元素是否存在
+  const monthYearEl = document.getElementById('calendar-month-year');
+  const grid = document.getElementById('calendar-grid');
+  
+  if (!monthYearEl || !grid) {
+    console.warn('日历DOM元素未找到，可能还未加载完成');
+    return;
+  }
+
   // 更新月份年份标题（只显示数字，不用年和月字）
-  document.getElementById('calendar-month-year').textContent = 
-    `${year} ${month + 1}`;
+  monthYearEl.textContent = `${year} ${month + 1}`;
 
   // 获取月份的第一天和最后一天
   const firstDay = new Date(year, month, 1);
@@ -109,7 +117,6 @@ async function renderCalendar(date) {
   const startingDayOfWeek = firstDay.getDay(); // 0 = 星期日
 
   // 清空日历网格
-  const grid = document.getElementById('calendar-grid');
   grid.innerHTML = '';
 
   // 添加空白单元格（月初之前的空白）
@@ -123,16 +130,34 @@ async function renderCalendar(date) {
   // 获取该月所有有行程和待办事项的日期（用于显示小点）
   const monthStart = formatDate(new Date(year, month, 1));
   const monthEnd = formatDate(new Date(year, month + 1, 0));
-  const eventsInMonth = await db.calendarEvents
-    .where('date')
-    .between(monthStart, monthEnd, true, true)
-    .toArray();
-  const todosInMonth = await db.calendarTodos
-    .where('date')
-    .between(monthStart, monthEnd, true, true)
-    .toArray();
-  const datesWithEvents = new Set(eventsInMonth.map(e => e.date));
-  const datesWithTodos = new Set(todosInMonth.map(t => t.date));
+  
+  // 使用 try-catch 处理数据库查询错误，确保即使查询失败也能显示日期
+  let datesWithEvents = new Set();
+  let datesWithTodos = new Set();
+  
+  try {
+    if (db && db.calendarEvents) {
+      const eventsInMonth = await db.calendarEvents
+        .where('date')
+        .between(monthStart, monthEnd, true, true)
+        .toArray();
+      datesWithEvents = new Set(eventsInMonth.map(e => e.date));
+    }
+  } catch (error) {
+    console.warn('查询行程数据失败:', error);
+  }
+  
+  try {
+    if (db && db.calendarTodos) {
+      const todosInMonth = await db.calendarTodos
+        .where('date')
+        .between(monthStart, monthEnd, true, true)
+        .toArray();
+      datesWithTodos = new Set(todosInMonth.map(t => t.date));
+    }
+  } catch (error) {
+    console.warn('查询待办数据失败:', error);
+  }
 
   // 添加日期单元格
   for (let day = 1; day <= daysInMonth; day++) {
