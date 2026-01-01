@@ -227,13 +227,59 @@ async function loadDayInfo(dateStr) {
   const month = dateObj.getMonth() + 1;
   const day = dateObj.getDate();
   
-  // 只显示月日，使用罗马数字
-  const dateText = `${toRomanNumeral(month)}.${toRomanNumeral(day)}`;
+  // 只显示月日，使用中文格式：1月1日
+  const dateText = `${month}月${day}日`;
   document.getElementById('calendar-selected-date').textContent = dateText;
   
-  // 显示日期信息区域
+  // 显示日期信息区域，并设置为独立卡片样式
+  const dayInfoEl = document.getElementById('calendar-day-info');
   document.getElementById('calendar-no-selection').style.display = 'none';
-  document.getElementById('calendar-day-info').style.display = 'block';
+  dayInfoEl.style.display = 'block';
+  
+  // 设置卡片样式：泡泡框样式
+  dayInfoEl.style.padding = '20px';
+  dayInfoEl.style.borderRadius = '16px';
+  dayInfoEl.style.backgroundColor = 'var(--secondary-bg)';
+  dayInfoEl.style.border = '1px solid var(--border-color)';
+  dayInfoEl.style.boxShadow = '0 2px 12px rgba(0, 0, 0, 0.08)';
+  dayInfoEl.style.margin = '0';
+  dayInfoEl.style.position = 'relative';
+
+  // 添加卡片关闭按钮（如果还没有的话）
+  let closeBtn = dayInfoEl.querySelector('.calendar-card-close-btn');
+  if (!closeBtn) {
+    closeBtn = document.createElement('button');
+    closeBtn.className = 'calendar-card-close-btn';
+    closeBtn.textContent = '❌';
+    closeBtn.style.position = 'absolute';
+    closeBtn.style.top = '12px';
+    closeBtn.style.right = '12px';
+    closeBtn.style.background = 'transparent';
+    closeBtn.style.border = 'none';
+    closeBtn.style.fontSize = '16px';
+    closeBtn.style.cursor = 'pointer';
+    closeBtn.style.padding = '4px';
+    closeBtn.style.width = '28px';
+    closeBtn.style.height = '28px';
+    closeBtn.style.display = 'flex';
+    closeBtn.style.alignItems = 'center';
+    closeBtn.style.justifyContent = 'center';
+    closeBtn.style.borderRadius = '50%';
+    closeBtn.style.transition = 'background-color 0.2s';
+    closeBtn.style.zIndex = '10';
+    closeBtn.addEventListener('mouseenter', () => {
+      closeBtn.style.backgroundColor = 'rgba(0, 0, 0, 0.1)';
+    });
+    closeBtn.addEventListener('mouseleave', () => {
+      closeBtn.style.backgroundColor = 'transparent';
+    });
+    closeBtn.addEventListener('click', () => {
+      dayInfoEl.style.display = 'none';
+      document.getElementById('calendar-no-selection').style.display = 'block';
+      selectedDate = null; // 清除选中的日期
+    });
+    dayInfoEl.appendChild(closeBtn);
+  }
 
   // 加载行程和待办事项
   await loadEvents(dateStr);
@@ -259,28 +305,27 @@ async function loadEvents(dateStr) {
 
   events.forEach(event => {
     const eventItem = document.createElement('div');
-    eventItem.style.padding = '12px';
-    eventItem.style.borderRadius = '8px';
+    eventItem.style.padding = '16px';
+    eventItem.style.borderRadius = '16px';
     eventItem.style.backgroundColor = 'var(--secondary-bg)';
     eventItem.style.border = '1px solid var(--border-color)';
-    eventItem.style.display = 'flex';
-    eventItem.style.justifyContent = 'space-between';
-    eventItem.style.alignItems = 'flex-start';
-    eventItem.style.gap = '10px';
+    eventItem.style.position = 'relative';
+    eventItem.style.marginBottom = '12px';
+    eventItem.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.08)';
 
     const eventContent = document.createElement('div');
-    eventContent.style.flex = '1';
 
     const timeDiv = document.createElement('div');
     timeDiv.style.fontSize = '14px';
     timeDiv.style.fontWeight = '600';
     timeDiv.style.color = 'var(--accent-color)';
-    timeDiv.style.marginBottom = '4px';
+    timeDiv.style.marginBottom = '8px';
     timeDiv.textContent = event.time;
 
     const contentDiv = document.createElement('div');
     contentDiv.style.fontSize = '14px';
     contentDiv.style.color = 'var(--text-primary)';
+    contentDiv.style.lineHeight = '1.5';
     contentDiv.textContent = event.content;
 
     eventContent.appendChild(timeDiv);
