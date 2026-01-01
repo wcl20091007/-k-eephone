@@ -744,3 +744,124 @@ if (document.readyState === 'loading') {
 } else {
   initCalendar();
 }
+
+/**
+ * 获取指定日期的行程和待办事项
+ * @param {string} dateStr - 日期字符串 (YYYY-MM-DD格式)
+ * @returns {Promise<{events: Array, todos: Array}>} 返回行程和待办事项
+ */
+async function getCalendarDataForDate(dateStr) {
+  try {
+    if (!db || !db.calendarEvents || !db.calendarTodos) {
+      return { events: [], todos: [] };
+    }
+
+    const events = await db.calendarEvents
+      .where('date')
+      .equals(dateStr)
+      .sortBy('time');
+    
+    const todos = await db.calendarTodos
+      .where('date')
+      .equals(dateStr)
+      .toArray();
+
+    return { events, todos };
+  } catch (error) {
+    console.warn('读取日历数据失败:', error);
+    return { events: [], todos: [] };
+  }
+}
+
+/**
+ * 获取今日的行程和待办事项
+ * @returns {Promise<{events: Array, todos: Array}>} 返回今日的行程和待办事项
+ */
+async function getTodayCalendarData() {
+  const today = formatDate(new Date());
+  return await getCalendarDataForDate(today);
+}
+
+/**
+ * 获取与指定时间相近的行程和待办事项（用于AI主动提醒）
+ * @param {Date} targetTime - 目标时间
+ * @param {number} timeRangeMinutes - 时间范围（分钟），默认30分钟
+ * @returns {Promise<{events: Array, todos: Array}>} 返回相近时间的行程和待办事项
+ */
+async function getNearbyCalendarData(targetTime, timeRangeMinutes = 30) {
+  try {
+    if (!db || !db.calendarEvents || !db.calendarTodos) {
+      return { events: [], todos: [] };
+    }
+
+    const targetDateStr = formatDate(targetTime);
+    const targetHour = targetTime.getHours();
+    const targetMinute = targetTime.getMinutes();
+    const targetTimeMinutes = targetHour * 60 + targetMinute;
+
+    // 获取当天的所有行程
+    const allEvents = await db.calendarEvents
+      .where('date')
+      .equals(targetDateStr)
+      .sortBy('time');
+
+    // 筛选出时间相近的行程（在时间范围内）
+    const nearbyEvents = allEvents.filter(event => {
+      if (!event.time) return false;
+      const [hour, minute] = event.time.split(':').map(Number);
+      const eventTimeMinutes = hour * 60 + minute;
+      const timeDiff = Math.abs(eventTimeMinutes - targetTimeMinutes);
+      return timeDiff <= timeRangeMinutes;
+    });
+
+    // 获取当天的所有待办事项（待办事项没有具体时间，所以返回当天的所有未完成待办）
+    const todos = await db.calendarTodos
+      .where('date')
+      .equals(targetDateStr)
+      .filter(todo => !todo.completed)
+      .toArray();
+
+    return { events: nearbyEvents, todos };
+  } catch (error) {
+    console.warn('读取相近时间日历数据失败:', error);
+    return { events: [], todos: [] };
+  }
+}
+
+/**
+ * 格式化日历数据为文本，用于发送给AI
+ * @param {Array} events - 行程数组
+ * @param {Array} todos - 待办事项数组
+ * @param {string} dateStr - 日期字符串
+ * @returns {string} 格式化后的文本
+ */
+function formatCalendarDataForAI(events, todos, dateStr) {
+  const dateObj = new Date(dateStr);
+  const month = dateObj.getMonth() + 1;
+  const day = dateObj.getDate();
+  const dateText = `${month}月${day}日`;
+
+  let text = `【${dateText}的日程安排】\n\n`;
+
+  if (events.length > 0) {
+    text += `📅 行程安排：\n`;
+    events.forEach(event => {
+      text += `  • ${event.time} - ${event.content}\n`;
+    });
+    text += '\n';
+  } else {
+    text += `📅 行程安排：暂无\n\n`;
+  }
+
+  if (todos.length > 0) {
+    text += `✅ 待办事项：\n`;
+    todos.forEach(todo => {
+      const status = todo.completed ? '✓' : '○';
+      text += `  ${status} ${todo.content}\n`;
+    });
+  } else {
+    text += `✅ 待办事项：暂无\n`;
+  }
+
+  return text;
+}

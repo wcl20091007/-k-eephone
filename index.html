@@ -24065,6 +24065,25 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             console.error("生成微博主动聊天上下文时出错:", e);
           }
 
+          // 【日历集成】检查相近时间的行程和待办事项（用于AI主动提醒）
+          let calendarContextForActiveChat = "";
+          try {
+            if (typeof getNearbyCalendarData === 'function' && typeof formatCalendarDataForAI === 'function') {
+              const now = new Date();
+              const { events, todos } = await getNearbyCalendarData(now, 30); // 检查30分钟内的行程
+              
+              // 只有当有行程或待办时才添加提醒
+              if (events.length > 0 || todos.length > 0) {
+                const todayStr = formatDate(now);
+                const calendarText = formatCalendarDataForAI(events, todos, todayStr);
+                
+                calendarContextForActiveChat = `\n\n# 用户当前的日程提醒\n${calendarText}\n\n【重要提示】你可以根据用户的行程和待办事项做出提醒和评价。如果没有行程或者根据你的人设有其他更重要的话题，就不需要提及行程或待办等信息。`;
+              }
+            }
+          } catch (e) {
+            console.error("生成日历主动聊天上下文时出错:", e);
+          }
+
           const chatHeaderTitle = document.getElementById("chat-header-title");
 
           // 获取群聊的输入提示元素
@@ -24736,6 +24755,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
 			${sharedContext}
 			${stickerContext}
 			${linkedMemoryContext}
+			${calendarContextForActiveChat}
 
 			# 用户的角色
 			- **${myNickname}**: ${chat.settings.myPersona}
@@ -25289,6 +25309,9 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
 
 			- **最近的微博互动**:
 			${weiboContextForActiveChat}
+
+			- **用户当前的日程提醒**:
+			${calendarContextForActiveChat}
 
 			- **世界观设定集**:
 			${worldBookContent}
@@ -52367,6 +52390,46 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               }
 
               chat.history.push(msg);
+              
+              // 【日历集成】检测用户是否询问行程或待办事项
+              const contentLower = content.toLowerCase();
+              const isAskingCalendar = 
+                /(今日|今天|今天.*行程|今天.*待办|行程|待办|日程|安排|计划)/.test(contentLower) ||
+                /(\d{1,2}月\d{1,2}日|\d{4}年\d{1,2}月\d{1,2}日)/.test(content);
+              
+              if (isAskingCalendar && typeof getCalendarDataForDate === 'function' && typeof formatCalendarDataForAI === 'function') {
+                try {
+                  let targetDate = new Date();
+                  // 尝试从消息中提取日期
+                  const dateMatch = content.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/) || content.match(/(\d{1,2})月(\d{1,2})日/);
+                  if (dateMatch) {
+                    if (dateMatch.length === 4) {
+                      // 完整日期：2024年1月1日
+                      targetDate = new Date(parseInt(dateMatch[1]), parseInt(dateMatch[2]) - 1, parseInt(dateMatch[3]));
+                    } else {
+                      // 简单日期：1月1日
+                      const currentYear = new Date().getFullYear();
+                      targetDate = new Date(currentYear, parseInt(dateMatch[1]) - 1, parseInt(dateMatch[2]));
+                    }
+                  }
+                  
+                  const dateStr = formatDate(targetDate);
+                  const { events, todos } = await getCalendarDataForDate(dateStr);
+                  const calendarText = formatCalendarDataForAI(events, todos, dateStr);
+                  
+                  // 添加隐藏的系统消息，让AI能看到用户的日程信息
+                  const calendarSystemMsg = {
+                    role: "system",
+                    content: `[系统提示：用户询问了${dateStr === formatDate(new Date()) ? '今日' : dateStr}的行程和待办事项。以下是用户的日程信息：\n\n${calendarText}\n\n请根据这些信息回答用户的问题，可以做出提醒和评价。]`,
+                    timestamp: Date.now(),
+                    isHidden: true,
+                  };
+                  chat.history.push(calendarSystemMsg);
+                } catch (error) {
+                  console.warn('读取日历数据失败:', error);
+                }
+              }
+              
               await incrementMessageCount(state.activeChatId);
               await db.chats.put(chat);
               appendMessage(msg, chat);
