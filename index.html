@@ -7786,14 +7786,14 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
         <span id="calendar-header-title">日历</span>
         <span class="action-btn" id="calendar-today-btn" title="今天">今天</span>
       </div>
-      <div style="display: flex; flex-direction: column; height: calc(100% - 60px);">
+      <div style="display: flex; flex-direction: column; height: calc(100% - 60px); overflow-y: auto;">
         <!-- 上半部分：日历 -->
         <div style="flex: 0 0 auto; padding: 20px; border-bottom: 1px solid var(--border-color);">
           <!-- 月份导航 -->
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-            <button id="calendar-prev-month" class="moe-btn" style="padding: 8px 16px;">‹ 上月</button>
+            <span id="calendar-prev-month" style="font-size: 24px; cursor: pointer; color: var(--text-primary); user-select: none;">◀</span>
             <h2 id="calendar-month-year" style="margin: 0; font-size: 20px; font-weight: 600;"></h2>
-            <button id="calendar-next-month" class="moe-btn" style="padding: 8px 16px;">下月 ›</button>
+            <span id="calendar-next-month" style="font-size: 24px; cursor: pointer; color: var(--text-primary); user-select: none;">▶</span>
           </div>
           
           <!-- 星期标题 -->
@@ -7814,7 +7814,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
         </div>
 
         <!-- 下半部分：当日信息 -->
-        <div style="flex: 1; overflow-y: auto; padding: 20px;">
+        <div style="flex: 0 0 auto; padding: 20px;">
           <div id="calendar-day-info" style="display: none;">
             <h3 id="calendar-selected-date" style="margin: 0 0 20px 0; font-size: 18px; font-weight: 600;"></h3>
             
@@ -7826,9 +7826,8 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
 
             <!-- 行程内容 -->
             <div id="calendar-events-content" class="calendar-tab-content">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+              <div style="margin-bottom: 15px;">
                 <h4 style="margin: 0; font-size: 16px; font-weight: 600;">今日行程</h4>
-                <button id="calendar-add-event-btn" class="moe-btn" style="padding: 6px 12px; font-size: 14px;">+ 添加行程</button>
               </div>
               <div id="calendar-events-list" style="display: flex; flex-direction: column; gap: 10px;">
                 <!-- 行程列表将由JS动态生成 -->
@@ -7837,9 +7836,8 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
 
             <!-- 待办事项内容 -->
             <div id="calendar-todos-content" class="calendar-tab-content" style="display: none;">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+              <div style="margin-bottom: 15px;">
                 <h4 style="margin: 0; font-size: 16px; font-weight: 600;">待办事项</h4>
-                <button id="calendar-add-todo-btn" class="moe-btn" style="padding: 6px 12px; font-size: 14px;">+ 添加待办</button>
               </div>
               <div id="calendar-todos-list" style="display: flex; flex-direction: column; gap: 10px;">
                 <!-- 待办事项列表将由JS动态生成 -->
@@ -7852,6 +7850,9 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           </div>
         </div>
       </div>
+      
+      <!-- 右下角漂浮气泡添加按钮 -->
+      <div id="calendar-floating-add-btn" style="position: fixed; bottom: 80px; right: 20px; width: 56px; height: 56px; border-radius: 50%; background-color: var(--accent-color); color: white; display: none; align-items: center; justify-content: center; font-size: 32px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); z-index: 1000; transition: transform 0.2s, box-shadow 0.2s; user-select: none;">+</div>
     </div>
 
     <!-- 添加行程模态框 -->
@@ -7877,6 +7878,15 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           <div class="form-group">
             <label>行程内容</label>
             <textarea id="calendar-event-content" class="moe-input" rows="3" placeholder="请输入行程内容..." required></textarea>
+          </div>
+          <div class="form-group">
+            <label style="display: flex; justify-content: space-between; align-items: center;">
+              <span>分类</span>
+              <button type="button" id="calendar-manage-categories-btn" class="moe-btn" style="padding: 4px 8px; font-size: 12px; border-radius: 12px;">管理分类</button>
+            </label>
+            <select id="calendar-event-category" class="moe-input">
+              <option value="">无分类</option>
+            </select>
           </div>
         </div>
         <div class="modal-footer">
@@ -7906,6 +7916,51 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
         <div class="modal-footer">
           <button class="moe-btn form-button-secondary" id="calendar-cancel-todo-btn">取消</button>
           <button class="moe-btn" id="calendar-save-todo-btn">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 分类管理模态框 -->
+    <div id="calendar-categories-modal" class="modal">
+      <div class="modal-content" style="max-width: 500px;">
+        <div class="modal-header">
+          <span>管理分类</span>
+          <span class="modal-close" id="calendar-close-categories-modal">×</span>
+        </div>
+        <div class="modal-body">
+          <div style="margin-bottom: 20px;">
+            <button id="calendar-add-category-btn" class="moe-btn" style="width: 100%; margin-bottom: 15px;">+ 添加新分类</button>
+            <div id="calendar-categories-list" style="display: flex; flex-direction: column; gap: 10px;">
+              <!-- 分类列表将由JS动态生成 -->
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="moe-btn" id="calendar-close-categories-btn">完成</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 添加/编辑分类模态框 -->
+    <div id="calendar-category-edit-modal" class="modal">
+      <div class="modal-content" style="max-width: 400px;">
+        <div class="modal-header">
+          <span id="calendar-category-edit-title">添加分类</span>
+          <span class="modal-close" id="calendar-close-category-edit-modal">×</span>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>分类名称</label>
+            <input type="text" id="calendar-category-name" class="moe-input" placeholder="请输入分类名称" required>
+          </div>
+          <div class="form-group">
+            <label>颜色</label>
+            <input type="color" id="calendar-category-color" class="moe-input" value="#4CAF50" required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="moe-btn form-button-secondary" id="calendar-cancel-category-edit-btn">取消</button>
+          <button class="moe-btn" id="calendar-save-category-btn">保存</button>
         </div>
       </div>
     </div>
@@ -16924,8 +16979,9 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           offlinePresets: "++id, name",
           elemeFoods: "++id, name, category",
           elemeOrders: "++id, recipientId, timestamp",
-          calendarEvents: "++id, date, time, content, type",
+          calendarEvents: "++id, date, time, content, type, startTime, endTime, categoryId",
           calendarTodos: "++id, date, content, completed",
+          calendarCategories: "++id, name, color",
           studioScripts: "++id, name",
           studioHistory: "++id, timestamp",
           tukeyAccounts: "++id, category, type", // 这是你已有的，保持不变

@@ -9,9 +9,34 @@ let currentTab = 'events'; // 当前显示的标签：'events' 或 'todos'
 /**
  * 初始化日历App
  */
-function initCalendar() {
+async function initCalendar() {
+  // 等待一小段时间确保DOM和数据库都准备好
+  await new Promise(resolve => setTimeout(resolve, 100));
   // 渲染当前月份
-  renderCalendar(currentCalendarDate);
+  await renderCalendar(currentCalendarDate);
+  
+  // 控制漂浮气泡的显示/隐藏
+  const calendarScreen = document.getElementById('calendar-screen');
+  const floatingAddBtn = document.getElementById('calendar-floating-add-btn');
+  
+  // 监听屏幕切换
+  const observer = new MutationObserver(() => {
+    if (calendarScreen && floatingAddBtn) {
+      if (calendarScreen.classList.contains('active')) {
+        floatingAddBtn.style.display = 'flex';
+      } else {
+        floatingAddBtn.style.display = 'none';
+      }
+    }
+  });
+  
+  if (calendarScreen) {
+    observer.observe(calendarScreen, { attributes: true, attributeFilter: ['class'] });
+    // 初始化显示状态
+    if (calendarScreen.classList.contains('active') && floatingAddBtn) {
+      floatingAddBtn.style.display = 'flex';
+    }
+  }
 
   // 绑定月份切换按钮
   document.getElementById('calendar-prev-month').addEventListener('click', () => {
@@ -36,17 +61,49 @@ function initCalendar() {
   document.getElementById('calendar-tab-events').addEventListener('click', () => switchTab('events'));
   document.getElementById('calendar-tab-todos').addEventListener('click', () => switchTab('todos'));
 
-  // 绑定添加行程按钮
-  document.getElementById('calendar-add-event-btn').addEventListener('click', () => openAddEventModal());
+  // 绑定漂浮气泡添加按钮（根据当前标签页决定添加行程还是待办）
+  const floatingAddBtnEl = document.getElementById('calendar-floating-add-btn');
+  if (floatingAddBtnEl) {
+    floatingAddBtnEl.addEventListener('click', () => {
+      // 根据当前标签页决定打开哪个模态框
+      if (currentTab === 'events') {
+        openAddEventModal();
+      } else {
+        openAddTodoModal();
+      }
+    });
+    
+    // 添加悬停效果
+    floatingAddBtnEl.addEventListener('mouseenter', () => {
+      floatingAddBtnEl.style.transform = 'scale(1.1)';
+      floatingAddBtnEl.style.boxShadow = '0 6px 16px rgba(0, 0, 0, 0.4)';
+    });
+    floatingAddBtnEl.addEventListener('mouseleave', () => {
+      floatingAddBtnEl.style.transform = 'scale(1)';
+      floatingAddBtnEl.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.3)';
+    });
+  }
+
+  // 绑定保存和取消按钮
   document.getElementById('calendar-save-event-btn').addEventListener('click', () => saveEvent());
   document.getElementById('calendar-cancel-event-btn').addEventListener('click', () => closeAddEventModal());
   document.getElementById('calendar-close-event-modal').addEventListener('click', () => closeAddEventModal());
 
-  // 绑定添加待办按钮
-  document.getElementById('calendar-add-todo-btn').addEventListener('click', () => openAddTodoModal());
   document.getElementById('calendar-save-todo-btn').addEventListener('click', () => saveTodo());
   document.getElementById('calendar-cancel-todo-btn').addEventListener('click', () => closeAddTodoModal());
   document.getElementById('calendar-close-todo-modal').addEventListener('click', () => closeAddTodoModal());
+
+  // 绑定分类管理按钮
+  document.getElementById('calendar-manage-categories-btn').addEventListener('click', () => openCategoriesModal());
+  document.getElementById('calendar-close-categories-modal').addEventListener('click', () => closeCategoriesModal());
+  document.getElementById('calendar-close-categories-btn').addEventListener('click', () => closeCategoriesModal());
+  document.getElementById('calendar-add-category-btn').addEventListener('click', () => openCategoryEditModal());
+  document.getElementById('calendar-save-category-btn').addEventListener('click', () => saveCategory());
+  document.getElementById('calendar-cancel-category-edit-btn').addEventListener('click', () => closeCategoryEditModal());
+  document.getElementById('calendar-close-category-edit-modal').addEventListener('click', () => closeCategoryEditModal());
+
+  // 加载分类列表
+  loadCategories();
 }
 
 /**
@@ -118,6 +175,14 @@ async function renderCalendar(date) {
 
   // 清空日历网格
   grid.innerHTML = '';
+  
+  // 清除所有之前的选中状态标记，确保只有当前selectedDate被选中
+  // 如果selectedDate不在当前月份，则清除选中状态
+  const currentMonthStart = formatDate(new Date(year, month, 1));
+  const currentMonthEnd = formatDate(new Date(year, month + 1, 0));
+  if (selectedDate && (selectedDate < currentMonthStart || selectedDate > currentMonthEnd)) {
+    selectedDate = null;
+  }
 
   // 添加空白单元格（月初之前的空白）
   for (let i = 0; i < startingDayOfWeek; i++) {
@@ -127,13 +192,13 @@ async function renderCalendar(date) {
     grid.appendChild(emptyCell);
   }
 
-  // 获取该月所有有行程和待办事项的日期（用于显示小点）
+  // 获取该月所有有行程和待办事项的日期（用于显示卡片）
   const monthStart = formatDate(new Date(year, month, 1));
   const monthEnd = formatDate(new Date(year, month + 1, 0));
   
   // 使用 try-catch 处理数据库查询错误，确保即使查询失败也能显示日期
-  let datesWithEvents = new Set();
-  let datesWithTodos = new Set();
+  let eventsByDate = new Map(); // 按日期分组的行程
+  let todosByDate = new Map(); // 按日期分组的待办
   
   try {
     if (db && db.calendarEvents) {
@@ -141,7 +206,23 @@ async function renderCalendar(date) {
         .where('date')
         .between(monthStart, monthEnd, true, true)
         .toArray();
-      datesWithEvents = new Set(eventsInMonth.map(e => e.date));
+      
+      // 按日期分组
+      eventsInMonth.forEach(event => {
+        if (!eventsByDate.has(event.date)) {
+          eventsByDate.set(event.date, []);
+        }
+        eventsByDate.get(event.date).push(event);
+      });
+      
+      // 对每个日期的行程按时间排序
+      eventsByDate.forEach((events, date) => {
+        events.sort((a, b) => {
+          const aTime = a.startTime || a.time || '';
+          const bTime = b.startTime || b.time || '';
+          return aTime.localeCompare(bTime);
+        });
+      });
     }
   } catch (error) {
     console.warn('查询行程数据失败:', error);
@@ -153,10 +234,35 @@ async function renderCalendar(date) {
         .where('date')
         .between(monthStart, monthEnd, true, true)
         .toArray();
-      datesWithTodos = new Set(todosInMonth.map(t => t.date));
+      
+      // 按日期分组，并按id排序（新添加的在后面）
+      todosInMonth.forEach(todo => {
+        if (!todosByDate.has(todo.date)) {
+          todosByDate.set(todo.date, []);
+        }
+        todosByDate.get(todo.date).push(todo);
+      });
+      
+      // 对每个日期的待办按id排序（新添加的在后面）
+      todosByDate.forEach((todos, date) => {
+        todos.sort((a, b) => a.id - b.id);
+      });
     }
   } catch (error) {
     console.warn('查询待办数据失败:', error);
+  }
+  
+  // 获取所有分类
+  let categories = new Map();
+  try {
+    if (db && db.calendarCategories) {
+      const allCategories = await db.calendarCategories.toArray();
+      allCategories.forEach(cat => {
+        categories.set(cat.id, cat);
+      });
+    }
+  } catch (error) {
+    console.warn('查询分类数据失败:', error);
   }
 
   // 添加日期单元格
@@ -165,76 +271,215 @@ async function renderCalendar(date) {
     const dateStr = formatDate(dayDate);
     const isToday = isCurrentMonth && day === today.getDate();
     
-    // 检查该日期是否有行程或待办事项
-    const hasEvents = datesWithEvents.has(dateStr);
-    const hasTodos = datesWithTodos.has(dateStr);
-    const hasAnyItem = hasEvents || hasTodos;
+    // 获取该日期的行程和待办事项
+    const dayEvents = eventsByDate.get(dateStr) || [];
+    const dayTodos = todosByDate.get(dateStr) || [];
+    const hasAnyItem = dayEvents.length > 0 || dayTodos.length > 0;
     
     const isSelected = selectedDate === dateStr;
 
     const dayCell = document.createElement('div');
-    dayCell.style.padding = '12px';
-    dayCell.style.minHeight = '50px';
+    dayCell.setAttribute('data-date', dateStr); // 添加data-date属性，方便查找
+    dayCell.style.padding = '4px';
+    dayCell.style.minHeight = '80px';
     dayCell.style.borderRadius = '8px';
     dayCell.style.cursor = 'pointer';
     dayCell.style.transition = 'all 0.2s';
-    dayCell.style.textAlign = 'center';
     dayCell.style.display = 'flex';
     dayCell.style.flexDirection = 'column';
-    dayCell.style.alignItems = 'center';
-    dayCell.style.justifyContent = 'center';
-    dayCell.style.fontSize = '16px';
+    dayCell.style.alignItems = 'stretch';
+    dayCell.style.justifyContent = 'flex-start';
+    dayCell.style.fontSize = '14px';
     dayCell.style.fontWeight = '500';
     dayCell.style.position = 'relative';
-
-    // 设置样式
-    if (isSelected) {
-      dayCell.style.backgroundColor = 'var(--accent-color)';
-      dayCell.style.color = 'white';
-      dayCell.style.border = '2px solid var(--accent-color)';
-    } else if (isToday) {
-      dayCell.style.backgroundColor = 'rgba(var(--accent-color-rgb), 0.2)';
-      dayCell.style.color = 'var(--accent-color)';
-      dayCell.style.border = '2px solid var(--accent-color)';
-    } else {
-      dayCell.style.color = 'var(--text-primary)';
-      dayCell.style.border = '2px solid transparent';
-    }
-
-    // 如果有行程或待办事项，显示小点
-    if (hasAnyItem && !isSelected) {
-      const dot = document.createElement('div');
-      dot.style.width = '6px';
-      dot.style.height = '6px';
-      dot.style.borderRadius = '50%';
-      dot.style.backgroundColor = isToday ? 'var(--accent-color)' : '#888';
-      dot.style.marginTop = '4px';
-      dayCell.appendChild(dot);
-    }
+    dayCell.style.overflow = 'hidden';
 
     // 日期数字
     const dayNumber = document.createElement('div');
     dayNumber.textContent = day;
-    dayCell.insertBefore(dayNumber, dayCell.firstChild);
+    dayNumber.style.textAlign = 'center';
+    dayNumber.style.fontSize = '16px';
+    dayNumber.style.fontWeight = '600';
+    dayNumber.style.marginBottom = '2px';
+    dayNumber.style.lineHeight = '1.2';
+    dayCell.appendChild(dayNumber);
+
+    // 设置样式（在创建dayNumber之后）
+    // 注意：选中状态的优先级最高
+    if (isSelected) {
+      dayCell.style.setProperty('background-color', 'var(--accent-color)', 'important');
+      dayCell.style.setProperty('color', 'white', 'important');
+      dayCell.style.setProperty('border', '2px solid var(--accent-color)', 'important');
+      // 选中时，日期数字使用白色
+      dayNumber.style.setProperty('color', 'white', 'important');
+      // 确保选中状态的样式不会被覆盖
+      dayCell.classList.add('calendar-day-selected');
+    } else if (isToday) {
+      dayCell.style.backgroundColor = 'rgba(var(--accent-color-rgb), 0.2)';
+      dayCell.style.color = 'var(--accent-color)';
+      dayCell.style.border = '2px solid var(--accent-color)';
+      dayNumber.style.color = 'var(--accent-color)';
+      // 确保不是选中状态
+      dayCell.classList.remove('calendar-day-selected');
+    } else {
+      dayCell.style.color = 'var(--text-primary)';
+      dayCell.style.border = '2px solid transparent';
+      dayCell.style.backgroundColor = 'transparent';
+      dayNumber.style.color = 'var(--text-primary)';
+      // 确保不是选中状态
+      dayCell.classList.remove('calendar-day-selected');
+    }
+
+    // 创建内容容器
+    const contentContainer = document.createElement('div');
+    contentContainer.style.display = 'flex';
+    contentContainer.style.flexDirection = 'column';
+    contentContainer.style.gap = '2px';
+    contentContainer.style.flex = '1';
+    contentContainer.style.overflow = 'hidden';
+    dayCell.appendChild(contentContainer);
+
+    // 显示待办事项（优先显示，在最前面，包括已完成的）
+    dayTodos.forEach(todo => {
+      const todoCard = document.createElement('div');
+      todoCard.style.display = 'flex';
+      todoCard.style.alignItems = 'center';
+      todoCard.style.gap = '4px';
+      todoCard.style.padding = '2px 4px';
+      todoCard.style.borderRadius = '4px';
+      todoCard.style.fontSize = '10px';
+      todoCard.style.lineHeight = '1.2';
+      todoCard.style.overflow = 'hidden';
+      todoCard.style.textOverflow = 'ellipsis';
+      todoCard.style.whiteSpace = 'nowrap';
+      todoCard.style.backgroundColor = '#ff9800';
+      todoCard.style.color = 'white';
+      todoCard.style.border = '1px solid #ff9800';
+      
+      // 添加勾选框
+      const checkbox = document.createElement('span');
+      checkbox.textContent = todo.completed ? '✓' : '○';
+      checkbox.style.fontSize = '8px';
+      checkbox.style.lineHeight = '1';
+      checkbox.style.flexShrink = '0';
+      
+      // 添加内容
+      const contentSpan = document.createElement('span');
+      contentSpan.textContent = todo.content;
+      if (todo.completed) {
+        contentSpan.style.textDecoration = 'line-through';
+        contentSpan.style.opacity = '0.7';
+      }
+      contentSpan.style.flex = '1';
+      contentSpan.style.overflow = 'hidden';
+      contentSpan.style.textOverflow = 'ellipsis';
+      contentSpan.style.whiteSpace = 'nowrap';
+      
+      todoCard.appendChild(checkbox);
+      todoCard.appendChild(contentSpan);
+      contentContainer.appendChild(todoCard);
+    });
+
+    // 显示行程（按时间排序）
+    dayEvents.forEach(event => {
+      const eventCard = document.createElement('div');
+      eventCard.style.padding = '2px 4px';
+      eventCard.style.borderRadius = '4px';
+      eventCard.style.fontSize = '10px';
+      eventCard.style.lineHeight = '1.2';
+      eventCard.style.overflow = 'hidden';
+      eventCard.style.textOverflow = 'ellipsis';
+      eventCard.style.whiteSpace = 'nowrap';
+      
+      // 获取分类颜色
+      let bgColor = '#4CAF50';
+      let borderColor = '#4CAF50';
+      if (event.categoryId && categories.has(event.categoryId)) {
+        const category = categories.get(event.categoryId);
+        bgColor = category.color || '#4CAF50';
+        borderColor = category.color || '#4CAF50';
+      }
+      
+      eventCard.style.backgroundColor = bgColor;
+      eventCard.style.color = 'white';
+      eventCard.style.border = `1px solid ${borderColor}`;
+      
+      // 只显示内容，不显示时间
+      eventCard.textContent = event.content;
+      contentContainer.appendChild(eventCard);
+    });
 
     // 点击事件
     dayCell.addEventListener('click', () => {
+      const previousSelectedDate = selectedDate;
       selectedDate = dateStr;
-      // 如果选中的日期不在当前显示的月份，切换到那个月份
+      
+      // 如果选中的日期不在当前显示的月份，切换到那个月份并重新渲染
       if (year !== currentCalendarDate.getFullYear() || month !== currentCalendarDate.getMonth()) {
         currentCalendarDate = new Date(year, month, day);
+        renderCalendar(currentCalendarDate);
+        loadDayInfo(selectedDate);
+      } else {
+        // 如果是在当前月份内切换，只更新选中状态的样式，不重新渲染整个日历
+        // 首先清除所有日期的选中状态（包括之前选中的）
+        const allDayCells = grid.querySelectorAll('[data-date]');
+        allDayCells.forEach(cell => {
+          const cellDateStr = cell.getAttribute('data-date');
+          const cellDateObj = new Date(cellDateStr);
+          const cellYear = cellDateObj.getFullYear();
+          const cellMonth = cellDateObj.getMonth();
+          const cellDay = cellDateObj.getDate();
+          const isCellToday = isCurrentMonth && cellYear === today.getFullYear() && cellMonth === today.getMonth() && cellDay === today.getDate();
+          
+          // 移除选中标记
+          cell.classList.remove('calendar-day-selected');
+          
+          // 恢复原始样式
+          if (isCellToday) {
+            cell.style.setProperty('background-color', 'rgba(var(--accent-color-rgb), 0.2)', 'important');
+            cell.style.setProperty('color', 'var(--accent-color)', 'important');
+            cell.style.setProperty('border', '2px solid var(--accent-color)', 'important');
+            const cellDayNumber = cell.querySelector('div:first-child');
+            if (cellDayNumber) cellDayNumber.style.setProperty('color', 'var(--accent-color)', 'important');
+          } else {
+            cell.style.setProperty('background-color', 'transparent', 'important');
+            cell.style.setProperty('color', 'var(--text-primary)', 'important');
+            cell.style.setProperty('border', '2px solid transparent', 'important');
+            const cellDayNumber = cell.querySelector('div:first-child');
+            if (cellDayNumber) cellDayNumber.style.setProperty('color', 'var(--text-primary)', 'important');
+          }
+        });
+        
+        // 更新当前选中日期的样式 - 使用setProperty确保样式优先级
+        dayCell.style.setProperty('background-color', 'var(--accent-color)', 'important');
+        dayCell.style.setProperty('color', 'white', 'important');
+        dayCell.style.setProperty('border', '2px solid var(--accent-color)', 'important');
+        dayNumber.style.setProperty('color', 'white', 'important');
+        dayCell.classList.add('calendar-day-selected');
+        
+        loadDayInfo(selectedDate);
       }
-      renderCalendar(currentCalendarDate);
-      loadDayInfo(selectedDate);
     });
 
     // 鼠标悬停效果
     dayCell.addEventListener('mouseenter', () => {
+      // 如果已选中，不改变样式
+      if (dayCell.classList.contains('calendar-day-selected')) {
+        return;
+      }
       if (!isSelected && !isToday) {
         dayCell.style.backgroundColor = 'var(--secondary-bg)';
       }
     });
     dayCell.addEventListener('mouseleave', () => {
+      // 如果已选中，保持选中样式
+      if (dayCell.classList.contains('calendar-day-selected')) {
+        dayCell.style.backgroundColor = 'var(--accent-color)';
+        dayCell.style.color = 'white';
+        dayCell.style.border = '2px solid var(--accent-color)';
+        dayNumber.style.color = 'white';
+        return;
+      }
       if (!isSelected && !isToday) {
         dayCell.style.backgroundColor = 'transparent';
       }
@@ -405,9 +650,13 @@ async function loadTodos(dateStr) {
     checkbox.checked = todo.completed;
     checkbox.style.width = '20px';
     checkbox.style.height = '20px';
+    checkbox.style.borderRadius = '4px';
+    checkbox.style.cursor = 'pointer';
     checkbox.addEventListener('change', async () => {
       await db.calendarTodos.update(todo.id, { completed: checkbox.checked });
       await loadTodos(dateStr);
+      // 更新月历显示，以反映待办状态的变化
+      await renderCalendar(currentCalendarDate);
     });
 
     const contentDiv = document.createElement('div');
@@ -458,9 +707,41 @@ function switchTab(tab) {
 }
 
 /**
+ * 加载分类列表到下拉框
+ */
+async function loadCategories() {
+  try {
+    if (!db || !db.calendarCategories) return;
+    
+    const categories = await db.calendarCategories.toArray();
+    const categorySelect = document.getElementById('calendar-event-category');
+    if (!categorySelect) return;
+    
+    // 保存当前选中的值
+    const currentValue = categorySelect.value;
+    
+    // 清空并重新填充
+    categorySelect.innerHTML = '<option value="">无分类</option>';
+    categories.forEach(cat => {
+      const option = document.createElement('option');
+      option.value = cat.id;
+      option.textContent = cat.name;
+      categorySelect.appendChild(option);
+    });
+    
+    // 恢复之前选中的值
+    if (currentValue) {
+      categorySelect.value = currentValue;
+    }
+  } catch (error) {
+    console.warn('加载分类列表失败:', error);
+  }
+}
+
+/**
  * 打开添加行程模态框
  */
-function openAddEventModal() {
+async function openAddEventModal() {
   editingEventId = null;
   const modal = document.getElementById('calendar-add-event-modal');
   modal.classList.add('visible');
@@ -484,6 +765,10 @@ function openAddEventModal() {
   }
   
   document.getElementById('calendar-event-content').value = '';
+  document.getElementById('calendar-event-category').value = '';
+  
+  // 加载分类列表
+  await loadCategories();
   
   // 重置标题
   const header = modal.querySelector('.modal-header span:first-child');
@@ -495,41 +780,10 @@ function openAddEventModal() {
  */
 function closeAddEventModal() {
   document.getElementById('calendar-add-event-modal').classList.remove('visible');
-}
-
-/**
- * 保存行程
- */
-async function saveEvent() {
-  const date = document.getElementById('calendar-event-date').value;
-  const startTime = document.getElementById('calendar-event-start-time').value;
-  const endTime = document.getElementById('calendar-event-end-time').value;
-  const content = document.getElementById('calendar-event-content').value.trim();
-
-  if (!date || !startTime || !content) {
-    alert('请填写完整信息（日期、开始时间和内容为必填项）');
-    return;
-  }
-
-  await db.calendarEvents.add({
-    date,
-    startTime,
-    endTime: endTime || null, // 结束时间为可选
-    time: startTime, // 保留time字段用于兼容旧代码
-    content,
-    type: 'event'
-  });
-
-  closeAddEventModal();
-  
-  // 如果选中的是当前日期，刷新显示
-  if (selectedDate === date) {
-    await loadEvents(date);
-  }
-  
-  // 刷新日历以更新小点
-  renderCalendar(currentCalendarDate);
-  alert('行程已添加！');
+  editingEventId = null;
+  // 重置标题
+  const header = document.querySelector('#calendar-add-event-modal .modal-header span:first-child');
+  if (header) header.textContent = '添加行程';
 }
 
 /**
@@ -633,14 +887,31 @@ let editingTodoId = null;
 /**
  * 打开编辑行程模态框
  */
-function openEditEventModal(event) {
+async function openEditEventModal(event) {
   editingEventId = event.id;
   const modal = document.getElementById('calendar-add-event-modal');
   modal.classList.add('visible');
   
   document.getElementById('calendar-event-date').value = event.date;
-  document.getElementById('calendar-event-time').value = event.time;
+  const startTimeInput = document.getElementById('calendar-event-start-time');
+  const timeInput = document.getElementById('calendar-event-time');
+  if (startTimeInput) {
+    startTimeInput.value = event.startTime || event.time || '';
+  } else if (timeInput) {
+    timeInput.value = event.startTime || event.time || '';
+  }
+  const endTimeInput = document.getElementById('calendar-event-end-time');
+  if (endTimeInput) {
+    endTimeInput.value = event.endTime || '';
+  }
   document.getElementById('calendar-event-content').value = event.content;
+  
+  // 加载分类列表并设置选中的分类
+  await loadCategories();
+  const categorySelect = document.getElementById('calendar-event-category');
+  if (categorySelect) {
+    categorySelect.value = event.categoryId || '';
+  }
   
   // 更新标题
   const header = modal.querySelector('.modal-header span:first-child');
@@ -664,40 +935,38 @@ function openEditTodoModal(todo) {
 }
 
 /**
- * 修改保存行程函数，支持编辑
+ * 修改保存行程函数，支持编辑和分类
  */
 async function saveEvent() {
   const date = document.getElementById('calendar-event-date').value;
   const startTime = document.getElementById('calendar-event-start-time')?.value || document.getElementById('calendar-event-time')?.value;
   const endTime = document.getElementById('calendar-event-end-time')?.value || '';
   const content = document.getElementById('calendar-event-content').value.trim();
+  const categoryId = document.getElementById('calendar-event-category')?.value || null;
 
   if (!date || !startTime || !content) {
     alert('请填写完整信息（日期、开始时间和内容为必填项）');
     return;
   }
 
+  const eventData = {
+    date,
+    startTime,
+    endTime: endTime || null,
+    time: startTime, // 保留time字段用于兼容
+    content,
+    categoryId: categoryId ? parseInt(categoryId) : null
+  };
+
   if (editingEventId) {
     // 编辑模式
-    await db.calendarEvents.update(editingEventId, {
-      date,
-      startTime,
-      endTime: endTime || null,
-      time: startTime, // 保留time字段用于兼容
-      content
-    });
+    await db.calendarEvents.update(editingEventId, eventData);
     editingEventId = null;
     alert('行程已更新！');
   } else {
     // 新建模式
-    await db.calendarEvents.add({
-      date,
-      startTime,
-      endTime: endTime || null,
-      time: startTime, // 保留time字段用于兼容
-      content,
-      type: 'event'
-    });
+    eventData.type = 'event';
+    await db.calendarEvents.add(eventData);
     alert('行程已添加！');
   }
 
@@ -708,7 +977,7 @@ async function saveEvent() {
     await loadEvents(date);
   }
   
-  // 刷新日历以更新小点
+  // 刷新日历以更新显示
   renderCalendar(currentCalendarDate);
 }
 
@@ -1010,4 +1279,160 @@ function formatCalendarDataForAI(events, todos, dateStr) {
   }
 
   return text;
+}
+
+let editingCategoryId = null;
+
+/**
+ * 打开分类管理模态框
+ */
+async function openCategoriesModal() {
+  const modal = document.getElementById('calendar-categories-modal');
+  modal.classList.add('visible');
+  await loadCategoriesList();
+}
+
+/**
+ * 关闭分类管理模态框
+ */
+function closeCategoriesModal() {
+  document.getElementById('calendar-categories-modal').classList.remove('visible');
+}
+
+/**
+ * 加载分类列表到管理界面
+ */
+async function loadCategoriesList() {
+  try {
+    if (!db || !db.calendarCategories) return;
+    
+    const categories = await db.calendarCategories.toArray();
+    const categoriesList = document.getElementById('calendar-categories-list');
+    if (!categoriesList) return;
+    
+    categoriesList.innerHTML = '';
+    
+    if (categories.length === 0) {
+      categoriesList.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 20px;">暂无分类</p>';
+      return;
+    }
+    
+    categories.forEach(category => {
+      const categoryItem = document.createElement('div');
+      categoryItem.style.display = 'flex';
+      categoryItem.style.alignItems = 'center';
+      categoryItem.style.gap = '10px';
+      categoryItem.style.padding = '12px';
+      categoryItem.style.borderRadius = '8px';
+      categoryItem.style.backgroundColor = 'var(--secondary-bg)';
+      categoryItem.style.border = '1px solid var(--border-color)';
+      
+      const colorBox = document.createElement('div');
+      colorBox.style.width = '24px';
+      colorBox.style.height = '24px';
+      colorBox.style.borderRadius = '4px';
+      colorBox.style.backgroundColor = category.color || '#4CAF50';
+      colorBox.style.border = '1px solid var(--border-color)';
+      
+      const nameDiv = document.createElement('div');
+      nameDiv.style.flex = '1';
+      nameDiv.style.fontSize = '14px';
+      nameDiv.style.color = 'var(--text-primary)';
+      nameDiv.textContent = category.name;
+      
+      const editBtn = document.createElement('button');
+      editBtn.className = 'moe-btn';
+      editBtn.style.padding = '4px 8px';
+      editBtn.style.fontSize = '12px';
+      editBtn.textContent = '编辑';
+      editBtn.addEventListener('click', () => openCategoryEditModal(category));
+      
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'moe-btn form-button-secondary';
+      deleteBtn.style.padding = '4px 8px';
+      deleteBtn.style.fontSize = '12px';
+      deleteBtn.textContent = '删除';
+      deleteBtn.addEventListener('click', async () => {
+        if (confirm(`确定要删除分类"${category.name}"吗？`)) {
+          await db.calendarCategories.delete(category.id);
+          await loadCategoriesList();
+          await loadCategories(); // 更新下拉框
+          renderCalendar(currentCalendarDate); // 刷新日历显示
+        }
+      });
+      
+      categoryItem.appendChild(colorBox);
+      categoryItem.appendChild(nameDiv);
+      categoryItem.appendChild(editBtn);
+      categoryItem.appendChild(deleteBtn);
+      
+      categoriesList.appendChild(categoryItem);
+    });
+  } catch (error) {
+    console.warn('加载分类列表失败:', error);
+  }
+}
+
+/**
+ * 打开添加/编辑分类模态框
+ */
+function openCategoryEditModal(category = null) {
+  editingCategoryId = category ? category.id : null;
+  const modal = document.getElementById('calendar-category-edit-modal');
+  modal.classList.add('visible');
+  
+  const title = document.getElementById('calendar-category-edit-title');
+  const nameInput = document.getElementById('calendar-category-name');
+  const colorInput = document.getElementById('calendar-category-color');
+  
+  if (category) {
+    title.textContent = '编辑分类';
+    nameInput.value = category.name;
+    colorInput.value = category.color || '#4CAF50';
+  } else {
+    title.textContent = '添加分类';
+    nameInput.value = '';
+    colorInput.value = '#4CAF50';
+  }
+}
+
+/**
+ * 关闭添加/编辑分类模态框
+ */
+function closeCategoryEditModal() {
+  document.getElementById('calendar-category-edit-modal').classList.remove('visible');
+  editingCategoryId = null;
+}
+
+/**
+ * 保存分类
+ */
+async function saveCategory() {
+  const name = document.getElementById('calendar-category-name').value.trim();
+  const color = document.getElementById('calendar-category-color').value;
+  
+  if (!name) {
+    alert('请输入分类名称');
+    return;
+  }
+  
+  try {
+    if (editingCategoryId) {
+      // 编辑模式
+      await db.calendarCategories.update(editingCategoryId, { name, color });
+      alert('分类已更新！');
+    } else {
+      // 新建模式
+      await db.calendarCategories.add({ name, color });
+      alert('分类已添加！');
+    }
+    
+    closeCategoryEditModal();
+    await loadCategoriesList();
+    await loadCategories(); // 更新下拉框
+    renderCalendar(currentCalendarDate); // 刷新日历显示
+  } catch (error) {
+    console.error('保存分类失败:', error);
+    alert('保存分类失败，请重试');
+  }
 }
