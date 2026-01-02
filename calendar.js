@@ -12,8 +12,12 @@ let currentTab = 'events'; // 当前显示的标签：'events' 或 'todos'
 async function initCalendar() {
   // 等待一小段时间确保DOM和数据库都准备好
   await new Promise(resolve => setTimeout(resolve, 100));
+  // 默认选中今天
+  selectedDate = formatDate(new Date());
   // 渲染当前月份
   await renderCalendar(currentCalendarDate);
+  // 加载今天的信息
+  await loadDayInfo(selectedDate);
   
   // 控制漂浮气泡的显示/隐藏
   const calendarScreen = document.getElementById('calendar-screen');
@@ -61,19 +65,95 @@ async function initCalendar() {
   document.getElementById('calendar-tab-events').addEventListener('click', () => switchTab('events'));
   document.getElementById('calendar-tab-todos').addEventListener('click', () => switchTab('todos'));
 
-  // 绑定漂浮气泡添加按钮（根据当前标签页决定添加行程还是待办）
+  // ==========================================
+  // 【终极修复】: 漂浮气泡交互 - 使用全屏透明遮罩层 (Backdrop Strategy)
+  // ==========================================
   const floatingAddBtnEl = document.getElementById('calendar-floating-add-btn');
-  if (floatingAddBtnEl) {
-    floatingAddBtnEl.addEventListener('click', () => {
-      // 根据当前标签页决定打开哪个模态框
-      if (currentTab === 'events') {
-        openAddEventModal();
-      } else {
-        openAddTodoModal();
+  const addTypeMenu = document.getElementById('calendar-add-type-menu');
+  let isAddMenuOpen = false; // ⭐ 记录气泡是否展开
+  
+  if (floatingAddBtnEl && addTypeMenu) {
+    
+    // 1. 动态创建一个透明遮罩层，用于捕获"点击空白处"
+    let backdrop = document.getElementById('calendar-menu-backdrop');
+    if (!backdrop) {
+      backdrop = document.createElement('div');
+      backdrop.id = 'calendar-menu-backdrop';
+      // 设置样式：全屏、透明、层级在菜单之下
+      backdrop.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        z-index: 998; /* 确保高层级，但低于菜单 */
+        display: none;
+        background: transparent; 
+        touch-action: manipulation; /* 优化触控 */
+      `;
+      document.body.appendChild(backdrop);
+    }
+
+    // 确保菜单层级最高
+    addTypeMenu.style.zIndex = '999';
+    // 确保按钮层级合适 (虽然遮罩层在上面，点击遮罩层也会关闭，视觉上像点了按钮)
+    floatingAddBtnEl.style.zIndex = '997'; 
+
+    // 定义打开和关闭逻辑
+    const openMenu = () => {
+      addTypeMenu.classList.add('visible');
+      backdrop.style.display = 'block';
+      isAddMenuOpen = true;
+    };
+    
+    const closeMenu = () => {
+      addTypeMenu.classList.remove('visible');
+      backdrop.style.display = 'none';
+      isAddMenuOpen = false;
+    };
+    
+
+    // 2. 按钮点击：切换
+    floatingAddBtnEl.addEventListener('click', (e) => {
+      e.stopPropagation();
+      isAddMenuOpen ? closeMenu() : openMenu();
+    });
+    
+
+    // 3. 遮罩层点击：即点击了页面上除了菜单以外的任何地方（包括按钮位置）
+    backdrop.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeMenu();
+    });
+    
+    // 兼容触摸设备，防止点击穿透
+    backdrop.addEventListener('touchstart', (e) => {
+      e.preventDefault(); // 阻止默认行为，直接关闭
+      closeMenu();
+    });
+
+    // 4. 菜单项点击逻辑
+    const menuItems = [
+      { id: 'calendar-menu-add-event', handler: openAddEventModal },
+      { id: 'calendar-menu-add-todo', handler: openAddTodoModal },
+      { id: 'calendar-menu-add-period', handler: openAddPeriodModal }
+    ];
+
+    menuItems.forEach(item => {
+      const el = document.getElementById(item.id);
+      if (el) {
+        el.addEventListener('click', (e) => {
+          e.stopPropagation(); 
+          closeMenu(); // 点击选项后关闭菜单和遮罩
+          item.handler();
+        });
+        // 悬停效果
+        el.addEventListener('mouseenter', () => el.style.backgroundColor = 'var(--secondary-bg)');
+        el.addEventListener('mouseleave', () => el.style.backgroundColor = 'transparent');
       }
     });
     
-    // 添加悬停效果
+    // 5. 按钮悬停效果
     floatingAddBtnEl.addEventListener('mouseenter', () => {
       floatingAddBtnEl.style.transform = 'scale(1.1)';
       floatingAddBtnEl.style.boxShadow = '0 6px 16px rgba(0, 0, 0, 0.4)';
@@ -101,6 +181,11 @@ async function initCalendar() {
   document.getElementById('calendar-save-category-btn').addEventListener('click', () => saveCategory());
   document.getElementById('calendar-cancel-category-edit-btn').addEventListener('click', () => closeCategoryEditModal());
   document.getElementById('calendar-close-category-edit-modal').addEventListener('click', () => closeCategoryEditModal());
+
+  // 绑定月经记录按钮
+  document.getElementById('calendar-save-period-btn').addEventListener('click', () => savePeriod());
+  document.getElementById('calendar-cancel-period-btn').addEventListener('click', () => closeAddPeriodModal());
+  document.getElementById('calendar-close-period-modal').addEventListener('click', () => closeAddPeriodModal());
 
   // 加载分类列表
   loadCategories();
@@ -264,6 +349,22 @@ async function renderCalendar(date) {
   } catch (error) {
     console.warn('查询分类数据失败:', error);
   }
+  
+  // 获取该月所有有月经记录的日期
+  let periodDates = new Set();
+  try {
+    if (db && db.calendarPeriods) {
+      const periodsInMonth = await db.calendarPeriods
+        .where('date')
+        .between(monthStart, monthEnd, true, true)
+        .toArray();
+      periodsInMonth.forEach(period => {
+        periodDates.add(period.date);
+      });
+    }
+  } catch (error) {
+    console.warn('查询月经记录数据失败:', error);
+  }
 
   // 添加日期单元格
   for (let day = 1; day <= daysInMonth; day++) {
@@ -275,6 +376,9 @@ async function renderCalendar(date) {
     const dayEvents = eventsByDate.get(dateStr) || [];
     const dayTodos = todosByDate.get(dateStr) || [];
     const hasAnyItem = dayEvents.length > 0 || dayTodos.length > 0;
+    
+    // 检查是否有月经记录
+    const hasPeriod = periodDates.has(dateStr);
     
     const isSelected = selectedDate === dateStr;
 
@@ -305,29 +409,46 @@ async function renderCalendar(date) {
     dayCell.appendChild(dayNumber);
 
     // 设置样式（在创建dayNumber之后）
-    // 注意：选中状态的优先级最高
+    // 优先级：选中状态 > 月经记录 > 今天标记
+    // 月经记录的粉色背景需要一直存在，即使被选中
     if (isSelected) {
-      dayCell.style.setProperty('background-color', 'var(--accent-color)', 'important');
+      // 选中状态：如果有月经记录，背景是粉色，边框是蓝色；否则背景是蓝色
+      if (hasPeriod) {
+        dayCell.style.setProperty('background-color', '#ffb3d9', 'important');
+        dayCell.style.setProperty('border', '2px solid var(--accent-color)', 'important');
+      } else {
+        dayCell.style.setProperty('background-color', 'var(--accent-color)', 'important');
+        dayCell.style.setProperty('border', '2px solid var(--accent-color)', 'important');
+      }
       dayCell.style.setProperty('color', 'white', 'important');
-      dayCell.style.setProperty('border', '2px solid var(--accent-color)', 'important');
-      // 选中时，日期数字使用白色
       dayNumber.style.setProperty('color', 'white', 'important');
-      // 确保选中状态的样式不会被覆盖
       dayCell.classList.add('calendar-day-selected');
+    } else if (hasPeriod) {
+      // 有月经记录的日子显示粉红色背景
+      dayCell.style.setProperty('background-color', '#ffb3d9', 'important');
+      dayCell.style.setProperty('color', 'var(--text-primary)', 'important');
+      dayCell.style.setProperty('border', '2px solid #ff99cc', 'important');
+      dayNumber.style.setProperty('color', 'var(--text-primary)', 'important');
+      dayCell.classList.remove('calendar-day-selected');
     } else if (isToday) {
+      // 今天标记：蓝色边框，透明或浅色背景
       dayCell.style.backgroundColor = 'rgba(var(--accent-color-rgb), 0.2)';
       dayCell.style.color = 'var(--accent-color)';
       dayCell.style.border = '2px solid var(--accent-color)';
       dayNumber.style.color = 'var(--accent-color)';
-      // 确保不是选中状态
       dayCell.classList.remove('calendar-day-selected');
     } else {
       dayCell.style.color = 'var(--text-primary)';
       dayCell.style.border = '2px solid transparent';
       dayCell.style.backgroundColor = 'transparent';
       dayNumber.style.color = 'var(--text-primary)';
-      // 确保不是选中状态
       dayCell.classList.remove('calendar-day-selected');
+    }
+    
+    // 如果今天有月经记录，需要同时显示粉色背景和蓝色边框
+    if (isToday && hasPeriod && !isSelected) {
+      dayCell.style.setProperty('background-color', '#ffb3d9', 'important');
+      dayCell.style.setProperty('border', '2px solid var(--accent-color)', 'important');
     }
 
     // 创建内容容器
@@ -430,18 +551,35 @@ async function renderCalendar(date) {
           const cellMonth = cellDateObj.getMonth();
           const cellDay = cellDateObj.getDate();
           const isCellToday = isCurrentMonth && cellYear === today.getFullYear() && cellMonth === today.getMonth() && cellDay === today.getDate();
+          const cellHasPeriod = periodDates.has(cellDateStr);
           
           // 移除选中标记
           cell.classList.remove('calendar-day-selected');
           
           // 恢复原始样式
-          if (isCellToday) {
+          if (isCellToday && cellHasPeriod) {
+            // 今天且有月经记录：粉色背景+蓝色边框
+            cell.style.setProperty('background-color', '#ffb3d9', 'important');
+            cell.style.setProperty('color', 'var(--text-primary)', 'important');
+            cell.style.setProperty('border', '2px solid var(--accent-color)', 'important');
+            const cellDayNumber = cell.querySelector('div:first-child');
+            if (cellDayNumber) cellDayNumber.style.setProperty('color', 'var(--text-primary)', 'important');
+          } else if (isCellToday) {
+            // 今天但无月经记录
             cell.style.setProperty('background-color', 'rgba(var(--accent-color-rgb), 0.2)', 'important');
             cell.style.setProperty('color', 'var(--accent-color)', 'important');
             cell.style.setProperty('border', '2px solid var(--accent-color)', 'important');
             const cellDayNumber = cell.querySelector('div:first-child');
             if (cellDayNumber) cellDayNumber.style.setProperty('color', 'var(--accent-color)', 'important');
+          } else if (cellHasPeriod) {
+            // 有月经记录但不是今天
+            cell.style.setProperty('background-color', '#ffb3d9', 'important');
+            cell.style.setProperty('color', 'var(--text-primary)', 'important');
+            cell.style.setProperty('border', '2px solid #ff99cc', 'important');
+            const cellDayNumber = cell.querySelector('div:first-child');
+            if (cellDayNumber) cellDayNumber.style.setProperty('color', 'var(--text-primary)', 'important');
           } else {
+            // 普通日期
             cell.style.setProperty('background-color', 'transparent', 'important');
             cell.style.setProperty('color', 'var(--text-primary)', 'important');
             cell.style.setProperty('border', '2px solid transparent', 'important');
@@ -451,9 +589,16 @@ async function renderCalendar(date) {
         });
         
         // 更新当前选中日期的样式 - 使用setProperty确保样式优先级
-        dayCell.style.setProperty('background-color', 'var(--accent-color)', 'important');
+        // 如果有月经记录，背景是粉色，边框是蓝色；否则背景是蓝色
+        const hasPeriodSelected = periodDates.has(dateStr);
+        if (hasPeriodSelected) {
+          dayCell.style.setProperty('background-color', '#ffb3d9', 'important');
+          dayCell.style.setProperty('border', '2px solid var(--accent-color)', 'important');
+        } else {
+          dayCell.style.setProperty('background-color', 'var(--accent-color)', 'important');
+          dayCell.style.setProperty('border', '2px solid var(--accent-color)', 'important');
+        }
         dayCell.style.setProperty('color', 'white', 'important');
-        dayCell.style.setProperty('border', '2px solid var(--accent-color)', 'important');
         dayNumber.style.setProperty('color', 'white', 'important');
         dayCell.classList.add('calendar-day-selected');
         
@@ -467,6 +612,11 @@ async function renderCalendar(date) {
       if (dayCell.classList.contains('calendar-day-selected')) {
         return;
       }
+      // 如果有月经记录，悬停时保持粉色背景
+      if (hasPeriod) {
+        dayCell.style.setProperty('background-color', '#ffb3d9', 'important');
+        return;
+      }
       if (!isSelected && !isToday) {
         dayCell.style.backgroundColor = 'var(--secondary-bg)';
       }
@@ -474,16 +624,41 @@ async function renderCalendar(date) {
     dayCell.addEventListener('mouseleave', () => {
       // 如果已选中，保持选中样式
       if (dayCell.classList.contains('calendar-day-selected')) {
-        dayCell.style.backgroundColor = 'var(--accent-color)';
-        dayCell.style.color = 'white';
-        dayCell.style.border = '2px solid var(--accent-color)';
-        dayNumber.style.color = 'white';
+        const hasPeriodSelected = periodDates.has(dateStr);
+        if (hasPeriodSelected) {
+          dayCell.style.setProperty('background-color', '#ffb3d9', 'important');
+          dayCell.style.setProperty('border', '2px solid var(--accent-color)', 'important');
+        } else {
+          dayCell.style.setProperty('background-color', 'var(--accent-color)', 'important');
+          dayCell.style.setProperty('border', '2px solid var(--accent-color)', 'important');
+        }
+        dayCell.style.setProperty('color', 'white', 'important');
+        dayNumber.style.setProperty('color', 'white', 'important');
+        return;
+      }
+      // 如果有月经记录，恢复粉色背景
+      if (hasPeriod) {
+        if (isToday) {
+          dayCell.style.setProperty('background-color', '#ffb3d9', 'important');
+          dayCell.style.setProperty('border', '2px solid var(--accent-color)', 'important');
+        } else {
+          dayCell.style.setProperty('background-color', '#ffb3d9', 'important');
+          dayCell.style.setProperty('border', '2px solid #ff99cc', 'important');
+        }
         return;
       }
       if (!isSelected && !isToday) {
         dayCell.style.backgroundColor = 'transparent';
       }
     });
+    
+    // 添加长按事件处理月经记录
+    if (typeof addLongPressListener === 'function') {
+      addLongPressListener(dayCell, () => {
+        // 长按打开编辑该日期的月经记录
+        openEditPeriodDateModal(dateStr);
+      });
+    }
 
     grid.appendChild(dayCell);
   }
@@ -811,34 +986,6 @@ function closeAddTodoModal() {
 }
 
 /**
- * 保存待办事项
- */
-async function saveTodo() {
-  const date = document.getElementById('calendar-todo-date').value;
-  const content = document.getElementById('calendar-todo-content').value.trim();
-
-  if (!date || !content) {
-    alert('请填写完整信息');
-    return;
-  }
-
-  await db.calendarTodos.add({
-    date,
-    content,
-    completed: false
-  });
-
-  closeAddTodoModal();
-  
-  // 如果选中的是当前日期，刷新显示
-  if (selectedDate === date) {
-    await loadTodos(date);
-  }
-  
-  alert('待办事项已添加！');
-}
-
-/**
  * 显示行程操作菜单（编辑/删除）
  */
 function showEventActionMenu(event, dateStr) {
@@ -1017,25 +1164,6 @@ async function saveTodo() {
   if (selectedDate === date) {
     await loadTodos(date);
   }
-}
-
-/**
- * 修改关闭模态框函数，重置编辑状态
- */
-function closeAddEventModal() {
-  document.getElementById('calendar-add-event-modal').classList.remove('visible');
-  editingEventId = null;
-  // 重置标题
-  const header = document.querySelector('#calendar-add-event-modal .modal-header span:first-child');
-  if (header) header.textContent = '添加行程';
-}
-
-function closeAddTodoModal() {
-  document.getElementById('calendar-add-todo-modal').classList.remove('visible');
-  editingTodoId = null;
-  // 重置标题
-  const header = document.querySelector('#calendar-add-todo-modal .modal-header span:first-child');
-  if (header) header.textContent = '添加待办事项';
 }
 
 // 当DOM加载完成后初始化
@@ -1281,6 +1409,153 @@ function formatCalendarDataForAI(events, todos, dateStr) {
   return text;
 }
 
+/**
+ * 获取指定日期的月经记录
+ * @param {string} dateStr - 日期字符串 (YYYY-MM-DD)
+ * @returns {Promise<Object|null>} 返回月经记录对象，包含 date, flow, pain，如果没有则返回null
+ */
+async function getPeriodDataForDate(dateStr) {
+  try {
+    if (!db || !db.calendarPeriods) {
+      return null;
+    }
+    const period = await db.calendarPeriods.where('date').equals(dateStr).first();
+    return period || null;
+  } catch (error) {
+    console.warn('读取月经记录失败:', error);
+    return null;
+  }
+}
+
+/**
+ * 获取今日的月经记录
+ * @returns {Promise<Object|null>} 返回今日的月经记录
+ */
+async function getTodayPeriodData() {
+  const today = formatDate(new Date());
+  return await getPeriodDataForDate(today);
+}
+
+/**
+ * 获取当前月经周期的持续天数（从最近一次月经开始到今天的连续天数）
+ * @returns {Promise<number>} 返回持续天数，如果没有月经记录则返回0
+ */
+async function getCurrentPeriodDuration() {
+  try {
+    if (!db || !db.calendarPeriods) {
+      return 0;
+    }
+    
+    const today = new Date();
+    const todayStr = formatDate(today);
+    
+    // 检查今天是否有月经记录
+    const todayPeriod = await getPeriodDataForDate(todayStr);
+    if (!todayPeriod) {
+      return 0;
+    }
+    
+    // 从今天往前查找连续的天数
+    let duration = 0;
+    let currentDate = new Date(today);
+    
+    while (true) {
+      const dateStr = formatDate(currentDate);
+      const period = await getPeriodDataForDate(dateStr);
+      if (period) {
+        duration++;
+        // 往前一天
+        currentDate.setDate(currentDate.getDate() - 1);
+      } else {
+        break;
+      }
+    }
+    
+    return duration;
+  } catch (error) {
+    console.warn('计算月经周期持续天数失败:', error);
+    return 0;
+  }
+}
+
+/**
+ * 格式化月经数据为AI上下文文本
+ * @param {Object} periodData - 月经记录对象，包含 flow 和 pain
+ * @param {number} duration - 当前月经周期持续天数
+ * @returns {string} 格式化后的文本
+ */
+function formatPeriodDataForAI(periodData, duration = 0) {
+  if (!periodData) {
+    return '';
+  }
+  
+  const flowMap = {
+    'light': '少',
+    'medium': '中',
+    'heavy': '大'
+  };
+  
+  const painMap = {
+    'none': '不痛',
+    'mild': '痛',
+    'severe': '非常痛'
+  };
+  
+  const flowText = flowMap[periodData.flow] || periodData.flow;
+  const painText = painMap[periodData.pain] || periodData.pain;
+  
+  let text = `\n【用户当前月经状态】\n`;
+  text += `- 经量：${flowText}\n`;
+  text += `- 疼痛程度：${painText}\n`;
+  if (duration > 0) {
+    text += `- 当前周期已持续：${duration}天\n`;
+  }
+  
+  return text;
+}
+
+/**
+ * 判断月经状态是否需要AI主动关心
+ * @param {Object} periodData - 月经记录对象
+ * @returns {boolean} 如果需要主动关心返回true
+ */
+function shouldActivelyCareAboutPeriod(periodData) {
+  if (!periodData) {
+    return false;
+  }
+  
+  // 如果量是大且疼痛是非常痛，必须主动关心
+  if (periodData.flow === 'heavy' && periodData.pain === 'severe') {
+    return true;
+  }
+  
+  return false;
+}
+
+/**
+ * 判断月经状态是否需要AI提及（普通情况）
+ * @param {Object} periodData - 月经记录对象
+ * @param {number} duration - 当前月经周期持续天数
+ * @returns {boolean} 如果需要提及返回true
+ */
+function shouldMentionPeriod(periodData, duration) {
+  if (!periodData) {
+    return false;
+  }
+  
+  // 如果持续时间异常（超过7天），需要提及
+  if (duration > 7) {
+    return true;
+  }
+  
+  // 如果量是大或疼痛是非常痛，需要提及
+  if (periodData.flow === 'heavy' || periodData.pain === 'severe') {
+    return true;
+  }
+  
+  return false;
+}
+
 let editingCategoryId = null;
 
 /**
@@ -1434,5 +1709,321 @@ async function saveCategory() {
   } catch (error) {
     console.error('保存分类失败:', error);
     alert('保存分类失败，请重试');
+  }
+}
+
+/**
+ * 打开添加/编辑月经记录模态框 (从菜单进入，支持日期范围)
+ */
+async function openAddPeriodModal() {
+  const modal = document.getElementById('calendar-add-period-modal');
+  modal.classList.add('visible');
+  
+  const startDateInput = document.getElementById('calendar-period-start-date');
+  const endDateInput = document.getElementById('calendar-period-end-date');
+  
+  // 移除日期限制，允许选择任意日期
+  startDateInput.removeAttribute('min');
+  startDateInput.removeAttribute('max');
+  endDateInput.removeAttribute('min');
+  endDateInput.removeAttribute('max');
+  
+  // 关键修改：强制显示日期选择区域（因为单日模式可能会将其隐藏）
+  const dateRangeGroup = startDateInput.closest('.form-group');
+  if (dateRangeGroup) {
+    dateRangeGroup.style.display = 'block';
+  }
+  
+  // 设置默认日期为选中的日期，如果没有选中则使用今天
+  const today = formatDate(new Date());
+  const defaultDate = selectedDate || today;
+  
+  startDateInput.value = defaultDate;
+  endDateInput.value = '';
+  
+  // 初始化日期列表（先执行一次，确保数据是最新的）
+  await updatePeriodDatesList();
+  
+  // 添加日期变化监听器
+  const startHandler = () => updatePeriodDatesList();
+  const endHandler = () => updatePeriodDatesList();
+  startDateInput.onchange = startHandler; // 使用onchange属性防止重复绑定
+  endDateInput.onchange = endHandler;
+  
+  // 更新标题
+  const title = document.getElementById('calendar-period-modal-title');
+  if (title) title.textContent = '添加/编辑月经记录';
+}
+
+/**
+ * 更新月经记录日期列表
+ */
+async function updatePeriodDatesList() {
+  const startDate = document.getElementById('calendar-period-start-date').value;
+  const endDate = document.getElementById('calendar-period-end-date').value;
+  const datesList = document.getElementById('calendar-period-dates-list');
+  
+  if (!startDate) {
+    datesList.innerHTML = '';
+    return;
+  }
+  
+  // 生成日期范围
+  const dates = [];
+  const start = new Date(startDate);
+  const end = endDate ? new Date(endDate) : new Date(startDate);
+  
+  if (end < start) {
+    datesList.innerHTML = '<p style="color: red; font-size: 12px;">结束日期不能早于开始日期</p>';
+    return;
+  }
+  
+  const current = new Date(start);
+  while (current <= end) {
+    dates.push(formatDate(new Date(current)));
+    current.setDate(current.getDate() + 1);
+  }
+  
+  // 清空列表
+  datesList.innerHTML = '';
+  
+  // 为每个日期创建输入项
+  for (const date of dates) {
+    // 获取已有记录
+    let existingRecord = null;
+    try {
+      if (db && db.calendarPeriods) {
+        existingRecord = await db.calendarPeriods.where('date').equals(date).first();
+      }
+    } catch (error) {
+      console.warn('查询月经记录失败:', error);
+    }
+    
+    const dateItem = document.createElement('div');
+    dateItem.style.padding = '12px';
+    dateItem.style.borderRadius = '8px';
+    dateItem.style.backgroundColor = 'var(--secondary-bg)';
+    dateItem.style.border = '1px solid var(--border-color)';
+    dateItem.style.display = 'flex';
+    dateItem.style.flexDirection = 'column';
+    dateItem.style.gap = '10px';
+    
+    const dateLabel = document.createElement('div');
+    dateLabel.style.fontSize = '14px';
+    dateLabel.style.fontWeight = '600';
+    dateLabel.style.color = 'var(--text-primary)';
+    const dateObj = new Date(date);
+    dateLabel.textContent = `${dateObj.getMonth() + 1}月${dateObj.getDate()}日`;
+    dateItem.appendChild(dateLabel);
+    
+    const controlsRow = document.createElement('div');
+    controlsRow.style.display = 'flex';
+    controlsRow.style.gap = '10px';
+    
+    const flowGroup = document.createElement('div');
+    flowGroup.style.flex = '1';
+    const flowLabel = document.createElement('label');
+    flowLabel.textContent = '经量';
+    flowLabel.style.fontSize = '12px';
+    flowLabel.style.color = 'var(--text-secondary)';
+    flowLabel.style.marginBottom = '4px';
+    flowLabel.style.display = 'block';
+    const flowSelect = document.createElement('select');
+    flowSelect.className = 'moe-input';
+    flowSelect.setAttribute('data-date', date);
+    flowSelect.setAttribute('data-type', 'flow');
+    flowSelect.innerHTML = `
+      <option value="light">少</option>
+      <option value="medium">中</option>
+      <option value="heavy">大</option>
+    `;
+    if (existingRecord) {
+      flowSelect.value = existingRecord.flow || 'medium';
+    } else {
+      flowSelect.value = 'medium';
+    }
+    flowGroup.appendChild(flowLabel);
+    flowGroup.appendChild(flowSelect);
+    
+    const painGroup = document.createElement('div');
+    painGroup.style.flex = '1';
+    const painLabel = document.createElement('label');
+    painLabel.textContent = '疼痛';
+    painLabel.style.fontSize = '12px';
+    painLabel.style.color = 'var(--text-secondary)';
+    painLabel.style.marginBottom = '4px';
+    painLabel.style.display = 'block';
+    const painSelect = document.createElement('select');
+    painSelect.className = 'moe-input';
+    painSelect.setAttribute('data-date', date);
+    painSelect.setAttribute('data-type', 'pain');
+    painSelect.innerHTML = `
+      <option value="none">不痛</option>
+      <option value="mild">痛</option>
+      <option value="severe">非常痛</option>
+    `;
+    if (existingRecord) {
+      painSelect.value = existingRecord.pain || 'none';
+    } else {
+      painSelect.value = 'none';
+    }
+    painGroup.appendChild(painLabel);
+    painGroup.appendChild(painSelect);
+    
+    controlsRow.appendChild(flowGroup);
+    controlsRow.appendChild(painGroup);
+    dateItem.appendChild(controlsRow);
+    
+    datesList.appendChild(dateItem);
+  }
+}
+
+/**
+ * 关闭添加月经记录模态框
+ */
+function closeAddPeriodModal() {
+  const modal = document.getElementById('calendar-add-period-modal');
+  modal.classList.remove('visible');
+  
+  // 恢复日期范围选择区域的显示（默认状态，下次从气泡打开时应该显示）
+  const startDateInput = document.getElementById('calendar-period-start-date');
+  if (startDateInput) {
+    const dateRangeGroup = startDateInput.closest('.form-group');
+    if (dateRangeGroup) {
+      dateRangeGroup.style.display = 'block';
+    }
+  }
+}
+
+/**
+ * 保存月经记录
+ */
+async function savePeriod() {
+  const startDate = document.getElementById('calendar-period-start-date').value;
+  const endDate = document.getElementById('calendar-period-end-date').value;
+
+  if (!startDate) {
+    alert('请选择开始日期');
+    return;
+  }
+
+  try {
+    // 获取所有日期输入项
+    const dateItems = document.querySelectorAll('#calendar-period-dates-list > div');
+    let savedCount = 0;
+    
+    // 保存每个日期的记录
+    for (const item of dateItems) {
+      const flowSelect = item.querySelector('select[data-type="flow"]');
+      const painSelect = item.querySelector('select[data-type="pain"]');
+      
+      if (!flowSelect || !painSelect) continue;
+      
+      const date = flowSelect.getAttribute('data-date');
+      const flow = flowSelect.value;
+      const pain = painSelect.value;
+      
+      // 保存或更新记录（移除月份限制）
+      const existing = await db.calendarPeriods.where('date').equals(date).first();
+      if (existing) {
+        await db.calendarPeriods.update(existing.id, { flow, pain });
+      } else {
+        await db.calendarPeriods.add({ date, flow, pain });
+      }
+      savedCount++;
+    }
+    
+    closeAddPeriodModal();
+    alert(`已保存${savedCount}天的月经记录！`);
+    
+    // 刷新日历显示
+    await renderCalendar(currentCalendarDate);
+    
+    // 如果当前选中的日期在范围内，重新加载信息
+    if (selectedDate) {
+      await loadDayInfo(selectedDate);
+    }
+  } catch (error) {
+    console.error('保存月经记录失败:', error);
+    alert('保存月经记录失败，请重试');
+  }
+}
+
+/**
+ * 打开编辑单个日期的月经记录模态框
+ */
+async function openEditPeriodDateModal(dateStr) {
+  // 获取该日期的记录
+  let existingRecord = null;
+  try {
+    if (db && db.calendarPeriods) {
+      existingRecord = await db.calendarPeriods.where('date').equals(dateStr).first();
+    }
+  } catch (error) {
+    console.warn('查询月经记录失败:', error);
+  }
+  
+  // 如果有记录，显示选择菜单（编辑/删除）
+  if (existingRecord) {
+    const options = [
+      { text: '编辑经量和疼痛', value: 'edit' },
+      { text: '取消月经记录', value: 'delete' }
+    ];
+    
+    showChoiceModal('选择操作', options).then(async (choice) => {
+      if (choice === 'edit') {
+        openSingleDatePeriodEditor(dateStr, '编辑月经记录');
+      } else if (choice === 'delete') {
+        if (confirm('确定要删除这天的月经记录吗？')) {
+          try {
+            await db.calendarPeriods.delete(existingRecord.id);
+            alert('已删除月经记录！');
+            await renderCalendar(currentCalendarDate);
+            if (selectedDate === dateStr) {
+              await loadDayInfo(selectedDate);
+            }
+          } catch (error) {
+            console.error('删除月经记录失败:', error);
+            alert('删除失败，请重试');
+          }
+        }
+      }
+    });
+  } else {
+    // 如果没有记录，直接打开编辑界面
+    openSingleDatePeriodEditor(dateStr, '添加月经记录');
+  }
+}
+
+/**
+ * 辅助函数：打开单日编辑界面（隐藏日期选择器）
+ */
+async function openSingleDatePeriodEditor(dateStr, titleText) {
+  const modal = document.getElementById('calendar-add-period-modal');
+  modal.classList.add('visible');
+  
+  const startDateInput = document.getElementById('calendar-period-start-date');
+  const endDateInput = document.getElementById('calendar-period-end-date');
+  
+  // 设置为同一天
+  startDateInput.value = dateStr;
+  endDateInput.value = dateStr; 
+  
+  // 关键修改：隐藏日期选择区域（输入框和提示文字）
+  const dateRangeGroup = startDateInput.closest('.form-group');
+  if (dateRangeGroup) {
+    dateRangeGroup.style.display = 'none';
+  }
+
+  // 立即生成单日的选项列表
+  await updatePeriodDatesList();
+  
+  // 更新标题
+  const title = document.getElementById('calendar-period-modal-title');
+  if (title) {
+    // 格式化日期用于标题，例如 "1月5日的记录"
+    const dateObj = new Date(dateStr);
+    const dateText = `${dateObj.getMonth() + 1}月${dateObj.getDate()}日`;
+    title.textContent = `${dateText} ${titleText.replace('添加/编辑', '')}`;
   }
 }
