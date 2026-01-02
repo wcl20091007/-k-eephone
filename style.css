@@ -12945,6 +12945,14 @@ body {
   bottom: 5px;
 }
 
+#calendar-menu-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 998;          /* 比页面高 */
+  background: transparent;
+  display: none;
+}
+
 /* 心情罐子 */
 .ls-mood-jar-wrapper {
   background-color: var(--secondary-bg);
