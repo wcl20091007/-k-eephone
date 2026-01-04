@@ -1101,6 +1101,49 @@
           </div>
 
           <div class="form-group">
+            <label style="display: flex; align-items: center; gap: 8px;">
+              <input
+                type="checkbox"
+                id="world-book-is-global-checkbox"
+                style="width: 18px; height: 18px; cursor: pointer;"
+              />
+              <span>全局世界书（所有角色默认加载）</span>
+            </label>
+            <small style="color: #888; font-size: 12px; display: block; margin-top: 4px;">
+              开启后，此世界书会自动加载到所有角色，无需单独绑定。
+            </small>
+          </div>
+
+          <div class="form-group">
+            <label style="display: flex; align-items: center; gap: 8px;">
+              <input
+                type="checkbox"
+                id="world-book-is-required-checkbox"
+                style="width: 18px; height: 18px; cursor: pointer;"
+              />
+              <span>必读（始终加载）</span>
+            </label>
+            <small style="color: #888; font-size: 12px; display: block; margin-top: 4px;">
+              开启后，此世界书会始终加载，不受关键词限制。
+            </small>
+          </div>
+
+          <div class="form-group">
+            <label for="world-book-priority-select">读取优先级</label>
+            <select
+              id="world-book-priority-select"
+              class="moe-input"
+            >
+              <option value="high">高（最高优先级，最先读取）</option>
+              <option value="medium">中（比人设高，在读取人设前读取）</option>
+              <option value="low">低（最低优先级，在读取人设后读取）</option>
+            </select>
+            <small style="color: #888; font-size: 12px; display: block; margin-top: 4px;">
+              控制世界书的读取顺序。高优先级最先读取，中优先级在读取人设前读取，低优先级在读取人设后读取。
+            </small>
+          </div>
+
+          <div class="form-group">
             <label for="world-book-trigger-keywords-input">触发关键词 (选填)</label>
             <input
               type="text"
@@ -1108,7 +1151,7 @@
               placeholder="用英文逗号分隔，例如：魔法,magic,法术"
             />
             <small style="color: #888; font-size: 12px; display: block; margin-top: 4px;">
-              留空则始终加载此条目。填写关键词后，只有当对话中包含这些关键词时才会加载。
+              填写关键词后，只有当对话中包含这些关键词时才会加载（必读世界书不受此限制）。
             </small>
           </div>
 
@@ -22036,6 +22079,16 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           document.getElementById("world-book-trigger-keywords-input").value =
             book.triggerKeywords || "";
 
+          // 【全局世界书和必读】加载开关状态
+          document.getElementById("world-book-is-global-checkbox").checked =
+            book.isGlobal || false;
+          document.getElementById("world-book-is-required-checkbox").checked =
+            book.isRequired || false;
+
+          // 【优先级】加载优先级设置
+          const prioritySelect = document.getElementById("world-book-priority-select");
+          prioritySelect.value = book.priority || "medium"; // 默认为中优先级
+
           // 填充分类下拉菜单
           const selectEl = document.getElementById(
             "world-book-category-select"
@@ -23500,50 +23553,70 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
 			`;
           }
           // 【世界书关键词优化】将世界书读取提到这里，确保线下模式也能生效
-          let worldBookContext = "";
-          if (
-            chat.settings.linkedWorldBookIds &&
-            chat.settings.linkedWorldBookIds.length > 0
-          ) {
+          // 【全局世界书】自动加载全局世界书
+          // 【优先级排序】按照优先级分组世界书内容
+          let worldBookContextHigh = ""; // 高优先级（最先）
+          let worldBookContextMedium = ""; // 中优先级
+          let worldBookContextLow = ""; // 低优先级（最后）
+          
+          // 合并角色绑定的世界书ID和全局世界书ID
+          const allWorldBookIds = new Set(chat.settings.linkedWorldBookIds || []);
+          const globalBooks = getGlobalWorldBooks();
+          globalBooks.forEach(book => allWorldBookIds.add(book.id));
+          
+          if (allWorldBookIds.size > 0) {
             // 获取最近的对话内容用于关键词匹配
             const recentMessages = chat.history
               .slice(-10)
               .map((msg) => String(msg.content || ""))
-              .join(" ")
-              .toLowerCase();
+              .join(" ");
             
-            const linkedContents = chat.settings.linkedWorldBookIds
-              .map((id) => {
-                const book = state.worldBooks.find((b) => b.id === id);
-                if (!book || !book.content) return "";
-                
-                // 【世界书关键词优化】检查是否需要加载此条目
-                if (book.triggerKeywords && book.triggerKeywords.trim()) {
-                  // 如果有关键词，检查是否匹配
-                  const keywords = book.triggerKeywords
-                    .split(",")
-                    .map((k) => k.trim().toLowerCase())
-                    .filter((k) => k);
-                  const hasKeyword = keywords.some((keyword) =>
-                    recentMessages.includes(keyword)
-                  );
-                  if (!hasKeyword) {
-                    // 没有匹配到关键词，跳过此条目
-                    return "";
-                  }
-                }
-                // 如果没有关键词或匹配成功，加载此条目
-                // 这里使用了 stripHtmlAndCode 清理函数，确保纯文本
-                return `\n\n## 世界书条目: ${book.name}\n${stripHtmlAndCode(
-                  book.content
+            const filteredBooks = filterWorldBooksByKeywords(
+              Array.from(allWorldBookIds),
+              recentMessages
+            );
+            
+            // 【优先级排序】按照优先级分组世界书
+            const sortedBooks = sortWorldBooksByPriority(filteredBooks);
+            
+            // 构建各优先级的内容
+            const highPriorityContent = sortedBooks.high
+              .map((worldBook) => {
+                return `\n\n## 世界书条目: ${worldBook.name}\n${stripHtmlAndCode(
+                  worldBook.content
                 )}`;
               })
-              .filter(Boolean)
               .join("");
-            if (linkedContents) {
-              worldBookContext = `\n\n# 核心世界观设定 (必须严格遵守以下所有设定)\n${linkedContents}\n`;
+            
+            const mediumPriorityContent = sortedBooks.medium
+              .map((worldBook) => {
+                return `\n\n## 世界书条目: ${worldBook.name}\n${stripHtmlAndCode(
+                  worldBook.content
+                )}`;
+              })
+              .join("");
+            
+            const lowPriorityContent = sortedBooks.low
+              .map((worldBook) => {
+                return `\n\n## 世界书条目: ${worldBook.name}\n${stripHtmlAndCode(
+                  worldBook.content
+                )}`;
+              })
+              .join("");
+            
+            if (highPriorityContent) {
+              worldBookContextHigh = `\n\n# 【高优先级】核心世界观设定 (必须严格遵守以下所有设定)\n${highPriorityContent}\n`;
+            }
+            if (mediumPriorityContent) {
+              worldBookContextMedium = `\n\n# 【中优先级】核心世界观设定 (必须严格遵守以下所有设定)\n${mediumPriorityContent}\n`;
+            }
+            if (lowPriorityContent) {
+              worldBookContextLow = `\n\n# 【低优先级】核心世界观设定 (必须严格遵守以下所有设定)\n${lowPriorityContent}\n`;
             }
           }
+          
+          // 组合所有优先级的内容（群聊中按顺序排列）
+          const worldBookContext = worldBookContextHigh + worldBookContextMedium + worldBookContextLow;
           // --- 线下模式核心拦截逻辑 ---
           if (
             !chat.isGroup &&
@@ -24206,34 +24279,43 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             }
             
             // 【月经记录集成】检查用户当前的月经状态
-            if (typeof getTodayPeriodData === 'function' && typeof getCurrentPeriodDuration === 'function' && typeof formatPeriodDataForAI === 'function' && typeof shouldActivelyCareAboutPeriod === 'function' && typeof shouldMentionPeriod === 'function') {
-              const todayPeriod = await getTodayPeriodData();
-              const duration = await getCurrentPeriodDuration();
+            try {
+              // 检查函数是否存在
+              if (typeof getTodayPeriodData === 'function' && typeof getCurrentPeriodDuration === 'function' && typeof formatPeriodDataForAI === 'function' && typeof shouldActivelyCareAboutPeriod === 'function' && typeof shouldMentionPeriod === 'function') {
+                const todayPeriod = await getTodayPeriodData();
+                const duration = await getCurrentPeriodDuration();
+                
+                console.log('[月经记录检查] 今日月经记录:', todayPeriod, '持续天数:', duration);
               
-              if (todayPeriod) {
-                // 判断优先度
-                if (shouldActivelyCareAboutPeriod(todayPeriod)) {
-                  periodPriority = 3; // 必须主动关心
-                } else if (shouldMentionPeriod(todayPeriod, duration)) {
-                  periodPriority = 2; // 应该提及
-                } else {
-                  periodPriority = 1; // 可以提及
+                if (todayPeriod) {
+                  // 判断优先度
+                  if (shouldActivelyCareAboutPeriod(todayPeriod)) {
+                    periodPriority = 3; // 必须主动关心
+                  } else if (shouldMentionPeriod(todayPeriod, duration)) {
+                    periodPriority = 2; // 应该提及
+                  } else {
+                    periodPriority = 1; // 可以提及
+                  }
+                  
+                  // 格式化月经数据
+                  const periodText = formatPeriodDataForAI(todayPeriod, duration);
+                  
+                  if (periodPriority === 3) {
+                    // 最高优先级：必须主动关心
+                    periodContextForActiveChat = `${periodText}\n\n【【【最高优先级：必须主动关心】】】用户当前正在月经期，且经量是大、疼痛是非常痛。这是一个非常重要的事情。如果根据聊天记录没有更重要的事情，你必须优先处理，主动关心用户的月经周期、量和痛处，为用户带来关心、安慰和建议。不可OOC（Out of Character）。`;
+                  } else if (periodPriority === 2) {
+                    // 高优先级：应该提及
+                    periodContextForActiveChat = `${periodText}\n\n【重要提示】用户当前正在月经期。如果聊天中提到月经相关话题，你要第一时间关心用户的月经周期、量和痛处，为用户带来关心、安慰和建议。如果月经持续时间异常（超过7天），也需要主动关心。不可OOC。`;
+                  } else {
+                    // 普通优先级：可以提及
+                    periodContextForActiveChat = `${periodText}\n\n【提示】用户当前正在月经期。如果聊天中提到月经相关话题，你要关心用户的月经周期、量和痛处。在普通聊天中不需要经常提及，要自然对话。不可OOC。`;
+                  }
                 }
-                
-                // 格式化月经数据
-                const periodText = formatPeriodDataForAI(todayPeriod, duration);
-                
-                if (periodPriority === 3) {
-                  // 最高优先级：必须主动关心
-                  periodContextForActiveChat = `${periodText}\n\n【【【最高优先级：必须主动关心】】】用户当前正在月经期，且经量是大、疼痛是非常痛。这是一个非常重要的事情。如果根据聊天记录没有更重要的事情，你必须优先处理，主动关心用户的月经周期、量和痛处，为用户带来关心、安慰和建议。不可OOC（Out of Character）。`;
-                } else if (periodPriority === 2) {
-                  // 高优先级：应该提及
-                  periodContextForActiveChat = `${periodText}\n\n【重要提示】用户当前正在月经期。如果聊天中提到月经相关话题，你要第一时间关心用户的月经周期、量和痛处，为用户带来关心、安慰和建议。如果月经持续时间异常（超过7天），也需要主动关心。不可OOC。`;
-                } else {
-                  // 普通优先级：可以提及
-                  periodContextForActiveChat = `${periodText}\n\n【提示】用户当前正在月经期。如果聊天中提到月经相关话题，你要关心用户的月经周期、量和痛处。在普通聊天中不需要经常提及，要自然对话。不可OOC。`;
-                }
+              } else {
+                console.warn('[月经记录检查] 函数未定义，无法读取月经记录。请确保calendar.js已正确加载。');
               }
+            } catch (e) {
+              console.error("生成月经主动聊天上下文时出错:", e);
             }
           } catch (e) {
             console.error("生成日历主动聊天上下文时出错:", e);
@@ -24567,11 +24649,18 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             }
 
             // 【世界书关键词优化】根据关键词过滤世界书
-            let worldBookContent = "";
-            if (
-              chat.settings.linkedWorldBookIds &&
-              chat.settings.linkedWorldBookIds.length > 0
-            ) {
+            // 【全局世界书】自动加载全局世界书
+            // 【优先级排序】按照优先级分组世界书内容
+            let worldBookContentHigh = ""; // 高优先级（最先）
+            let worldBookContentMedium = ""; // 中优先级（在人设前）
+            let worldBookContentLow = ""; // 低优先级（在人设后）
+            
+            // 合并角色绑定的世界书ID和全局世界书ID
+            const allWorldBookIds = new Set(chat.settings.linkedWorldBookIds || []);
+            const globalBooks = getGlobalWorldBooks();
+            globalBooks.forEach(book => allWorldBookIds.add(book.id));
+            
+            if (allWorldBookIds.size > 0) {
               // 获取最近的对话内容用于关键词匹配
               const recentMessages = chat.history
                 .slice(-10)
@@ -24579,19 +24668,49 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                 .join(" ");
               
               const filteredBooks = filterWorldBooksByKeywords(
-                chat.settings.linkedWorldBookIds,
+                Array.from(allWorldBookIds),
                 recentMessages
               );
               
-              const linkedContents = filteredBooks
+              // 【优先级排序】按照优先级分组世界书
+              const sortedBooks = sortWorldBooksByPriority(filteredBooks);
+              
+              // 构建高优先级世界书内容
+              const highPriorityContent = sortedBooks.high
                 .map((worldBook) => {
                   return `\n\n## 世界书: ${worldBook.name}\n${stripHtmlAndCode(
                     worldBook.content
                   )}`;
                 })
                 .join("");
-              if (linkedContents) {
-                worldBookContent = `\n\n# 核心世界观设定 (必须严格遵守以下所有设定)，里面可能会包含HTML小剧场，在捕获到关键词后输出\n${linkedContents}\n`;
+              
+              // 构建中优先级世界书内容
+              const mediumPriorityContent = sortedBooks.medium
+                .map((worldBook) => {
+                  return `\n\n## 世界书: ${worldBook.name}\n${stripHtmlAndCode(
+                    worldBook.content
+                  )}`;
+                })
+                .join("");
+              
+              // 构建低优先级世界书内容
+              const lowPriorityContent = sortedBooks.low
+                .map((worldBook) => {
+                  return `\n\n## 世界书: ${worldBook.name}\n${stripHtmlAndCode(
+                    worldBook.content
+                  )}`;
+                })
+                .join("");
+              
+              // 分别构建各优先级的内容
+              if (highPriorityContent) {
+                worldBookContentHigh = `\n\n# 【高优先级】核心世界观设定 (必须严格遵守以下所有设定)\n${highPriorityContent}\n`;
+              }
+              if (mediumPriorityContent) {
+                worldBookContentMedium = `\n\n# 【中优先级】核心世界观设定 (必须严格遵守以下所有设定)\n${mediumPriorityContent}\n`;
+              }
+              if (lowPriorityContent) {
+                worldBookContentLow = `\n\n# 【低优先级】核心世界观设定 (必须严格遵守以下所有设定)\n${lowPriorityContent}\n`;
               }
             }
             let musicContext = "";
@@ -24727,13 +24846,20 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             if (userMentionedPeriod && periodPriority < 2) {
               periodPriority = 2;
               // 更新月经上下文，强调必须关心
-              if (typeof getTodayPeriodData === 'function' && typeof getCurrentPeriodDuration === 'function' && typeof formatPeriodDataForAI === 'function') {
-                const todayPeriod = await getTodayPeriodData();
-                const duration = await getCurrentPeriodDuration();
-                if (todayPeriod) {
-                  const periodText = formatPeriodDataForAI(todayPeriod, duration);
-                  periodContextForActiveChat = `${periodText}\n\n【【【用户主动提及月经 - 必须第一时间关心】】】用户刚刚在聊天中提到了月经相关话题。你必须第一时间关心用户的月经周期、量和痛处，为用户带来关心、安慰和建议。不可OOC。`;
+              try {
+                if (typeof getTodayPeriodData === 'function' && typeof getCurrentPeriodDuration === 'function' && typeof formatPeriodDataForAI === 'function') {
+                  const todayPeriod = await getTodayPeriodData();
+                  const duration = await getCurrentPeriodDuration();
+                  console.log('[月经记录检查] 用户提及月经，今日记录:', todayPeriod, '持续天数:', duration);
+                  if (todayPeriod) {
+                    const periodText = formatPeriodDataForAI(todayPeriod, duration);
+                    periodContextForActiveChat = `${periodText}\n\n【【【用户主动提及月经 - 必须第一时间关心】】】用户刚刚在聊天中提到了月经相关话题。你必须第一时间关心用户的月经周期、量和痛处，为用户带来关心、安慰和建议。不可OOC。`;
+                  }
+                } else {
+                  console.warn('[月经记录检查] 用户提及月经但函数未定义');
                 }
+              } catch (e) {
+                console.error("更新月经上下文时出错:", e);
               }
             }
 
@@ -24935,7 +25061,9 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
 			${summaryContext}
 			${announcementContext}
 			${redPacketContext}
-			${worldBookContent}
+			${worldBookContentHigh}
+			${worldBookContentMedium}
+			${worldBookContentLow}
 			${weatherContext}
 			${musicContext}
 			${countdownContext} 
@@ -25095,7 +25223,25 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                 })
                 .filter(Boolean);
 
-              console.log(messagesPayload);
+              // 【调试日志】输出群聊的完整prompt到控制台
+              console.log('========== AI群聊请求 - 完整Prompt ==========');
+              console.log('【角色】:', chat.name);
+              console.log('【System Prompt】:');
+              console.log(systemPrompt);
+              console.log('【Messages Payload】:');
+              console.log(JSON.stringify(messagesPayload, null, 2));
+              console.log('【完整请求体】:');
+              const fullGroupRequest = {
+                model: model,
+                messages: [
+                  { role: "system", content: systemPrompt },
+                  ...messagesPayload,
+                ],
+                temperature: parseFloat(state.apiConfig.temperature) || 0.8,
+                stream: false,
+              };
+              console.log(JSON.stringify(fullGroupRequest, null, 2));
+              console.log('==========================================');
             } else {
               // 【NPC库优化】从全局NPC库获取启用的NPC
               const npcLibrary = await getEnabledNpcs(chat);
@@ -25232,8 +25378,11 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
 
 			你现在将扮演一个名为“**${chat.name}**”的角色。
 
+			${worldBookContentHigh}
 			**1. 角色基本设定:**
+			${worldBookContentMedium}
 			- **核心人设**: ${chat.settings.aiPersona}
+			${worldBookContentLow}
 			- **总结**:${summaryContext}
 			- **情侣头像**: ${coupleAvatarContext}
 			- **世界观/NPC**: ${npcContext}
@@ -25516,7 +25665,6 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
 			${periodContextForActiveChat}
 
 			- **世界观设定集**:
-			${worldBookContent}
 			${weatherContext}
 			${linkedMemoryContext}
 			${elemeContext}
@@ -25903,6 +26051,27 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               messagesPayload.push({ role: "system", content: postsContext });
             }
 
+            // 【调试日志】输出完整的prompt到控制台
+            console.log('========== AI聊天请求 - 完整Prompt ==========');
+            console.log('【角色】:', chat.name);
+            console.log('【聊天类型】:', chat.isGroup ? '群聊' : '单人聊天');
+            console.log('【System Prompt】:');
+            console.log(systemPrompt);
+            console.log('【Messages Payload】:');
+            console.log(JSON.stringify(messagesPayload, null, 2));
+            console.log('【完整请求体】:');
+            const fullRequest = {
+              model: model,
+              messages: [
+                { role: "system", content: systemPrompt },
+                ...messagesPayload,
+              ],
+              temperature: parseFloat(state.apiConfig.temperature) || 0.8,
+              stream: false,
+            };
+            console.log(JSON.stringify(fullRequest, null, 2));
+            console.log('==========================================');
+
             let isGemini = proxyUrl === GEMINI_API_URL;
             let geminiConfig = toGeminiRequestData(
               model,
@@ -25919,15 +26088,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                     "Content-Type": "application/json",
                     Authorization: `Bearer ${apiKey}`,
                   },
-                  body: JSON.stringify({
-                    model: model,
-                    messages: [
-                      { role: "system", content: systemPrompt },
-                      ...messagesPayload,
-                    ],
-                    temperature: parseFloat(state.apiConfig.temperature) || 0.8,
-                    stream: false,
-                  }),
+                  body: JSON.stringify(fullRequest),
                 });
             if (!response.ok) {
               let errorMsg = `API Error: ${response.status}`;
@@ -31227,11 +31388,18 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           const countdownContext = await getCountdownContext();
 
           // 【世界书关键词优化】根据关键词过滤世界书
-          let worldBookContext = "";
-          if (
-            chat.settings.linkedWorldBookIds &&
-            chat.settings.linkedWorldBookIds.length > 0
-          ) {
+          // 【全局世界书】自动加载全局世界书
+          // 【优先级排序】按照优先级分组世界书内容
+          let worldBookContextHigh = ""; // 高优先级（最先）
+          let worldBookContextMedium = ""; // 中优先级（在人设前）
+          let worldBookContextLow = ""; // 低优先级（在人设后）
+          
+          // 合并角色绑定的世界书ID和全局世界书ID
+          const allWorldBookIds = new Set(chat.settings.linkedWorldBookIds || []);
+          const globalBooks = getGlobalWorldBooks();
+          globalBooks.forEach(book => allWorldBookIds.add(book.id));
+          
+          if (allWorldBookIds.size > 0) {
             // 获取最近的对话内容用于关键词匹配
             const recentMessages = chat.history
               .slice(-10)
@@ -31239,17 +31407,40 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               .join(" ");
             
             const filteredBooks = filterWorldBooksByKeywords(
-              chat.settings.linkedWorldBookIds,
+              Array.from(allWorldBookIds),
               recentMessages
             );
             
-            const linkedContents = filteredBooks
+            // 【优先级排序】按照优先级分组世界书
+            const sortedBooks = sortWorldBooksByPriority(filteredBooks);
+            
+            // 构建各优先级的内容
+            const highPriorityContent = sortedBooks.high
               .map((worldBook) => {
                 return `\n\n## 世界书: ${worldBook.name}\n${worldBook.content}`;
               })
               .join("");
-            if (linkedContents) {
-              worldBookContext = `\n\n# 核心世界观设定 (你必须严格遵守)\n${linkedContents}\n`;
+            
+            const mediumPriorityContent = sortedBooks.medium
+              .map((worldBook) => {
+                return `\n\n## 世界书: ${worldBook.name}\n${worldBook.content}`;
+              })
+              .join("");
+            
+            const lowPriorityContent = sortedBooks.low
+              .map((worldBook) => {
+                return `\n\n## 世界书: ${worldBook.name}\n${worldBook.content}`;
+              })
+              .join("");
+            
+            if (highPriorityContent) {
+              worldBookContextHigh = `\n\n# 【高优先级】核心世界观设定 (你必须严格遵守)\n${highPriorityContent}\n`;
+            }
+            if (mediumPriorityContent) {
+              worldBookContextMedium = `\n\n# 【中优先级】核心世界观设定 (你必须严格遵守)\n${mediumPriorityContent}\n`;
+            }
+            if (lowPriorityContent) {
+              worldBookContextLow = `\n\n# 【低优先级】核心世界观设定 (你必须严格遵守)\n${lowPriorityContent}\n`;
             }
           }
 
@@ -31351,9 +31542,18 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           let periodContextForAction = "";
           let periodPriorityForAction = 0;
           try {
-            if (typeof getTodayPeriodData === 'function' && typeof getCurrentPeriodDuration === 'function' && typeof formatPeriodDataForAI === 'function' && typeof shouldActivelyCareAboutPeriod === 'function' && typeof shouldMentionPeriod === 'function') {
+            // 检查函数是否存在
+            const hasPeriodFunctions = typeof getTodayPeriodData === 'function' && 
+                                      typeof getCurrentPeriodDuration === 'function' && 
+                                      typeof formatPeriodDataForAI === 'function' && 
+                                      typeof shouldActivelyCareAboutPeriod === 'function' && 
+                                      typeof shouldMentionPeriod === 'function';
+            
+            if (hasPeriodFunctions) {
               const todayPeriod = await getTodayPeriodData();
               const duration = await getCurrentPeriodDuration();
+              
+              console.log('[月经记录检查-主动消息] 今日月经记录:', todayPeriod, '持续天数:', duration);
               
               if (todayPeriod) {
                 // 判断优先度
@@ -31370,13 +31570,13 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                 
                 if (periodPriorityForAction === 3) {
                   // 最高优先级：必须主动关心
-                  periodContextForAction = `${periodText}\n\n【【【最高优先级：必须主动关心】】】用户当前正在月经期，且经量是大、疼痛是非常痛。这是一个非常重要的事情。如果根据聊天记录没有更重要的事情，你必须优先处理，主动关心用户的月经周期、量和痛处，为用户带来关心、安慰和建议。不可OOC（Out of Character）。`;
+                  periodContextForAction = `${periodText}\n\n【【【最高优先级：必须主动关心】】】用户当前正在月经期，且经量是大、疼痛是非常痛。这是一个非常重要的事情。如果根据聊天记录没有優先度事情，你必须优先处理，根據聊天記錄自然关心用户的月经周期、量和痛处，为用户带来关心、安慰和建议。對話要含接自然，不可以生硬突然轉換話題，除非是上一個話題已經完結。必須嚴格跟從人設，不可OOC（Out of Character）。`;
                 } else if (periodPriorityForAction === 2) {
                   // 高优先级：应该提及
-                  periodContextForAction = `${periodText}\n\n【重要提示】用户当前正在月经期。如果月经持续时间异常（超过7天），你需要主动关心。在普通聊天中不需要经常提及，要自然对话。不可OOC。`;
+                  periodContextForAction = `${periodText}\n\n【重要提示】用户当前正在月经期。如果月经持续时间异常（超过7天），你需要主动关心。在普通聊天中不需要经常提及，要自然含接对话，不可以生硬突然轉換話題，除非是上一個話題已經完結。不可OOC。`;
                 } else {
                   // 普通优先级：可以提及
-                  periodContextForAction = `${periodText}\n\n【提示】用户当前正在月经期。在普通聊天中不需要经常提及，要自然对话。不可OOC。`;
+                  periodContextForAction = `${periodText}\n\n【提示】用户当前正在月经期。在普通聊天中不需要经常主動提及，要自然对话。不可OOC。`;
                 }
               }
             }
@@ -31476,7 +31676,10 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
 			-   **【新】在情侣空间分享书籍**: \`[{"type": "ls_share", "shareType": "book", "title": "书名", "summary": "在这里写下这本书的简介...", "thoughts": "在这里写下你分享这本书的感想..."}]\`
 
 			# 供你决策的参考信息：
+			${worldBookContextHigh}
 			-   **你的角色设定**: ${chat.settings.aiPersona}
+			${worldBookContextMedium}
+			${worldBookContextLow}
 			- 情侣空间状态: ${chat.loversSpaceData ? "已开启" : "未开启"}
 			${npcContextForAction}
 			${weiboContextForAction}
@@ -31501,6 +31704,23 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                 "请严格按照system prompt中的所有规则，特别是输出格式铁律，立即开始你的行动。",
             },
           ];
+          
+          // 【调试日志】输出主动消息的完整prompt到控制台
+          console.log('========== AI主动消息请求 - 完整Prompt ==========');
+          console.log('【角色】:', chat.name);
+          console.log('【System Prompt】:');
+          console.log(systemPrompt);
+          console.log('【Messages Payload】:');
+          console.log(JSON.stringify(messagesPayload, null, 2));
+          console.log('【完整请求体】:');
+          const fullActionRequest = {
+            model: model,
+            messages: messagesPayload,
+            temperature: parseFloat(state.apiConfig.temperature) || 0.8,
+          };
+          console.log(JSON.stringify(fullActionRequest, null, 2));
+          console.log('==========================================');
+          
           try {
             let isGemini = proxyUrl === GEMINI_API_URL;
             let geminiConfig = toGeminiRequestData(
@@ -31518,11 +31738,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                     "Content-Type": "application/json",
                     Authorization: `Bearer ${apiKey}`,
                   },
-                  body: JSON.stringify({
-                    model: model,
-                    messages: messagesPayload,
-                    temperature: parseFloat(state.apiConfig.temperature) || 0.8,
-                  }),
+                  body: JSON.stringify(fullActionRequest),
                 });
             if (!response.ok) {
               const errorData = await response.json();
@@ -34250,26 +34466,65 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
 
           const userNickname = chat.settings.myNickname || "我";
 
-          let worldBookContent = "";
-          if (
-            chat.settings.linkedWorldBookIds &&
-            chat.settings.linkedWorldBookIds.length > 0
-          ) {
-            const linkedContents = chat.settings.linkedWorldBookIds
-              .map((bookId) => {
-                const worldBook = state.worldBooks.find(
-                  (wb) => wb.id === bookId
-                );
-                return worldBook && worldBook.content
-                  ? `\n\n## 世界书: ${worldBook.name}\n${worldBook.content}`
-                  : "";
+          // 【世界书关键词优化】根据关键词过滤世界书
+          // 【全局世界书】自动加载全局世界书
+          // 【优先级排序】按照优先级分组世界书内容
+          let worldBookContentHigh = ""; // 高优先级（最先）
+          let worldBookContentMedium = ""; // 中优先级
+          let worldBookContentLow = ""; // 低优先级（最后）
+          
+          // 合并角色绑定的世界书ID和全局世界书ID
+          const allWorldBookIds = new Set(chat.settings.linkedWorldBookIds || []);
+          const globalBooks = getGlobalWorldBooks();
+          globalBooks.forEach(book => allWorldBookIds.add(book.id));
+          
+          if (allWorldBookIds.size > 0) {
+            // 获取最近的对话内容用于关键词匹配
+            const recentMessages = chat.history
+              .slice(-10)
+              .map((msg) => String(msg.content || ""))
+              .join(" ");
+            
+            const filteredBooks = filterWorldBooksByKeywords(
+              Array.from(allWorldBookIds),
+              recentMessages
+            );
+            
+            // 【优先级排序】按照优先级分组世界书
+            const sortedBooks = sortWorldBooksByPriority(filteredBooks);
+            
+            // 构建各优先级的内容
+            const highPriorityContent = sortedBooks.high
+              .map((worldBook) => {
+                return `\n\n## 世界书: ${worldBook.name}\n${worldBook.content}`;
               })
-              .filter(Boolean)
               .join("");
-            if (linkedContents) {
-              worldBookContent = `\n\n# 核心世界观设定 (你必须严格遵守)\n${linkedContents}\n`;
+            
+            const mediumPriorityContent = sortedBooks.medium
+              .map((worldBook) => {
+                return `\n\n## 世界书: ${worldBook.name}\n${worldBook.content}`;
+              })
+              .join("");
+            
+            const lowPriorityContent = sortedBooks.low
+              .map((worldBook) => {
+                return `\n\n## 世界书: ${worldBook.name}\n${worldBook.content}`;
+              })
+              .join("");
+            
+            if (highPriorityContent) {
+              worldBookContentHigh = `\n\n# 【高优先级】核心世界观设定 (你必须严格遵守)\n${highPriorityContent}\n`;
+            }
+            if (mediumPriorityContent) {
+              worldBookContentMedium = `\n\n# 【中优先级】核心世界观设定 (你必须严格遵守)\n${mediumPriorityContent}\n`;
+            }
+            if (lowPriorityContent) {
+              worldBookContentLow = `\n\n# 【低优先级】核心世界观设定 (你必须严格遵守)\n${lowPriorityContent}\n`;
             }
           }
+          
+          // 组合所有优先级的内容（视频通话中按顺序排列）
+          const worldBookContent = worldBookContentHigh + worldBookContentMedium + worldBookContentLow;
 
           if (userInput && videoCallState.isUserParticipating) {
             if (isVisualMode) {
@@ -34799,34 +35054,75 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             })
             .join("\n");
 
-          let worldBookContent = "";
-          if (
-            chat.settings.linkedWorldBookIds &&
-            chat.settings.linkedWorldBookIds.length > 0
-          ) {
-            const linkedContents = chat.settings.linkedWorldBookIds
-              .map((bookId) => {
-                const worldBook = state.worldBooks.find(
-                  (wb) => wb.id === bookId
-                );
-                return worldBook && worldBook.content
-                  ? `\n\n## 世界书: ${worldBook.name}\n${worldBook.content}`
-                  : "";
+          // 【世界书关键词优化】根据关键词过滤世界书
+          // 【全局世界书】自动加载全局世界书
+          // 【优先级排序】按照优先级分组世界书内容
+          let worldBookContentHigh = ""; // 高优先级（最先）
+          let worldBookContentMedium = ""; // 中优先级
+          let worldBookContentLow = ""; // 低优先级（最后）
+          
+          // 合并角色绑定的世界书ID和全局世界书ID
+          const allWorldBookIds = new Set(chat.settings.linkedWorldBookIds || []);
+          const globalBooks = getGlobalWorldBooks();
+          globalBooks.forEach(book => allWorldBookIds.add(book.id));
+          
+          if (allWorldBookIds.size > 0) {
+            // 获取最近的对话内容用于关键词匹配
+            const recentMessages = chat.history
+              .slice(-10)
+              .map((msg) => String(msg.content || ""))
+              .join(" ");
+            
+            const filteredBooks = filterWorldBooksByKeywords(
+              Array.from(allWorldBookIds),
+              recentMessages
+            );
+            
+            // 【优先级排序】按照优先级分组世界书
+            const sortedBooks = sortWorldBooksByPriority(filteredBooks);
+            
+            // 构建各优先级的内容
+            const highPriorityContent = sortedBooks.high
+              .map((worldBook) => {
+                return `\n\n## 世界书: ${worldBook.name}\n${worldBook.content}`;
               })
-              .filter(Boolean)
               .join("");
-            if (linkedContents) {
-              worldBookContent = `\n\n# 核心世界观设定 (请参考)\n${linkedContents}\n`;
+            
+            const mediumPriorityContent = sortedBooks.medium
+              .map((worldBook) => {
+                return `\n\n## 世界书: ${worldBook.name}\n${worldBook.content}`;
+              })
+              .join("");
+            
+            const lowPriorityContent = sortedBooks.low
+              .map((worldBook) => {
+                return `\n\n## 世界书: ${worldBook.name}\n${worldBook.content}`;
+              })
+              .join("");
+            
+            if (highPriorityContent) {
+              worldBookContentHigh = `\n\n# 【高优先级】核心世界观设定 (请参考)\n${highPriorityContent}\n`;
+            }
+            if (mediumPriorityContent) {
+              worldBookContentMedium = `\n\n# 【中优先级】核心世界观设定 (请参考)\n${mediumPriorityContent}\n`;
+            }
+            if (lowPriorityContent) {
+              worldBookContentLow = `\n\n# 【低优先级】核心世界观设定 (请参考)\n${lowPriorityContent}\n`;
             }
           }
+          
+          // 组合所有优先级的内容
+          const worldBookContent = worldBookContentHigh + worldBookContentMedium + worldBookContentLow;
 
           const systemPrompt = `
 			# 你的任务
 			你现在是角色“${chat.name}”。你之前被用户（你的聊天对象）拉黑了，你们已经有一段时间没有联系了。
 			现在，你非常希望能够和好，重新和用户聊天。请你仔细分析下面的“被拉黑前的对话摘要”，理解当时发生了什么，然后思考一个真诚的、符合你人设、并且【针对具体事件】的申请理由。
+			${worldBookContentHigh}
 			# 你的角色设定
+			${worldBookContentMedium}
 			${chat.settings.aiPersona}
-			${worldBookContent} // <--【核心】在这里注入世界书内容
+			${worldBookContentLow} // <--【核心】在这里注入世界书内容
 			# 被拉黑前的对话摘要 (这是你被拉黑的关键原因)
 			${contextSummary}
 			# 指令格式
@@ -35865,26 +36161,65 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               .join("\n");
             const myNickname = chat.settings.myNickname || "我";
 
-            let worldBookContent = "";
-            if (
-              chat.settings.linkedWorldBookIds &&
-              chat.settings.linkedWorldBookIds.length > 0
-            ) {
-              const linkedContents = chat.settings.linkedWorldBookIds
-                .map((bookId) => {
-                  const worldBook = state.worldBooks.find(
-                    (wb) => wb.id === bookId
-                  );
-                  return worldBook && worldBook.content
-                    ? `\n\n## 世界书: ${worldBook.name}\n${worldBook.content}`
-                    : "";
+            // 【世界书关键词优化】根据关键词过滤世界书
+            // 【全局世界书】自动加载全局世界书
+            // 【优先级排序】按照优先级分组世界书内容
+            let worldBookContentHigh = ""; // 高优先级（最先）
+            let worldBookContentMedium = ""; // 中优先级
+            let worldBookContentLow = ""; // 低优先级（最后）
+            
+            // 合并角色绑定的世界书ID和全局世界书ID
+            const allWorldBookIds = new Set(chat.settings.linkedWorldBookIds || []);
+            const globalBooks = getGlobalWorldBooks();
+            globalBooks.forEach(book => allWorldBookIds.add(book.id));
+            
+            if (allWorldBookIds.size > 0) {
+              // 获取最近的对话内容用于关键词匹配
+              const recentMessages = chat.history
+                .slice(-10)
+                .map((msg) => String(msg.content || ""))
+                .join(" ");
+              
+              const filteredBooks = filterWorldBooksByKeywords(
+                Array.from(allWorldBookIds),
+                recentMessages
+              );
+              
+              // 【优先级排序】按照优先级分组世界书
+              const sortedBooks = sortWorldBooksByPriority(filteredBooks);
+              
+              // 构建各优先级的内容
+              const highPriorityContent = sortedBooks.high
+                .map((worldBook) => {
+                  return `\n\n## 世界书: ${worldBook.name}\n${worldBook.content}`;
                 })
-                .filter(Boolean)
                 .join("");
-              if (linkedContents) {
-                worldBookContent = `\n\n# 核心世界观设定 (你必须严格遵守)\n${linkedContents}\n`;
+              
+              const mediumPriorityContent = sortedBooks.medium
+                .map((worldBook) => {
+                  return `\n\n## 世界书: ${worldBook.name}\n${worldBook.content}`;
+                })
+                .join("");
+              
+              const lowPriorityContent = sortedBooks.low
+                .map((worldBook) => {
+                  return `\n\n## 世界书: ${worldBook.name}\n${worldBook.content}`;
+                })
+                .join("");
+              
+              if (highPriorityContent) {
+                worldBookContentHigh = `\n\n# 【高优先级】核心世界观设定 (你必须严格遵守)\n${highPriorityContent}\n`;
+              }
+              if (mediumPriorityContent) {
+                worldBookContentMedium = `\n\n# 【中优先级】核心世界观设定 (你必须严格遵守)\n${mediumPriorityContent}\n`;
+              }
+              if (lowPriorityContent) {
+                worldBookContentLow = `\n\n# 【低优先级】核心世界观设定 (你必须严格遵守)\n${lowPriorityContent}\n`;
               }
             }
+            
+            // 组合所有优先级的内容
+            const worldBookContent = worldBookContentHigh + worldBookContentMedium + worldBookContentLow;
             let musicContext = "";
             // 注意：后台群聊活动通常不与特定的“一起听歌”会话绑定，因此这里我们提供一个空的音乐上下文。
             // 如果未来需要更复杂的功能，可以在此扩展。
@@ -37174,9 +37509,14 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               const book = state.worldBooks.find((b) => b.id === id);
               if (!book || !book.content) return null;
               
-              // 如果没有关键词，则始终加载（全局使用）
-              if (!book.triggerKeywords || !book.triggerKeywords.trim()) {
+              // 【必读】如果标记为必读，则始终加载，不受关键词限制
+              if (book.isRequired) {
                 return book;
+              }
+              
+              // 如果没有关键词，则不加载（必须通过必读开关或关键词匹配才能加载）
+              if (!book.triggerKeywords || !book.triggerKeywords.trim()) {
+                return null;
               }
               
               // 如果有关键词，检查是否匹配
@@ -37184,6 +37524,11 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                 .split(",")
                 .map((k) => k.trim().toLowerCase())
                 .filter((k) => k);
+              
+              // 如果关键词列表为空（分割后没有有效关键词），则不加载
+              if (keywords.length === 0) {
+                return null;
+              }
               
               const hasKeyword = keywords.some((keyword) =>
                 contextLower.includes(keyword)
@@ -37193,6 +37538,38 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               return hasKeyword ? book : null;
             })
             .filter(Boolean);
+        }
+
+        /**
+         * 【全局世界书】获取所有全局世界书
+         * @returns {Array<Object>} 全局世界书数组
+         */
+        function getGlobalWorldBooks() {
+          return state.worldBooks.filter(book => book.isGlobal && book.content);
+        }
+
+        /**
+         * 【优先级排序】按照优先级对世界书进行排序
+         * @param {Array<Object>} books - 世界书数组
+         * @returns {Object} 按优先级分组的世界书对象 {high: [], medium: [], low: []}
+         */
+        function sortWorldBooksByPriority(books) {
+          const sorted = {
+            high: [],
+            medium: [],
+            low: []
+          };
+          
+          books.forEach(book => {
+            const priority = book.priority || "medium"; // 默认为中优先级
+            if (sorted[priority]) {
+              sorted[priority].push(book);
+            } else {
+              sorted.medium.push(book); // 如果优先级无效，默认放到中优先级
+            }
+          });
+          
+          return sorted;
         }
 
         /**
@@ -39791,35 +40168,39 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                 }
               );
 
-              const allContexts = await Promise.all(contextPromises);
-              linkedMemoryContext = allContexts.filter(Boolean).join("\n");
-            }
+            const allContexts = await Promise.all(contextPromises);
+            linkedMemoryContext = allContexts.filter(Boolean).join("\n");
+          }
 
-            // 【世界书关键词优化】根据关键词过滤世界书
-            let worldBookContext = "";
-            if (
-              chat.settings.linkedWorldBookIds &&
-              chat.settings.linkedWorldBookIds.length > 0
-            ) {
-              // 获取最近的对话内容用于关键词匹配
-              const recentMessages = chat.history
-                .slice(-10)
-                .map((msg) => String(msg.content || ""))
-                .join(" ");
-              
-              const filteredBooks = filterWorldBooksByKeywords(
-                chat.settings.linkedWorldBookIds,
-                recentMessages
-              );
-              
-              worldBookContext =
-                "--- 世界观设定 (必须严格遵守) ---\n" +
-                filteredBooks
-                  .map((book) => `[${book.name}]: ${book.content}`)
-                  .join("\n\n");
-            }
+          // 【世界书关键词优化】根据关键词过滤世界书
+          // 【全局世界书】自动加载全局世界书
+          let worldBookContext = "";
+          
+          // 合并角色绑定的世界书ID和全局世界书ID
+          const allWorldBookIds = new Set(chat.settings.linkedWorldBookIds || []);
+          const globalBooks = getGlobalWorldBooks();
+          globalBooks.forEach(book => allWorldBookIds.add(book.id));
+          
+          if (allWorldBookIds.size > 0) {
+            // 获取最近的对话内容用于关键词匹配
+            const recentMessages = chat.history
+              .slice(-10)
+              .map((msg) => String(msg.content || ""))
+              .join(" ");
+            
+            const filteredBooks = filterWorldBooksByKeywords(
+              Array.from(allWorldBookIds),
+              recentMessages
+            );
+            
+            worldBookContext =
+              "--- 世界观设定 (必须严格遵守) ---\n" +
+              filteredBooks
+                .map((book) => `[${book.name}]: ${book.content}`)
+                .join("\n\n");
+          }
 
-            const npcLibrary = chat.npcLibrary || [];
+          const npcLibrary = chat.npcLibrary || [];
             let npcContext = "";
             // 如果有指定对象，就【不使用】默认的 NPC 随机列表，避免混淆
             if (!specificPromptInject) {
@@ -40229,11 +40610,15 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               linkedMemoryContext
             );
             // 【世界书关键词优化】根据关键词过滤世界书
+            // 【全局世界书】自动加载全局世界书
             let worldBookContext = "";
-            if (
-              chat.settings.linkedWorldBookIds &&
-              chat.settings.linkedWorldBookIds.length > 0
-            ) {
+            
+            // 合并角色绑定的世界书ID和全局世界书ID
+            const allWorldBookIds = new Set(chat.settings.linkedWorldBookIds || []);
+            const globalBooks = getGlobalWorldBooks();
+            globalBooks.forEach(book => allWorldBookIds.add(book.id));
+            
+            if (allWorldBookIds.size > 0) {
               // 获取最近的对话内容用于关键词匹配
               const recentMessages = chat.history
                 .slice(-10)
@@ -40241,7 +40626,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                 .join(" ");
               
               const filteredBooks = filterWorldBooksByKeywords(
-                chat.settings.linkedWorldBookIds,
+                Array.from(allWorldBookIds),
                 recentMessages
               );
               
@@ -53517,6 +53902,9 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                   name: name.trim(),
                   content: "",
                   triggerKeywords: null, // 【世界书关键词优化】初始化触发关键词
+                  isGlobal: false, // 【全局世界书】初始化全局世界书开关
+                  isRequired: false, // 【必读】初始化必读开关
+                  priority: "medium", // 【优先级】初始化优先级，默认为中
                 };
                 await db.worldBooks.add(newBook);
                 state.worldBooks.push(newBook);
@@ -53556,6 +53944,13 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                   "world-book-trigger-keywords-input"
                 ).value.trim();
                 book.triggerKeywords = triggerKeywords || null;
+
+                // 【全局世界书和必读】保存开关状态
+                book.isGlobal = document.getElementById("world-book-is-global-checkbox").checked || false;
+                book.isRequired = document.getElementById("world-book-is-required-checkbox").checked || false;
+
+                // 【优先级】保存优先级设置
+                book.priority = document.getElementById("world-book-priority-select").value || "medium";
 
                 await db.worldBooks.put(book);
                 document.getElementById("world-book-editor-title").textContent =

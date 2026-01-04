@@ -1556,6 +1556,16 @@ function shouldMentionPeriod(periodData, duration) {
   return false;
 }
 
+// 确保函数在全局作用域中可用（用于index.html中的调用）
+if (typeof window !== 'undefined') {
+  window.getPeriodDataForDate = getPeriodDataForDate;
+  window.getTodayPeriodData = getTodayPeriodData;
+  window.getCurrentPeriodDuration = getCurrentPeriodDuration;
+  window.formatPeriodDataForAI = formatPeriodDataForAI;
+  window.shouldActivelyCareAboutPeriod = shouldActivelyCareAboutPeriod;
+  window.shouldMentionPeriod = shouldMentionPeriod;
+}
+
 let editingCategoryId = null;
 
 /**
