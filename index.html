@@ -104,6 +104,13 @@
         <img id="video-floating-avatar" src="" />
       </div>
 
+      <!-- 桌宠元素 -->
+      <div id="desktop-pet-container" style="display: none;">
+        <div id="desktop-pet-circle">
+          <img id="desktop-pet-avatar" src="" alt="桌宠" />
+        </div>
+      </div>
+
       <div id="floating-lyrics-bar">
         <span id="floating-lyric-text">♪</span>
 
@@ -6230,6 +6237,26 @@
               >
                 配置角色专属提示词
               </button>
+            </div>
+
+            <!-- 桌宠功能开关 -->
+            <div
+              class="form-group"
+              id="desktop-pet-group"
+              style="display: none"
+            >
+              <div class="moe-divider"></div>
+              <label style="display: flex; align-items: center; gap: 8px;">
+                <input
+                  type="checkbox"
+                  id="desktop-pet-switch"
+                  style="width: 18px; height: 18px; cursor: pointer;"
+                />
+                <span>桌宠</span>
+              </label>
+              <small style="color: #888; font-size: 12px; display: block; margin-top: 4px;">
+                开启后，小手机界面会出现该角色的桌宠，可以拖拽移动。同时只能有一个角色开启桌宠。
+              </small>
             </div>
           </div>
 
@@ -54608,9 +54635,24 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                 isGroup ? "none" : "block";
               document.getElementById("weibo-instruction-group").style.display =
                 isGroup ? "none" : "block";
-              // 根据是否为群聊，显示或隐藏“好友分组”区域
+              // 根据是否为群聊，显示或隐藏"好友分组"区域
               document.getElementById("assign-group-section").style.display =
                 isGroup ? "none" : "block";
+
+              // 桌宠功能开关的显示/隐藏和加载
+              const desktopPetGroup = document.getElementById("desktop-pet-group");
+              if (!isGroup) {
+                desktopPetGroup.style.display = "block";
+                // 加载桌宠设置
+                const desktopPetEnabled = chat.settings.desktopPetEnabled || false;
+                document.getElementById("desktop-pet-switch").checked = desktopPetEnabled;
+                // 加载桌宠位置（如果有保存的话）
+                if (chat.settings.desktopPetPosition) {
+                  // 位置会在显示桌宠时应用
+                }
+              } else {
+                desktopPetGroup.style.display = "none";
+              }
 
               // --- 加载表单数据 ---
               document.getElementById("chat-name-input").value = chat.name;
@@ -55285,6 +55327,34 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                   .getElementById("couple-avatar-description")
                   .value.trim();
 
+                // 保存桌宠设置
+                const desktopPetEnabled = document.getElementById("desktop-pet-switch").checked;
+                
+                // 如果开启新桌宠，先关闭其他角色的桌宠
+                if (desktopPetEnabled) {
+                  for (const chatId in state.chats) {
+                    const otherChat = state.chats[chatId];
+                    if (otherChat.id !== chat.id && !otherChat.isGroup && otherChat.settings) {
+                      otherChat.settings.desktopPetEnabled = false;
+                      await db.chats.put(otherChat);
+                    }
+                  }
+                }
+                
+                chat.settings.desktopPetEnabled = desktopPetEnabled;
+                
+                // 如果桌宠已显示，保存当前位置
+                const petContainer = document.getElementById("desktop-pet-container");
+                if (petContainer && petContainer.style.display !== "none") {
+                  const rect = petContainer.getBoundingClientRect();
+                  const phoneScreen = document.getElementById("phone-screen");
+                  const screenRect = phoneScreen.getBoundingClientRect();
+                  chat.settings.desktopPetPosition = {
+                    top: rect.top - screenRect.top,
+                    left: rect.left - screenRect.left
+                  };
+                }
+
                 // 从输入框读取值并保存
                 chat.settings.weiboProfession = document
                   .getElementById("weibo-profession-input")
@@ -55483,6 +55553,9 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               }
 
               await db.chats.put(chat);
+
+              // 更新桌宠显示
+              updateDesktopPet();
 
               applyScopedCss(
                 chat.settings.customCss,
@@ -58953,7 +59026,146 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
 
           // 在页面加载时，就应用一次已保存的设置
           applyLyricsSettings();
-          // “查角色手机”功能事件监听器
+
+          // ========== 桌宠功能 ==========
+          /**
+           * 更新桌宠显示
+           * 检查所有角色，找到开启桌宠的角色并显示
+           */
+          async function updateDesktopPet() {
+            const petContainer = document.getElementById("desktop-pet-container");
+            const petAvatar = document.getElementById("desktop-pet-avatar");
+            
+            if (!petContainer || !petAvatar) return;
+
+            // 查找所有开启桌宠的角色
+            let activePetChat = null;
+            for (const chatId in state.chats) {
+              const chat = state.chats[chatId];
+              if (!chat.isGroup && chat.settings?.desktopPetEnabled) {
+                activePetChat = chat;
+                break; // 只允许一个桌宠
+              }
+            }
+
+            if (activePetChat) {
+              // 显示桌宠
+              petAvatar.src = activePetChat.settings.aiAvatar || defaultAvatar;
+              petContainer.style.display = "block";
+              
+              // 如果有保存的位置，应用它
+              if (activePetChat.settings.desktopPetPosition) {
+                petContainer.style.top = activePetChat.settings.desktopPetPosition.top + "px";
+                petContainer.style.left = activePetChat.settings.desktopPetPosition.left + "px";
+              } else {
+                // 默认位置
+                petContainer.style.top = "150px";
+                petContainer.style.left = "auto";
+                petContainer.style.right = "20px";
+              }
+            } else {
+              // 隐藏桌宠
+              petContainer.style.display = "none";
+            }
+          }
+
+          // 初始化桌宠拖拽功能
+          function initDesktopPetDrag() {
+            const petContainer = document.getElementById("desktop-pet-container");
+            if (!petContainer) return;
+
+            let isDragging = false;
+            let offsetX = 0;
+            let offsetY = 0;
+
+            const getEventCoords = (e) => {
+              if (e.touches && e.touches.length > 0) {
+                return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+              }
+              return { x: e.clientX, y: e.clientY };
+            };
+
+            const onDragStart = (e) => {
+              isDragging = true;
+              petContainer.classList.add("dragging");
+              
+              const coords = getEventCoords(e);
+              const rect = petContainer.getBoundingClientRect();
+              offsetX = coords.x - rect.left;
+              offsetY = coords.y - rect.top;
+              
+              e.preventDefault();
+            };
+
+            const onDrag = (e) => {
+              if (!isDragging) return;
+              
+              const coords = getEventCoords(e);
+              const phoneScreen = document.getElementById("phone-screen");
+              const screenRect = phoneScreen.getBoundingClientRect();
+              
+              // 计算新位置，限制在屏幕内
+              let newLeft = coords.x - offsetX - screenRect.left;
+              let newTop = coords.y - offsetY - screenRect.top;
+              
+              // 边界检查
+              const petWidth = petContainer.offsetWidth;
+              const petHeight = petContainer.offsetHeight;
+              newLeft = Math.max(0, Math.min(newLeft, screenRect.width - petWidth));
+              newTop = Math.max(0, Math.min(newTop, screenRect.height - petHeight));
+              
+              petContainer.style.left = newLeft + "px";
+              petContainer.style.top = newTop + "px";
+              petContainer.style.right = "auto";
+              
+              e.preventDefault();
+            };
+
+            const onDragEnd = async (e) => {
+              if (!isDragging) return;
+              
+              isDragging = false;
+              petContainer.classList.remove("dragging");
+              
+              // 保存位置到当前显示的桌宠角色
+              for (const chatId in state.chats) {
+                const chat = state.chats[chatId];
+                if (!chat.isGroup && chat.settings?.desktopPetEnabled) {
+                  const rect = petContainer.getBoundingClientRect();
+                  const phoneScreen = document.getElementById("phone-screen");
+                  const screenRect = phoneScreen.getBoundingClientRect();
+                  
+                  chat.settings.desktopPetPosition = {
+                    top: rect.top - screenRect.top,
+                    left: rect.left - screenRect.left
+                  };
+                  
+                  await db.chats.put(chat);
+                  break;
+                }
+              }
+            };
+
+            // 绑定事件
+            petContainer.addEventListener("mousedown", onDragStart);
+            petContainer.addEventListener("touchstart", onDragStart);
+            document.addEventListener("mousemove", onDrag);
+            document.addEventListener("touchmove", onDrag);
+            document.addEventListener("mouseup", onDragEnd);
+            document.addEventListener("touchend", onDragEnd);
+          }
+
+          // 初始化拖拽功能
+          initDesktopPetDrag();
+          
+          // 页面加载时更新桌宠显示
+          updateDesktopPet();
+          
+          // 将函数暴露到全局，供保存设置时调用
+          window.updateDesktopPet = updateDesktopPet;
+          // ========== 桌宠功能结束 ==========
+
+          // "查角色手机"功能事件监听器
 
           // 1. 绑定主屏幕上的“查手机”APP图标
           const checkPhoneAppIcon = document.querySelector(
@@ -61368,7 +61580,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             // 添加一条隐藏的系统指令消息，触发AI主动回复
             const systemInstruction = {
               role: "user",
-              content: `[系统指令：用户按下了"推进"按钮，现在轮到你主动行动了，请继续对话。]`,
+              content: `[系统指令：用户按下了"推进"按钮，现在轮到你主动行动了]`,
               timestamp: Date.now(),
               isHidden: true, // 隐藏这条消息，不在界面显示
             };

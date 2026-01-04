@@ -20488,6 +20488,56 @@ body {
     border-color: rgba(76, 175, 80, 0.5);
     box-shadow: 0 0 0 10px rgba(76, 175, 80, 0);
   }
+}
+
+/* ▼▼▼ 桌宠样式 ▼▼▼ */
+#desktop-pet-container {
+  position: fixed;
+  top: 150px;
+  right: 20px;
+  width: 80px;
+  height: 80px;
+  z-index: 99998;
+  cursor: move;
+  touch-action: none;
+  user-select: none;
+}
+
+#desktop-pet-circle {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+  background-color: rgba(255, 255, 255, 0.1);
+  transition: transform 0.1s;
+}
+
+#desktop-pet-circle:hover {
+  transform: scale(1.05);
+}
+
+#desktop-pet-container.dragging #desktop-pet-circle {
+  cursor: grabbing;
+  cursor: -webkit-grabbing;
+  transform: scale(1.1);
+}
+
+#desktop-pet-avatar {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+/* 夜间模式适配 */
+#phone-screen.dark-mode #desktop-pet-circle {
+  border-color: rgba(255, 255, 255, 0.7);
+  background-color: rgba(0, 0, 0, 0.3);
+}
+/* ▲▲▲ 桌宠样式结束 ▲▲▲ */
+  }
   100% {
     border-color: rgba(76, 175, 80, 1);
     box-shadow: 0 0 0 0 rgba(76, 175, 80, 0);
