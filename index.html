@@ -59163,6 +59163,451 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           
           // 将函数暴露到全局，供保存设置时调用
           window.updateDesktopPet = updateDesktopPet;
+
+          // ========== 桌宠智能反应功能 ==========
+          /**
+           * 获取当前显示的界面ID
+           */
+          function getCurrentScreenId() {
+            const activeScreen = document.querySelector(".screen.active");
+            return activeScreen ? activeScreen.id : null;
+          }
+
+          /**
+           * 获取QQ消息界面的信息（聊天对象、备注名、置顶信息等）
+           */
+          function getQQMessageInfo() {
+            const screenId = getCurrentScreenId();
+            if (screenId !== "character-chat-list-screen") {
+              return null;
+            }
+
+            // 获取当前查看的角色手机的角色
+            if (!activeCharacterPhoneId) return null;
+            const characterChat = state.chats[activeCharacterPhoneId];
+            if (!characterChat) return null;
+
+            const characterChatData = characterChat.characterPhoneData || {};
+            const chats = characterChatData.chats || {};
+
+            // 获取"我"的备注名
+            const userContactInData = Object.values(chats).find(
+              (c) => !c.history || c.history.length === 0
+            );
+            const remarkNameForMe = userContactInData
+              ? userContactInData.remarkName
+              : "我";
+
+            // 从DOM中获取置顶信息（第一个聊天项通常是置顶的）
+            const listEl = document.getElementById("character-chat-list");
+            const firstChatItem = listEl?.querySelector(".chat-list-item");
+            const isFirstPinned = firstChatItem && firstChatItem.dataset.isUserChat !== "true";
+
+            // 获取所有聊天对象（包括私信和群聊）
+            const chatList = [];
+            const pinnedChats = [];
+            
+            // 添加与"我"的聊天
+            const realChatHistory = characterChat.history || [];
+            if (realChatHistory.length > 0) {
+              const myChat = {
+                type: "私信",
+                contactName: remarkNameForMe,
+                realName: "我",
+                remarkName: remarkNameForMe,
+                isUserChat: true,
+                isPinned: false, // "我"的聊天通常不置顶
+              };
+              chatList.push(myChat);
+            }
+
+            // 添加与其他NPC的聊天
+            for (const contactName in chats) {
+              if (contactName === remarkNameForMe) continue;
+              const contact = chats[contactName];
+              if (!contact.history || contact.history.length === 0) continue;
+
+              // 判断是私信还是群聊
+              const npcFromLibrary = (characterChat.npcLibrary || []).find(
+                (npc) => npc.name === contactName
+              );
+              
+              const npcChat = {
+                type: "私信",
+                contactName: contactName,
+                realName: contactName,
+                remarkName: contact.remarkName || contactName,
+                isUserChat: false,
+                isPinned: false, // 暂时设为false，后续可以从DOM判断
+              };
+              chatList.push(npcChat);
+            }
+
+            // 尝试从DOM判断置顶（第一个非"我"的聊天项可能是置顶的）
+            if (listEl) {
+              const allItems = listEl.querySelectorAll(".chat-list-item");
+              allItems.forEach((item, index) => {
+                if (item.dataset.isUserChat !== "true" && index === 0) {
+                  // 第一个非"我"的聊天可能是置顶的
+                  const contactName = item.dataset.contactName;
+                  const chat = chatList.find(c => c.contactName === contactName);
+                  if (chat) {
+                    chat.isPinned = true;
+                    pinnedChats.push(chat);
+                  }
+                }
+              });
+            }
+
+            return {
+              characterName: characterChat.name,
+              characterPersona: characterChat.settings?.aiPersona || "",
+              chatList: chatList,
+              pinnedChats: pinnedChats,
+              remarkNameForMe: remarkNameForMe,
+            };
+          }
+
+          /**
+           * 显示等待状态的小对话泡
+           */
+          function showPetWaitingBubble() {
+            let bubble = document.getElementById("desktop-pet-waiting-bubble");
+            if (!bubble) {
+              bubble = document.createElement("div");
+              bubble.id = "desktop-pet-waiting-bubble";
+              bubble.className = "desktop-pet-waiting-bubble";
+              bubble.textContent = "正在窥屏中...";
+              document.getElementById("phone-screen").appendChild(bubble);
+            }
+            
+            const petContainer = document.getElementById("desktop-pet-container");
+            if (!petContainer) return;
+            
+            const petRect = petContainer.getBoundingClientRect();
+            const phoneScreen = document.getElementById("phone-screen");
+            const screenRect = phoneScreen.getBoundingClientRect();
+            
+            // 将气泡定位在桌宠旁边
+            bubble.style.left = (petRect.left - screenRect.left + petRect.width + 10) + "px";
+            bubble.style.top = (petRect.top - screenRect.top) + "px";
+            bubble.style.display = "block";
+          }
+
+          /**
+           * 隐藏等待状态的小对话泡
+           */
+          function hidePetWaitingBubble() {
+            const bubble = document.getElementById("desktop-pet-waiting-bubble");
+            if (bubble) {
+              bubble.style.display = "none";
+            }
+          }
+
+          /**
+           * 显示桌宠回复的大气泡
+           */
+          function showPetReplyBubble(content) {
+            // 移除旧的回复气泡
+            const oldBubble = document.getElementById("desktop-pet-reply-bubble");
+            if (oldBubble) {
+              oldBubble.remove();
+            }
+
+            const bubble = document.createElement("div");
+            bubble.id = "desktop-pet-reply-bubble";
+            bubble.className = "desktop-pet-reply-bubble";
+            
+            bubble.innerHTML = `
+              <div class="desktop-pet-reply-content">${content}</div>
+              <button class="desktop-pet-reply-delete" onclick="this.closest('#desktop-pet-reply-bubble').remove()">✕</button>
+            `;
+            
+            document.getElementById("phone-screen").appendChild(bubble);
+            
+            // 添加淡入动画
+            setTimeout(() => {
+              bubble.classList.add("visible");
+            }, 10);
+          }
+
+          /**
+           * 触发桌宠AI回复
+           */
+          async function triggerPetAIResponse() {
+            // 获取当前桌宠角色
+            let activePetChat = null;
+            for (const chatId in state.chats) {
+              const chat = state.chats[chatId];
+              if (!chat.isGroup && chat.settings?.desktopPetEnabled) {
+                activePetChat = chat;
+                break;
+              }
+            }
+
+            if (!activePetChat) return;
+
+            // 获取当前界面信息
+            const screenId = getCurrentScreenId();
+            let contextInfo = "";
+            let systemPrompt = "";
+
+            if (screenId === "character-chat-list-screen") {
+              // QQ消息界面
+              const qqInfo = getQQMessageInfo();
+              if (!qqInfo) {
+                systemPrompt = `你是角色"${activePetChat.name}"，你的人设是：${activePetChat.settings?.aiPersona || ""}。你正在观察用户的手机界面，但当前界面信息无法获取。请用符合你人设的方式，简短地表达你的想法（1-2句话）。`;
+              } else {
+                // 构建聊天列表信息
+                const chatListText = qqInfo.chatList.map(chat => {
+                  let text = "";
+                  if (chat.isUserChat) {
+                    text = `- 与"${chat.remarkName}"的私信`;
+                  } else {
+                    text = `- 与"${chat.remarkName}"（真名：${chat.realName}）的私信`;
+                  }
+                  if (chat.isPinned) {
+                    text += " [置顶]";
+                  }
+                  return text;
+                }).join("\n");
+
+                // 检查是否有置顶的聊天（在角色手机中，第一个非"我"的聊天可能是置顶的）
+                const pinnedInfo = qqInfo.pinnedChats.length > 0 
+                  ? `被置顶的人：${qqInfo.pinnedChats.map(c => c.remarkName).join("、")}`
+                  : "没有置顶的聊天";
+
+                systemPrompt = `你是角色"${activePetChat.name}"，你的人设是：${activePetChat.settings?.aiPersona || ""}。
+
+你正在观察用户的手机界面，当前界面是查看角色"${qqInfo.characterName}"的QQ消息列表。你看到了以下信息：
+
+# 聊天列表
+${chatListText}
+
+# 置顶信息
+${pinnedInfo}
+
+# 你的备注名
+用户给你的备注名是："${qqInfo.remarkNameForMe}"
+
+# 任务
+根据以上信息，用符合你人设的方式，简短地表达你的想法或反应（1-3句话）。你可以：
+- 对用户查看其他角色的聊天表示吃醋、好奇或调侃
+- 对用户给其他角色取的备注名进行调侃、评价或吐槽
+- 对置顶的人表示不满、好奇或调侃
+- 其他符合你人设的自然反应
+
+请直接输出你的反应，不要添加任何格式标记，语气要自然、符合你的人设。`;
+              }
+            } else {
+              // 其他界面
+              systemPrompt = `你是角色"${activePetChat.name}"，你的人设是：${activePetChat.settings?.aiPersona || ""}。你正在观察用户的手机界面，当前界面是：${screenId || "未知界面"}。请用符合你人设的方式，简短地表达你的想法（1-2句话）。`;
+            }
+
+            // 显示等待气泡
+            showPetWaitingBubble();
+
+            try {
+              // 从state.apiConfig读取配置
+              const proxyUrl = state.apiConfig?.proxyUrl;
+              const apiKey = state.apiConfig?.apiKey;
+              const model = state.apiConfig?.model;
+              
+              // 如果state.apiConfig中没有，尝试从DOM直接读取（作为备用方案）
+              const proxyUrlFromDom = proxyUrl || document.getElementById("proxy-url")?.value?.trim();
+              const apiKeyFromDom = apiKey || document.getElementById("api-key")?.value?.trim();
+              const modelFromDom = model || document.getElementById("model-select")?.value?.trim();
+              
+              // 使用可用的配置
+              const finalProxyUrl = proxyUrlFromDom;
+              const finalApiKey = apiKeyFromDom;
+              const finalModel = modelFromDom;
+              
+              if (!finalProxyUrl || !finalApiKey || !finalModel) {
+                console.error("API配置检查:", {
+                  fromState: { proxyUrl, apiKey, model },
+                  fromDom: { proxyUrlFromDom, apiKeyFromDom, modelFromDom },
+                  stateApiConfig: state.apiConfig
+                });
+                throw new Error(`API配置不完整。请检查：${!finalProxyUrl ? '反代地址' : ''}${!finalApiKey ? '密钥' : ''}${!finalModel ? '模型' : ''}`);
+              }
+
+              const messagesForApi = [{ role: "user", content: systemPrompt }];
+              
+              // 检查是否是Gemini API（与其他代码保持一致）
+              const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models";
+              const isGemini = finalProxyUrl === GEMINI_API_URL || finalProxyUrl?.includes("generativelanguage.googleapis.com");
+              
+              let response;
+              if (isGemini) {
+                // Gemini API处理 - 使用toGeminiRequestData函数（如果存在）
+                if (window.toGeminiRequestData) {
+                  const geminiConfig = window.toGeminiRequestData(
+                    finalModel,
+                    finalApiKey,
+                    systemPrompt,
+                    messagesForApi,
+                    true,
+                    0.8
+                  );
+                  response = await fetch(geminiConfig.url, geminiConfig.data);
+                } else {
+                  // 备用方案：直接调用Gemini API
+                  const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/${finalModel}:generateContent?key=${finalApiKey}`;
+                  response = await fetch(geminiUrl, {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                      contents: [{ role: "user", parts: [{ text: systemPrompt }] }],
+                      generationConfig: {
+                        temperature: 0.8,
+                        // 移除 maxOutputTokens 限制，让API返回完整响应
+                      },
+                    }),
+                  });
+                }
+              } else {
+                // 标准OpenAI API处理
+                response = await fetch(`${finalProxyUrl}/v1/chat/completions`, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${finalApiKey}`,
+                  },
+                  body: JSON.stringify({
+                    model: finalModel,
+                    messages: messagesForApi,
+                    temperature: 0.8,
+                    // 不设置 max_tokens，让API使用默认值或返回完整响应
+                  }),
+                });
+              }
+
+              if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`API请求失败: ${response.status} - ${errorText}`);
+              }
+
+              const data = await response.json();
+              
+              // 检查API返回的错误
+              if (data.error) {
+                throw new Error(`API返回错误: ${data.error.message || JSON.stringify(data.error)}`);
+              }
+              
+              // 根据API类型提取回复内容
+              let reply;
+              if (isGemini) {
+                reply = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+              } else {
+                // 标准OpenAI格式：data.choices[0].message.content
+                const choice = data.choices?.[0];
+                if (choice) {
+                  // 优先尝试 message.content
+                  reply = choice.message?.content?.trim();
+                  
+                  // 检查 finish_reason
+                  const finishReason = choice.finish_reason;
+                  
+                  // 如果内容为空但 finish_reason 是 'length'，说明响应被截断
+                  if (!reply && finishReason === 'length') {
+                    console.warn("API响应被截断（达到max_tokens限制），但内容为空。可能需要检查API配置。");
+                    throw new Error("API响应被截断，但未返回内容。请尝试增加max_tokens或检查API配置。");
+                  }
+                  
+                  // 如果内容为空但 finish_reason 是其他值，尝试其他路径
+                  if (!reply) {
+                    // 尝试 delta.content（流式响应的增量）
+                    reply = choice.delta?.content?.trim();
+                    
+                    // 如果还没有，尝试直接访问 content
+                    if (!reply && choice.content) {
+                      reply = typeof choice.content === 'string' ? choice.content.trim() : choice.content;
+                    }
+                    
+                    // 如果还是没有，尝试 text 字段
+                    if (!reply && choice.text) {
+                      reply = typeof choice.text === 'string' ? choice.text.trim() : choice.text;
+                    }
+                    
+                    // 尝试 message.text（某些API变体）
+                    if (!reply) {
+                      reply = choice.message?.text?.trim();
+                    }
+                    
+                    // 尝试直接访问 message（如果它是字符串）
+                    if (!reply && typeof choice.message === 'string') {
+                      reply = choice.message.trim();
+                    }
+                  }
+                  
+                  // 如果仍然没有内容，记录详细信息
+                  if (!reply) {
+                    console.error("API响应数据:", data);
+                    console.error("choices[0] 详细内容:", choice);
+                    console.error("finish_reason:", finishReason);
+                    throw new Error(`API返回的回复内容为空。finish_reason: ${finishReason}。请检查API响应格式或配置。`);
+                  }
+                }
+              }
+
+              // 隐藏等待气泡
+              hidePetWaitingBubble();
+
+              // 显示回复气泡
+              showPetReplyBubble(reply);
+            } catch (error) {
+              console.error("桌宠AI回复失败:", error);
+              console.error("错误详情:", {
+                message: error.message,
+                stack: error.stack,
+                apiConfig: {
+                  proxyUrl: state.apiConfig?.proxyUrl,
+                  hasApiKey: !!state.apiConfig?.apiKey,
+                  model: state.apiConfig?.model,
+                }
+              });
+              hidePetWaitingBubble();
+              showPetReplyBubble(`抱歉，我现在无法回应... (${error.message})`);
+            }
+          }
+
+          /**
+           * 初始化桌宠双击回复功能
+           */
+          function initDesktopPetDoubleClick() {
+            const petContainer = document.getElementById("desktop-pet-container");
+            if (!petContainer) return;
+
+            let clickTimer = null;
+            let clickCount = 0;
+
+            petContainer.addEventListener("click", (e) => {
+              // 如果正在拖拽，不触发双击
+              if (petContainer.classList.contains("dragging")) {
+                return;
+              }
+
+              clickCount++;
+              
+              if (clickCount === 1) {
+                clickTimer = setTimeout(() => {
+                  clickCount = 0;
+                }, 300); // 300ms内没有第二次点击则重置
+              } else if (clickCount === 2) {
+                clearTimeout(clickTimer);
+                clickCount = 0;
+                // 触发AI回复
+                triggerPetAIResponse();
+              }
+            });
+          }
+
+          // 初始化双击功能
+          initDesktopPetDoubleClick();
+          // ========== 桌宠智能反应功能结束 ==========
           // ========== 桌宠功能结束 ==========
 
           // "查角色手机"功能事件监听器

@@ -20536,6 +20536,119 @@ body {
   border-color: rgba(255, 255, 255, 0.7);
   background-color: rgba(0, 0, 0, 0.3);
 }
+
+/* ▼▼▼ 桌宠等待气泡样式 ▼▼▼ */
+#desktop-pet-waiting-bubble {
+  position: absolute;
+  background-color: rgba(0, 0, 0, 0.75);
+  color: white;
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  white-space: nowrap;
+  z-index: 99999;
+  pointer-events: none;
+  display: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  animation: petBubblePulse 1.5s ease-in-out infinite;
+}
+
+@keyframes petBubblePulse {
+  0%, 100% {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+}
+
+#phone-screen.dark-mode #desktop-pet-waiting-bubble {
+  background-color: rgba(255, 255, 255, 0.9);
+  color: #000;
+}
+/* ▲▲▲ 桌宠等待气泡样式结束 ▲▲▲ */
+
+/* ▼▼▼ 桌宠回复气泡样式 ▼▼▼ */
+#desktop-pet-reply-bubble {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.9);
+  width: 80%;
+  max-width: 500px;
+  min-height: 100px;
+  background-color: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  z-index: 100000;
+  display: flex;
+  flex-direction: column;
+  opacity: 0;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  pointer-events: auto;
+}
+
+#desktop-pet-reply-bubble.visible {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.desktop-pet-reply-content {
+  flex-grow: 1;
+  color: var(--text-primary);
+  font-size: 15px;
+  line-height: 1.6;
+  margin-bottom: 10px;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+.desktop-pet-reply-delete {
+  align-self: flex-end;
+  background-color: rgba(255, 59, 48, 0.1);
+  color: #ff3b30;
+  border: 1px solid rgba(255, 59, 48, 0.3);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-weight: 500;
+}
+
+.desktop-pet-reply-delete:hover {
+  background-color: rgba(255, 59, 48, 0.2);
+  border-color: rgba(255, 59, 48, 0.5);
+}
+
+.desktop-pet-reply-delete:active {
+  transform: scale(0.95);
+}
+
+#phone-screen.dark-mode #desktop-pet-reply-bubble {
+  background-color: rgba(28, 28, 30, 0.95);
+}
+
+#phone-screen.dark-mode .desktop-pet-reply-content {
+  color: #ffffff;
+}
+
+#phone-screen.dark-mode .desktop-pet-reply-delete {
+  background-color: rgba(255, 59, 48, 0.2);
+  color: #ff6b6b;
+  border-color: rgba(255, 59, 48, 0.4);
+}
+
+#phone-screen.dark-mode .desktop-pet-reply-delete:hover {
+  background-color: rgba(255, 59, 48, 0.3);
+  border-color: rgba(255, 59, 48, 0.6);
+}
+/* ▲▲▲ 桌宠回复气泡样式结束 ▲▲▲ */
 /* ▲▲▲ 桌宠样式结束 ▲▲▲ */
   }
   100% {
