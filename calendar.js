@@ -235,6 +235,21 @@ function toRomanNumeral(num) {
  * @param {Date} date - 要显示的月份日期
  */
 async function renderCalendar(date) {
+  // 类型检查：确保传入的是Date对象
+  if (!(date instanceof Date) || isNaN(date.getTime())) {
+    console.error('renderCalendar: 参数必须是有效的Date对象，收到:', date);
+    // 如果传入的不是Date对象，尝试转换
+    if (typeof date === 'number') {
+      date = new Date(date);
+    } else if (typeof date === 'string') {
+      date = new Date(date);
+    } else {
+      // 如果无法转换，使用当前日期
+      console.warn('renderCalendar: 无法转换参数为Date对象，使用当前日期');
+      date = new Date();
+    }
+  }
+  
   const year = date.getFullYear();
   const month = date.getMonth();
   const today = new Date();

@@ -622,10 +622,16 @@ async function showWeiboScreen() {
 async function renderWeiboProfile() {
   const settings = state.qzoneSettings || {};
   // 【核心】所有数据都从 weibo... 字段读取！
-  document.getElementById('weibo-avatar-img').src = settings.weiboAvatar;
-  document.getElementById('weibo-nickname').textContent = settings.weiboNickname;
-  document.getElementById('weibo-fans-count').textContent = settings.weiboFansCount;
-  document.getElementById('weibo-background-img').src = settings.weiboBackground;
+  // 添加安全检查，确保DOM元素存在
+  const avatarImg = document.getElementById('weibo-avatar-img');
+  const nicknameEl = document.getElementById('weibo-nickname');
+  const fansCountEl = document.getElementById('weibo-fans-count');
+  const backgroundImg = document.getElementById('weibo-background-img');
+  
+  if (avatarImg) avatarImg.src = settings.weiboAvatar || avatarImg.src;
+  if (nicknameEl) nicknameEl.textContent = settings.weiboNickname || '你的昵称';
+  if (fansCountEl) fansCountEl.textContent = settings.weiboFansCount || '0';
+  if (backgroundImg) backgroundImg.src = settings.weiboBackground || backgroundImg.src;
 
   // 动态计算关注数 (使用全局NPC库)
   const allSingleChats = Object.values(state.chats).filter(chat => !chat.isGroup);
@@ -641,11 +647,17 @@ async function renderWeiboProfile() {
     }
     totalNpcCount += npcCount;
   }
-  document.getElementById('weibo-following-count').textContent = allSingleChats.length + totalNpcCount;
+  const followingCountEl = document.getElementById('weibo-following-count');
+  if (followingCountEl) {
+    followingCountEl.textContent = allSingleChats.length + totalNpcCount;
+  }
 
   // 动态计算微博数
   const postsCount = await db.weiboPosts.where('authorId').equals('user').count();
-  document.getElementById('weibo-posts-count').textContent = postsCount;
+  const postsCountEl = document.getElementById('weibo-posts-count');
+  if (postsCountEl) {
+    postsCountEl.textContent = postsCount;
+  }
 
   const professionEl = document.getElementById('weibo-user-profession-display');
   if (professionEl) {
@@ -1357,7 +1369,7 @@ async function showFollowingList() {
           listContainer.appendChild(npcItem);
         });
       }
-    });
+    }
   }
 
   modal.classList.add('visible');
@@ -2875,12 +2887,27 @@ const setupFileUpload = (inputId, callback) => {
 // 3. Weibo Event Listeners
 // ===================================================================
 document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('weibo-app-icon').addEventListener('click', () => {
-    renderWeiboProfile();
-    renderMyWeiboFeed();
-    switchToWeiboView('weibo-my-profile-view');
-    showScreen('weibo-screen');
-  });
+  const weiboAppIcon = document.getElementById('weibo-app-icon');
+  if (weiboAppIcon) {
+    weiboAppIcon.addEventListener('click', async () => {
+      try {
+        // 先切换屏幕，确保DOM元素存在
+        showScreen('weibo-screen');
+        // 等待一下确保DOM渲染完成
+        await new Promise(resolve => setTimeout(resolve, 50));
+        // 然后渲染内容
+        await renderWeiboProfile();
+        await renderMyWeiboFeed();
+        await switchToWeiboView('weibo-my-profile-view');
+      } catch (error) {
+        console.error('打开微博时出错:', error);
+        // 即使出错也显示微博界面
+        showScreen('weibo-screen');
+      }
+    });
+  } else {
+    console.error('微博图标元素未找到: weibo-app-icon');
+  }
 
   document.getElementById('weibo-screen').addEventListener('click', async e => {
     const avatarWrapper = e.target.closest('.weibo-post-avatar-clickable');

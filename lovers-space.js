@@ -1397,8 +1397,8 @@ async function renderLSDiaryView(year, month) {
 
   const diaryData = chat.loversSpaceData.emotionDiaries || {};
 
-  // 渲染日历
-  viewEl.innerHTML = renderCalendar(year, month, diaryData);
+  // 渲染日历（使用本地函数避免与calendar.js冲突）
+  viewEl.innerHTML = renderLSCalendar(year, month, diaryData);
 
   // 渲染心情罐子
   const jarHtml = renderMoodJar(year, month, diaryData);
@@ -1406,13 +1406,13 @@ async function renderLSDiaryView(year, month) {
 }
 
 /**
- * 生成日历的HTML
+ * 生成日历的HTML（情侣空间专用，避免与calendar.js冲突）
  * @param {number} year - 年份
  * @param {number} month - 月份
  * @param {object} diaryData - 日记数据
  * @returns {string} 日历HTML字符串
  */
-function renderCalendar(year, month, diaryData) {
+function renderLSCalendar(year, month, diaryData) {
   const date = new Date(year, month - 1, 1);
   const firstDay = date.getDay(); // 0-6 (周日-周六)
   const daysInMonth = new Date(year, month, 0).getDate();

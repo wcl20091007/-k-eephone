@@ -17833,7 +17833,68 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           return { x: e.pageX, y: e.pageY };
         }
 
+        // 当前界面状态跟踪（供桌宠使用）
+        window.currentScreen = 'home-screen'; // 默认界面
+        
+        // 界面名称映射（供桌宠使用）
+        window.screenNameMap = {
+          'home-screen': '主页',
+          'chat-list-screen': '聊天列表',
+          'chat-interface-screen': '聊天界面',
+          'weibo-screen': '微博',
+          'forum-screen': '论坛',
+          'lovers-space-screen': '情侣空间',
+          'taobao-screen': '淘宝',
+          'calendar-screen': '月历',
+          'game-hall-screen': '游戏大厅',
+          'date-a-live-screen': '约会大作战',
+          'studio-screen': '工作室',
+          'tukey-accounting-screen': '兔k记账',
+          'x-social-screen': 'X社交',
+          'world-book-screen': '世界书',
+          'api-settings-screen': 'API设置',
+          'font-settings-screen': '字体设置',
+          'wallpaper-screen': '壁纸设置',
+          'kk-checkin-screen': 'KK签到',
+          'kk-monitor-screen': '监控中心',
+          'kk-computer-modal': '电脑',
+          'undercover-setup-screen': '卧底游戏设置',
+          'undercover-game-screen': '卧底游戏',
+          'sts-game-screen': '海龟汤游戏',
+          'ludo-game-screen': '飞行棋游戏',
+          'werewolf-game-screen': '狼人杀游戏'
+        };
+        
+        /**
+         * 获取当前界面名称（供桌宠使用）
+         * @returns {string} 当前界面的中文名称
+         */
+        window.getCurrentScreenName = function() {
+          return window.screenNameMap[window.currentScreen] || window.currentScreen || '未知界面';
+        };
+        
+        /**
+         * 获取当前界面ID（供桌宠使用）
+         * @returns {string} 当前界面的ID
+         */
+        window.getCurrentScreenId = function() {
+          return window.currentScreen || 'home-screen';
+        };
+
         function showScreen(screenId) {
+          // 更新当前界面状态
+          window.currentScreen = screenId;
+          
+          // 触发自定义事件，通知桌宠界面变化
+          if (typeof window.dispatchEvent !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('screenChanged', {
+              detail: {
+                screenId: screenId,
+                screenName: window.screenNameMap[screenId] || screenId
+              }
+            }));
+          }
+          
           if (
             !document
               .getElementById("logistics-screen")
