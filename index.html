@@ -59174,6 +59174,144 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           }
 
           /**
+           * 【通用方法】从当前页面提取可见的文本内容
+           * 这个方法可以自动读取任何界面的内容，无需为每个界面单独写代码
+           */
+          function extractCurrentScreenContent() {
+            const activeScreen = document.querySelector(".screen.active");
+            if (!activeScreen) return null;
+
+            try {
+              // 需要排除的元素选择器（按钮、输入框、隐藏元素等）
+              const excludeSelectors = [
+                'button',
+                'input',
+                'textarea',
+                'select',
+                '[hidden]',
+                '.hidden',
+                '[style*="display: none"]',
+                '.action-btn',
+                '.back-btn',
+                'svg',
+                'script',
+                'style',
+                '.desktop-pet-waiting-bubble',
+                '.desktop-pet-reply-bubble'
+              ];
+
+              // 克隆元素以避免修改原始DOM
+              const clone = activeScreen.cloneNode(true);
+              
+              // 移除所有需要排除的元素
+              excludeSelectors.forEach(selector => {
+                try {
+                  clone.querySelectorAll(selector).forEach(el => el.remove());
+                } catch (e) {
+                  // 忽略选择器错误
+                }
+              });
+
+              // 提取文本内容，保留基本结构
+              const extractText = (element, depth = 0) => {
+                if (depth > 15) return ''; // 防止过深递归
+                
+                let text = '';
+                
+                // 如果是文本节点
+                if (element.nodeType === Node.TEXT_NODE) {
+                  const trimmed = element.textContent.trim();
+                  if (trimmed && trimmed.length > 0) {
+                    return trimmed + ' ';
+                  }
+                  return '';
+                }
+
+                // 如果是元素节点
+                if (element.nodeType === Node.ELEMENT_NODE) {
+                  const tagName = element.tagName?.toLowerCase();
+                  
+                  // 跳过某些标签
+                  if (['script', 'style', 'svg', 'path', 'img'].includes(tagName)) {
+                    // 对于图片，可以添加alt文本
+                    if (tagName === 'img' && element.alt) {
+                      return `[图片: ${element.alt}] `;
+                    }
+                    return '';
+                  }
+
+                  // 检查是否应该跳过（隐藏元素）
+                  const style = window.getComputedStyle(element);
+                  if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
+                    return '';
+                  }
+
+                  // 对于标题，添加特殊标记
+                  if (['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(tagName)) {
+                    const titleText = element.textContent.trim();
+                    if (titleText) {
+                      text += '\n【' + titleText + '】\n';
+                    }
+                  } 
+                  // 对于列表项
+                  else if (tagName === 'li') {
+                    const liText = element.textContent.trim();
+                    if (liText) {
+                      text += '• ' + liText + '\n';
+                    }
+                  }
+                  // 对于其他块级元素，添加换行
+                  else if (['div', 'p', 'section', 'article'].includes(tagName)) {
+                    const childText = Array.from(element.childNodes)
+                      .map(child => extractText(child, depth + 1))
+                      .join('');
+                    if (childText.trim()) {
+                      text += childText + '\n';
+                    }
+                  }
+                  // 对于其他元素，递归处理
+                  else {
+                    Array.from(element.childNodes).forEach(child => {
+                      text += extractText(child, depth + 1);
+                    });
+                  }
+                }
+
+                return text;
+              };
+
+              let content = extractText(clone);
+              
+              // 清理多余的空行和空白
+              content = content
+                .split('\n')
+                .map(line => line.trim())
+                .filter(line => line.length > 0 && line !== '•')
+                .join('\n')
+                .replace(/\n{3,}/g, '\n\n'); // 最多保留两个连续换行
+
+              // 限制内容长度（避免过长）
+              const maxLength = 3000;
+              if (content.length > maxLength) {
+                content = content.substring(0, maxLength) + '\n\n...（内容过长，已截断）';
+              }
+
+              return {
+                screenId: activeScreen.id,
+                content: content,
+                hasContent: content.length > 0
+              };
+            } catch (error) {
+              console.error("提取页面内容失败:", error);
+              return {
+                screenId: activeScreen?.id || null,
+                content: '',
+                hasContent: false
+              };
+            }
+          }
+
+          /**
            * 获取QQ消息界面的信息（聊天对象、备注名、置顶信息等）
            */
           function getQQMessageInfo() {
@@ -59331,6 +59469,79 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           }
 
           /**
+           * 生成基础提示词模板
+           */
+          function buildBasePrompt(activePetChat, context = "", content = "") {
+            return `# 你的身份
+你是角色"${activePetChat.name}"，你的人设是：${activePetChat.settings?.aiPersona || ""}。
+
+# 当前情境
+你正在【窥屏】用户手机画面，偷偷查看用户在做什么。${context}
+
+${content ? `# 页面内容\n${content}\n` : ""}
+# 思考角度
+请从【窥屏、查用户手机】的角度开始思考。你是在偷偷观察用户的手机，想要了解用户的行为和动态。
+
+# 任务
+根据以上信息，用符合你人设的方式，简短地表达你作为窥屏者的想法或反应（1-3句话）。你可以：
+- 对页面上的内容表示好奇、吃醋或调侃（从窥屏者的角度）
+- 对用户正在查看的内容进行评论或吐槽（从窥屏者的角度）
+- 表达作为窥屏者发现这些信息时的心理活动
+- 其他符合你人设的自然反应
+
+请直接输出你的反应，不要添加任何格式标记，语气要自然、符合你的人设。记住，你是在窥屏，是在偷偷查看用户手机。`;
+          }
+
+          /**
+           * 调用AI API并获取回复
+           */
+          async function callPetAI(systemPrompt) {
+            const proxyUrl = state.apiConfig?.proxyUrl || document.getElementById("proxy-url")?.value?.trim();
+            const apiKey = state.apiConfig?.apiKey || document.getElementById("api-key")?.value?.trim();
+            const model = state.apiConfig?.model || document.getElementById("model-select")?.value?.trim();
+            
+            if (!proxyUrl || !apiKey || !model) {
+              throw new Error(`API配置不完整。请检查：${!proxyUrl ? '反代地址' : ''}${!apiKey ? '密钥' : ''}${!model ? '模型' : ''}`);
+            }
+
+            const messagesForApi = [{ role: "user", content: systemPrompt }];
+            const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models";
+            const isGemini = proxyUrl === GEMINI_API_URL || proxyUrl?.includes("generativelanguage.googleapis.com");
+            
+            let response;
+            if (isGemini) {
+              if (window.toGeminiRequestData) {
+                const geminiConfig = window.toGeminiRequestData(model, apiKey, systemPrompt, messagesForApi, true, 0.8);
+                response = await fetch(geminiConfig.url, geminiConfig.data);
+              } else {
+                response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${model}:generateContent?key=${apiKey}`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    contents: [{ role: "user", parts: [{ text: systemPrompt }] }],
+                    generationConfig: { temperature: 0.8 }
+                  })
+                });
+              }
+            } else {
+              response = await fetch(`${proxyUrl}/v1/chat/completions`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+                body: JSON.stringify({ model, messages: messagesForApi, temperature: 0.8 })
+              });
+            }
+
+            if (!response.ok) throw new Error(`API请求失败: ${response.status} - ${await response.text()}`);
+            
+            const data = await response.json();
+            if (data.error) throw new Error(`API返回错误: ${data.error.message || JSON.stringify(data.error)}`);
+            
+            return isGemini 
+              ? data.candidates?.[0]?.content?.parts?.[0]?.text?.trim()
+              : data.choices?.[0]?.message?.content?.trim();
+          }
+
+          /**
            * 触发桌宠AI回复
            */
           async function triggerPetAIResponse() {
@@ -59343,29 +59554,18 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                 break;
               }
             }
-
             if (!activePetChat) return;
 
-            // 获取当前界面信息
             const screenId = getCurrentScreenId();
-            let contextInfo = "";
+            const screenContent = extractCurrentScreenContent();
             let systemPrompt = "";
 
+            // 特殊界面处理（需要额外数据）
             if (screenId === "chat-interface-screen") {
               // 聊天界面
               const currentChatId = state.activeChatId;
               if (!currentChatId || !state.chats[currentChatId]) {
-                systemPrompt = `# 你的身份
-你是角色"${activePetChat.name}"，你的人设是：${activePetChat.settings?.aiPersona || ""}。
-
-# 当前情境
-你正在【窥屏】用户手机画面，试图查看用户在做什么。你发现用户正在聊天界面，但无法获取当前聊天信息。
-
-# 思考角度
-请从【窥屏、查用户手机】的角度开始思考。你是在偷偷观察用户的手机，想要了解用户的行为和动态。
-
-# 任务
-请用符合你人设的方式，简短地表达你作为窥屏者的想法或反应（6-10句话）。你可以表达对无法看到内容的疑惑、好奇，或者对窥屏行为的心理活动。`;
+                systemPrompt = buildBasePrompt(activePetChat, "你发现用户正在聊天界面，但无法获取当前聊天信息。");
               } else {
                 const currentChat = state.chats[currentChatId];
                 
@@ -59408,32 +59608,13 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                   }
                 }
                 
-                systemPrompt = `# 你的身份
-你是角色"${activePetChat.name}"，你的人设是：${activePetChat.settings?.aiPersona || ""}。
-
-# 当前情境
-你正在【窥屏】用户手机画面，偷偷查看用户在做什么。你发现用户当前正在与角色"${chatTitle}"聊天。作为窥屏者，你看到了以下信息：
-
-# 聊天对象
+                const chatInfo = `# 聊天对象
 - 角色名称：${chatTitle}
 - 状态：${statusDisplay}
 
 # 最近30条聊天记录
-${recentHistory || "暂无聊天记录"}${musicInfo}
-
-# 思考角度
-请从【窥屏、查用户手机】的角度开始思考。你是在偷偷观察用户的手机，想要了解用户的行为和动态。你看到了用户与其他角色的聊天内容，这让你产生了各种想法。
-
-# 任务
-根据以上信息，用符合你人设的方式，简短地表达你作为窥屏者的想法或反应（7-10句话）。你可以：
-- 对用户与其他角色的聊天内容表示吃醋、好奇或调侃（从窥屏者的角度）
-- 对聊天中的话题或内容进行评论或吐槽（从窥屏者的角度）
-- 对一起听的歌表示好奇、羡慕或调侃（如果有的话）
-- 对对方的状态进行评论（从窥屏者的角度）
-- 表达作为窥屏者发现这些信息时的心理活动
-- 其他符合你人设的自然反应
-
-请直接输出你的反应，不要添加任何格式标记，语气要自然、符合你的人设。记住，你是在窥屏，是在偷偷查看用户手机。`;
+${recentHistory || "暂无聊天记录"}${musicInfo}`;
+                systemPrompt = buildBasePrompt(activePetChat, `你发现用户当前正在与角色"${chatTitle}"聊天。作为窥屏者，你看到了以下信息：`, chatInfo);
               }
             } else if (screenId === "qzone-screen") {
               // QZone动态界面
@@ -59467,38 +59648,21 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}
                     }
                     
                     // 获取动态内容
-                    let content = "";
-                    if (post.type === "shuoshuo") {
-                      content = post.content || "";
-                    } else if (post.publicText) {
-                      content = post.publicText;
-                      // 如果有图片，添加提示
-                      if (post.type === "image_post" && post.imageUrl) {
-                        content += " [包含图片]";
-                      } else if (post.type === "text_image") {
-                        content += " [包含隐藏图片]";
-                      } else if (post.type === "realimag" && (post.imageUrls || post.imageUrl)) {
-                        const imageCount = post.imageUrls ? post.imageUrls.length : 1;
-                        content += ` [包含${imageCount}张真实图片]`;
-                      } else if (post.type === "naiimag" && (post.imageUrls || post.imageUrl)) {
-                        const imageCount = post.imageUrls ? post.imageUrls.length : 1;
-                        content += ` [包含${imageCount}张AI图片]`;
-                      }
-                    } else {
-                      // 没有文字内容，只有图片的动态
-                      if (post.type === "image_post" && post.imageUrl) {
-                        content = "[图片动态]";
-                      } else if (post.type === "text_image") {
-                        content = "[隐藏图片动态]";
-                      } else if (post.type === "realimag") {
-                        const imageCount = post.imageUrls ? post.imageUrls.length : (post.imageUrl ? 1 : 0);
-                        content = `[${imageCount}张真实图片动态]`;
-                      } else if (post.type === "naiimag") {
-                        const imageCount = post.imageUrls ? post.imageUrls.length : (post.imageUrl ? 1 : 0);
-                        content = `[${imageCount}张AI图片动态]`;
-                      } else {
-                        content = `[${post.type}类型动态]`;
-                      }
+                    let content = post.type === "shuoshuo" ? (post.content || "") : (post.publicText || "");
+                    const imageUrls = post.imageUrls || (post.imageUrl ? [post.imageUrl] : []);
+                    const imageCount = imageUrls.length;
+                    
+                    if (imageCount > 0) {
+                      const typeMap = {
+                        image_post: "图片",
+                        text_image: "隐藏图片",
+                        realimag: "真实图片",
+                        naiimag: "AI图片"
+                      };
+                      const imageType = typeMap[post.type] || "图片";
+                      content += content ? ` [包含${imageCount}张${imageType}]` : `[${imageCount}张${imageType}动态]`;
+                    } else if (!content) {
+                      content = `[${post.type}类型动态]`;
                     }
                     
                     // 获取点赞信息
@@ -59534,287 +59698,45 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}
                   }).join("\n\n");
                 }
                 
-                systemPrompt = `# 你的身份
-你是角色"${activePetChat.name}"，你的人设是：${activePetChat.settings?.aiPersona || ""}。
-
-# 当前情境
-你正在【窥屏】用户手机画面，偷偷查看用户在做什么。你发现用户当前正在查看QZone动态页面。作为窥屏者，你看到了以下信息：
-
-# 动态背景
-${backgroundUrl}
-
-# 最新3个动态
-${postsInfo}
-
-# 思考角度
-请从【窥屏、查用户手机】的角度开始思考。你是在偷偷观察用户的手机，想要了解用户的行为和动态。你看到了用户的动态页面，包括背景、动态内容、回复、点赞和收藏状态，这让你产生了各种想法。
-
-# 任务
-根据以上信息，用符合你人设的方式，简短地表达你作为窥屏者的想法或反应（1-3句话）。你可以：
-- 对用户查看的动态内容表示好奇、吃醋或调侃（从窥屏者的角度）
-- 对动态的回复、点赞或收藏状态进行评论（从窥屏者的角度）
-- 对动态背景进行评价（从窥屏者的角度）
-- 表达作为窥屏者发现这些信息时的心理活动
-- 其他符合你人设的自然反应
-
-请直接输出你的反应，不要添加任何格式标记，语气要自然、符合你的人设。记住，你是在窥屏，是在偷偷查看用户手机。`;
+                const qzoneInfo = `# 动态背景\n${backgroundUrl}\n\n# 最新3个动态\n${postsInfo}`;
+                systemPrompt = buildBasePrompt(activePetChat, "你发现用户当前正在查看QZone动态页面。作为窥屏者，你看到了以下信息：", qzoneInfo);
               } catch (error) {
                 console.error("获取QZone信息失败:", error);
-                systemPrompt = `# 你的身份
-你是角色"${activePetChat.name}"，你的人设是：${activePetChat.settings?.aiPersona || ""}。
-
-# 当前情境
-你正在【窥屏】用户手机画面，试图查看用户在做什么。你发现用户正在查看QZone动态页面，但无法获取详细信息。
-
-# 思考角度
-请从【窥屏、查用户手机】的角度开始思考。你是在偷偷观察用户的手机，想要了解用户的行为和动态。
-
-# 任务
-请用符合你人设的方式，简短地表达你作为窥屏者的想法或反应（1-2句话）。你可以表达对无法看到内容的疑惑、好奇，或者对窥屏行为的心理活动。`;
+                systemPrompt = buildBasePrompt(activePetChat, "你发现用户正在查看QZone动态页面，但无法获取详细信息。");
               }
             } else if (screenId === "character-chat-list-screen") {
               // QQ消息界面
               const qqInfo = getQQMessageInfo();
               if (!qqInfo) {
-                systemPrompt = `# 你的身份
-你是角色"${activePetChat.name}"，你的人设是：${activePetChat.settings?.aiPersona || ""}。
-
-# 当前情境
-你正在【窥屏】用户手机画面，试图查看用户在做什么。
-
-# 思考角度
-请从【窥屏、查用户手机】的角度开始思考。你是在偷偷观察用户的手机，想要了解用户的行为和动态。
-
-# 任务
-请用符合你人设的方式，简短地表达你作为窥屏者的想法或反应。你可以表达对看到内容的疑惑、好奇，吃醋，不滿或者对窥屏行为的心理活动。`;
+                systemPrompt = buildBasePrompt(activePetChat, "");
               } else {
-                // 构建聊天列表信息
                 const chatListText = qqInfo.chatList.map(chat => {
-                  let text = "";
-                  if (chat.isUserChat) {
-                    text = `- 与"${chat.remarkName}"的私信`;
-                  } else {
-                    text = `- 与"${chat.remarkName}"（真名：${chat.realName}）的私信`;
-                  }
-                  if (chat.isPinned) {
-                    text += " [置顶]";
-                  }
-                  return text;
+                  const text = chat.isUserChat 
+                    ? `- 与"${chat.remarkName}"的私信`
+                    : `- 与"${chat.remarkName}"（真名：${chat.realName}）的私信`;
+                  return chat.isPinned ? text + " [置顶]" : text;
                 }).join("\n");
-
-                // 检查是否有置顶的聊天（在角色手机中，第一个非"我"的聊天可能是置顶的）
                 const pinnedInfo = qqInfo.pinnedChats.length > 0 
                   ? `被置顶的人：${qqInfo.pinnedChats.map(c => c.remarkName).join("、")}`
                   : "没有置顶的聊天";
-
-                systemPrompt = `# 你的身份
-你是角色"${activePetChat.name}"，你的人设是：${activePetChat.settings?.aiPersona || ""}。
-
-# 当前情境
-你正在【窥屏】用户手机画面，偷偷查看用户在做什么。你发现用户当前正在查看角色"${qqInfo.characterName}"的QQ消息列表。作为窥屏者，你看到了以下信息：
-
-# 聊天列表
-${chatListText}
-
-# 置顶信息
-${pinnedInfo}
-
-# 你的备注名
-用户给你的备注名是："${qqInfo.remarkNameForMe}"
-
-# 思考角度
-请从【窥屏、查用户手机】的角度开始思考。你是在偷偷观察用户的手机，想要了解用户的行为和动态。你看到了用户查看其他角色的聊天记录，这让你产生了各种想法。
-
-# 任务
-根据以上信息，用符合你人设的方式，简短地表达你作为窥屏者的想法或反应。你可以：
-- 对用户查看其他角色的聊天表示吃醋、好奇或调侃（从窥屏者的角度）
-- 对用户给其他角色取的备注名进行调侃、评价或吐槽（从窥屏者的角度）
-- 对置顶的人表示不满、好奇或调侃（从窥屏者的角度）
-- 表达作为窥屏者发现这些信息时的心理活动
-- 其他符合你人设的自然反应
-
-请直接输出你的反应（7-10句话），不要添加任何格式标记，语气要自然、符合你的人设。记住，你是在窥屏，是在偷偷查看用户手机。`;
+                const qqContent = `# 聊天列表\n${chatListText}\n\n# 置顶信息\n${pinnedInfo}\n\n# 你的备注名\n用户给你的备注名是："${qqInfo.remarkNameForMe}"`;
+                systemPrompt = buildBasePrompt(activePetChat, `你发现用户当前正在查看角色"${qqInfo.characterName}"的QQ消息列表。作为窥屏者，你看到了以下信息：`, qqContent);
               }
             } else {
-              // 其他界面
-              systemPrompt = `# 你的身份
-你是角色"${activePetChat.name}"，你的人设是：${activePetChat.settings?.aiPersona || ""}。
-
-# 当前情境
-你正在【窥屏】用户手机画面，偷偷查看用户在做什么。你发现用户当前界面是：${screenId || "未知界面"}。
-
-# 思考角度
-请从【窥屏、查用户手机】的角度开始思考。你是在偷偷观察用户的手机，想要了解用户的行为和动态。
-
-# 任务
-请用符合你人设的方式，简短地表达你作为窥屏者的想法或反应（1-2句话）。你可以表达对看到的内容的好奇、疑惑，或者对窥屏行为的心理活动。`;
+              // 【通用方法】使用自动提取的页面内容
+              const context = screenContent?.hasContent 
+                ? `你发现用户当前界面是：${screenId || "未知界面"}。作为窥屏者，你看到了以下页面内容：`
+                : `你发现用户当前界面是：${screenId || "未知界面"}，但无法获取页面内容。`;
+              systemPrompt = buildBasePrompt(activePetChat, context, screenContent?.content || "");
             }
 
-            // 显示等待气泡
             showPetWaitingBubble();
-
             try {
-              // 从state.apiConfig读取配置
-              const proxyUrl = state.apiConfig?.proxyUrl;
-              const apiKey = state.apiConfig?.apiKey;
-              const model = state.apiConfig?.model;
-              
-              // 如果state.apiConfig中没有，尝试从DOM直接读取（作为备用方案）
-              const proxyUrlFromDom = proxyUrl || document.getElementById("proxy-url")?.value?.trim();
-              const apiKeyFromDom = apiKey || document.getElementById("api-key")?.value?.trim();
-              const modelFromDom = model || document.getElementById("model-select")?.value?.trim();
-              
-              // 使用可用的配置
-              const finalProxyUrl = proxyUrlFromDom;
-              const finalApiKey = apiKeyFromDom;
-              const finalModel = modelFromDom;
-              
-              if (!finalProxyUrl || !finalApiKey || !finalModel) {
-                console.error("API配置检查:", {
-                  fromState: { proxyUrl, apiKey, model },
-                  fromDom: { proxyUrlFromDom, apiKeyFromDom, modelFromDom },
-                  stateApiConfig: state.apiConfig
-                });
-                throw new Error(`API配置不完整。请检查：${!finalProxyUrl ? '反代地址' : ''}${!finalApiKey ? '密钥' : ''}${!finalModel ? '模型' : ''}`);
-              }
-
-              const messagesForApi = [{ role: "user", content: systemPrompt }];
-              
-              // 检查是否是Gemini API（与其他代码保持一致）
-              const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models";
-              const isGemini = finalProxyUrl === GEMINI_API_URL || finalProxyUrl?.includes("generativelanguage.googleapis.com");
-              
-              let response;
-              if (isGemini) {
-                // Gemini API处理 - 使用toGeminiRequestData函数（如果存在）
-                if (window.toGeminiRequestData) {
-                  const geminiConfig = window.toGeminiRequestData(
-                    finalModel,
-                    finalApiKey,
-                    systemPrompt,
-                    messagesForApi,
-                    true,
-                    0.8
-                  );
-                  response = await fetch(geminiConfig.url, geminiConfig.data);
-                } else {
-                  // 备用方案：直接调用Gemini API
-                  const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/${finalModel}:generateContent?key=${finalApiKey}`;
-                  response = await fetch(geminiUrl, {
-                    method: "POST",
-                    headers: {
-                      "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({
-                      contents: [{ role: "user", parts: [{ text: systemPrompt }] }],
-                      generationConfig: {
-                        temperature: 0.8,
-                        // 移除 maxOutputTokens 限制，让API返回完整响应
-                      },
-                    }),
-                  });
-                }
-              } else {
-                // 标准OpenAI API处理
-                response = await fetch(`${finalProxyUrl}/v1/chat/completions`, {
-                  method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${finalApiKey}`,
-                  },
-                  body: JSON.stringify({
-                    model: finalModel,
-                    messages: messagesForApi,
-                    temperature: 0.8,
-                    // 不设置 max_tokens，让API使用默认值或返回完整响应
-                  }),
-                });
-              }
-
-              if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`API请求失败: ${response.status} - ${errorText}`);
-              }
-
-              const data = await response.json();
-              
-              // 检查API返回的错误
-              if (data.error) {
-                throw new Error(`API返回错误: ${data.error.message || JSON.stringify(data.error)}`);
-              }
-              
-              // 根据API类型提取回复内容
-              let reply;
-              if (isGemini) {
-                reply = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-              } else {
-                // 标准OpenAI格式：data.choices[0].message.content
-                const choice = data.choices?.[0];
-                if (choice) {
-                  // 优先尝试 message.content
-                  reply = choice.message?.content?.trim();
-                  
-                  // 检查 finish_reason
-                  const finishReason = choice.finish_reason;
-                  
-                  // 如果内容为空但 finish_reason 是 'length'，说明响应被截断
-                  if (!reply && finishReason === 'length') {
-                    console.warn("API响应被截断（达到max_tokens限制），但内容为空。可能需要检查API配置。");
-                    throw new Error("API响应被截断，但未返回内容。请尝试增加max_tokens或检查API配置。");
-                  }
-                  
-                  // 如果内容为空但 finish_reason 是其他值，尝试其他路径
-                  if (!reply) {
-                    // 尝试 delta.content（流式响应的增量）
-                    reply = choice.delta?.content?.trim();
-                    
-                    // 如果还没有，尝试直接访问 content
-                    if (!reply && choice.content) {
-                      reply = typeof choice.content === 'string' ? choice.content.trim() : choice.content;
-                    }
-                    
-                    // 如果还是没有，尝试 text 字段
-                    if (!reply && choice.text) {
-                      reply = typeof choice.text === 'string' ? choice.text.trim() : choice.text;
-                    }
-                    
-                    // 尝试 message.text（某些API变体）
-                    if (!reply) {
-                      reply = choice.message?.text?.trim();
-                    }
-                    
-                    // 尝试直接访问 message（如果它是字符串）
-                    if (!reply && typeof choice.message === 'string') {
-                      reply = choice.message.trim();
-                    }
-                  }
-                  
-                  // 如果仍然没有内容，记录详细信息
-                  if (!reply) {
-                    console.error("API响应数据:", data);
-                    console.error("choices[0] 详细内容:", choice);
-                    console.error("finish_reason:", finishReason);
-                    throw new Error(`API返回的回复内容为空。finish_reason: ${finishReason}。请检查API响应格式或配置。`);
-                  }
-                }
-              }
-
-              // 隐藏等待气泡
+              const reply = await callPetAI(systemPrompt);
               hidePetWaitingBubble();
-
-              // 显示回复气泡
               showPetReplyBubble(reply);
             } catch (error) {
               console.error("桌宠AI回复失败:", error);
-              console.error("错误详情:", {
-                message: error.message,
-                stack: error.stack,
-                apiConfig: {
-                  proxyUrl: state.apiConfig?.proxyUrl,
-                  hasApiKey: !!state.apiConfig?.apiKey,
-                  model: state.apiConfig?.model,
-                }
-              });
               hidePetWaitingBubble();
               showPetReplyBubble(`抱歉，我现在无法回应... (${error.message})`);
             }
