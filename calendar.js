@@ -43,22 +43,22 @@ async function initCalendar() {
   }
 
   // 绑定月份切换按钮
-  document.getElementById('calendar-prev-month').addEventListener('click', () => {
+  document.getElementById('calendar-prev-month').addEventListener('click', async () => {
     currentCalendarDate.setMonth(currentCalendarDate.getMonth() - 1);
-    renderCalendar(currentCalendarDate);
+    await renderCalendar(currentCalendarDate);
   });
 
-  document.getElementById('calendar-next-month').addEventListener('click', () => {
+  document.getElementById('calendar-next-month').addEventListener('click', async () => {
     currentCalendarDate.setMonth(currentCalendarDate.getMonth() + 1);
-    renderCalendar(currentCalendarDate);
+    await renderCalendar(currentCalendarDate);
   });
 
   // 绑定"今天"按钮
-  document.getElementById('calendar-today-btn').addEventListener('click', () => {
+  document.getElementById('calendar-today-btn').addEventListener('click', async () => {
     currentCalendarDate = new Date();
     selectedDate = formatDate(new Date());
-    renderCalendar(currentCalendarDate);
-    loadDayInfo(selectedDate);
+    await renderCalendar(currentCalendarDate);
+    await loadDayInfo(selectedDate);
   });
 
   // 绑定标签切换
@@ -546,15 +546,15 @@ async function renderCalendar(date) {
     });
 
     // 点击事件
-    dayCell.addEventListener('click', () => {
+    dayCell.addEventListener('click', async () => {
       const previousSelectedDate = selectedDate;
       selectedDate = dateStr;
       
       // 如果选中的日期不在当前显示的月份，切换到那个月份并重新渲染
       if (year !== currentCalendarDate.getFullYear() || month !== currentCalendarDate.getMonth()) {
         currentCalendarDate = new Date(year, month, day);
-        renderCalendar(currentCalendarDate);
-        loadDayInfo(selectedDate);
+        await renderCalendar(currentCalendarDate);
+        await loadDayInfo(selectedDate);
       } else {
         // 如果是在当前月份内切换，只更新选中状态的样式，不重新渲染整个日历
         // 首先清除所有日期的选中状态（包括之前选中的）
@@ -1016,7 +1016,7 @@ function showEventActionMenu(event, dateStr) {
       if (confirm('确定要删除这个行程吗？')) {
         await db.calendarEvents.delete(event.id);
         await loadEvents(dateStr);
-        renderCalendar(currentCalendarDate); // 刷新日历以更新小点
+        await renderCalendar(currentCalendarDate); // 刷新日历以更新小点
       }
     }
   });
@@ -1140,7 +1140,7 @@ async function saveEvent() {
   }
   
   // 刷新日历以更新显示
-  renderCalendar(currentCalendarDate);
+  await renderCalendar(currentCalendarDate);
 }
 
 /**
@@ -1657,7 +1657,7 @@ async function loadCategoriesList() {
           await db.calendarCategories.delete(category.id);
           await loadCategoriesList();
           await loadCategories(); // 更新下拉框
-          renderCalendar(currentCalendarDate); // 刷新日历显示
+          await renderCalendar(currentCalendarDate); // 刷新日历显示
         }
       });
       
@@ -1730,7 +1730,7 @@ async function saveCategory() {
     closeCategoryEditModal();
     await loadCategoriesList();
     await loadCategories(); // 更新下拉框
-    renderCalendar(currentCalendarDate); // 刷新日历显示
+    await renderCalendar(currentCalendarDate); // 刷新日历显示
   } catch (error) {
     console.error('保存分类失败:', error);
     alert('保存分类失败，请重试');
