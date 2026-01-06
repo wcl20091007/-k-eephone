@@ -168,9 +168,20 @@ document.addEventListener('DOMContentLoaded', () => {
     selectionEl.innerHTML = '<p>正在加载角色列表...</p>';
 
     const singleChats = Object.values(state.chats).filter(chat => !chat.isGroup);
-    const allNpcs = Object.values(state.chats).flatMap(chat =>
-      (chat.npcLibrary || []).map(npc => ({ ...npc, owner: chat.name })),
-    );
+    // 【NPC库优化】从全局NPC库获取所有角色的启用NPC
+    const allNpcs = [];
+    for (const chat of singleChats) {
+      let enabledNpcs = [];
+      if (typeof getEnabledNpcs === 'function') {
+        enabledNpcs = await getEnabledNpcs(chat);
+      } else if (chat.enabledNpcIds && chat.enabledNpcIds.length > 0) {
+        const allNpcsFromDb = await db.globalNpcs.toArray();
+        enabledNpcs = allNpcsFromDb.filter(npc => chat.enabledNpcIds.includes(npc.id));
+      }
+      enabledNpcs.forEach(npc => {
+        allNpcs.push({ ...npc, owner: chat.name });
+      });
+    }
 
     let playerOptions = [
       ...singleChats.map(c => ({ id: c.id, name: c.name, avatar: c.settings.aiAvatar, type: '角色' })),
@@ -1460,9 +1471,20 @@ ${jsonFormat}
     selectionEl.innerHTML = '<p>正在加载角色列表...</p>';
 
     const singleChats = Object.values(state.chats).filter(chat => !chat.isGroup);
-    const allNpcs = Object.values(state.chats).flatMap(chat =>
-      (chat.npcLibrary || []).map(npc => ({ ...npc, owner: chat.name })),
-    );
+    // 【NPC库优化】从全局NPC库获取所有角色的启用NPC
+    const allNpcs = [];
+    for (const chat of singleChats) {
+      let enabledNpcs = [];
+      if (typeof getEnabledNpcs === 'function') {
+        enabledNpcs = await getEnabledNpcs(chat);
+      } else if (chat.enabledNpcIds && chat.enabledNpcIds.length > 0) {
+        const allNpcsFromDb = await db.globalNpcs.toArray();
+        enabledNpcs = allNpcsFromDb.filter(npc => chat.enabledNpcIds.includes(npc.id));
+      }
+      enabledNpcs.forEach(npc => {
+        allNpcs.push({ ...npc, owner: chat.name });
+      });
+    }
 
     let playerOptions = [
       ...singleChats.map(c => ({ id: c.id, name: c.name, avatar: c.settings.aiAvatar, type: '角色' })),
@@ -2339,9 +2361,20 @@ ${gameLogText}
     selectionEl.innerHTML = '<p>正在加载角色列表...</p>';
 
     const singleChats = Object.values(state.chats).filter(chat => !chat.isGroup);
-    const allNpcs = Object.values(state.chats).flatMap(chat =>
-      (chat.npcLibrary || []).map(npc => ({ ...npc, owner: chat.name })),
-    );
+    // 【NPC库优化】从全局NPC库获取所有角色的启用NPC
+    const allNpcs = [];
+    for (const chat of singleChats) {
+      let enabledNpcs = [];
+      if (typeof getEnabledNpcs === 'function') {
+        enabledNpcs = await getEnabledNpcs(chat);
+      } else if (chat.enabledNpcIds && chat.enabledNpcIds.length > 0) {
+        const allNpcsFromDb = await db.globalNpcs.toArray();
+        enabledNpcs = allNpcsFromDb.filter(npc => chat.enabledNpcIds.includes(npc.id));
+      }
+      enabledNpcs.forEach(npc => {
+        allNpcs.push({ ...npc, owner: chat.name });
+      });
+    }
 
     let playerOptions = [
       ...singleChats.map(c => ({ id: c.id, name: c.name, avatar: c.settings.aiAvatar, type: '角色' })),
@@ -4072,9 +4105,20 @@ ${formattedLog}
     selectionEl.innerHTML = '<p>正在加载玩伴列表...</p>';
 
     const singleChats = Object.values(state.chats).filter(chat => !chat.isGroup);
-    const allNpcs = Object.values(state.chats).flatMap(chat =>
-      (chat.npcLibrary || []).map(npc => ({ ...npc, owner: chat.name })),
-    );
+    // 【NPC库优化】从全局NPC库获取所有角色的启用NPC
+    const allNpcs = [];
+    for (const chat of singleChats) {
+      let enabledNpcs = [];
+      if (typeof getEnabledNpcs === 'function') {
+        enabledNpcs = await getEnabledNpcs(chat);
+      } else if (chat.enabledNpcIds && chat.enabledNpcIds.length > 0) {
+        const allNpcsFromDb = await db.globalNpcs.toArray();
+        enabledNpcs = allNpcsFromDb.filter(npc => chat.enabledNpcIds.includes(npc.id));
+      }
+      enabledNpcs.forEach(npc => {
+        allNpcs.push({ ...npc, owner: chat.name });
+      });
+    }
     let playerOptions = [
       ...singleChats.map(c => ({ id: c.id, name: c.name, avatar: c.settings.aiAvatar, type: '角色' })),
       ...allNpcs.map(n => ({ id: n.id, name: n.name, avatar: n.avatar, type: `NPC (${n.owner})` })),
@@ -4751,9 +4795,20 @@ ${formattedLog}
 
     // 【核心修改】为了保持统一，我们在这里也加载NPC作为可选玩伴
     const singleChats = Object.values(state.chats).filter(chat => !chat.isGroup);
-    const allNpcs = Object.values(state.chats).flatMap(chat =>
-      (chat.npcLibrary || []).map(npc => ({ ...npc, owner: chat.name })),
-    );
+    // 【NPC库优化】从全局NPC库获取所有角色的启用NPC
+    const allNpcs = [];
+    for (const chat of singleChats) {
+      let enabledNpcs = [];
+      if (typeof getEnabledNpcs === 'function') {
+        enabledNpcs = await getEnabledNpcs(chat);
+      } else if (chat.enabledNpcIds && chat.enabledNpcIds.length > 0) {
+        const allNpcsFromDb = await db.globalNpcs.toArray();
+        enabledNpcs = allNpcsFromDb.filter(npc => chat.enabledNpcIds.includes(npc.id));
+      }
+      enabledNpcs.forEach(npc => {
+        allNpcs.push({ ...npc, owner: chat.name });
+      });
+    }
     let playerOptions = [
       ...singleChats.map(c => ({ id: c.id, name: c.name, avatar: c.settings.aiAvatar, type: '角色' })),
       ...allNpcs.map(n => ({ id: n.id, name: n.name, avatar: n.avatar, type: `NPC (${n.owner})` })),
@@ -5978,9 +6033,20 @@ ${eventPrompt}
 
     // 复用狼人杀的玩家加载逻辑，非常方便
     const singleChats = Object.values(state.chats).filter(chat => !chat.isGroup);
-    const allNpcs = Object.values(state.chats).flatMap(chat =>
-      (chat.npcLibrary || []).map(npc => ({ ...npc, owner: chat.name })),
-    );
+    // 【NPC库优化】从全局NPC库获取所有角色的启用NPC
+    const allNpcs = [];
+    for (const chat of singleChats) {
+      let enabledNpcs = [];
+      if (typeof getEnabledNpcs === 'function') {
+        enabledNpcs = await getEnabledNpcs(chat);
+      } else if (chat.enabledNpcIds && chat.enabledNpcIds.length > 0) {
+        const allNpcsFromDb = await db.globalNpcs.toArray();
+        enabledNpcs = allNpcsFromDb.filter(npc => chat.enabledNpcIds.includes(npc.id));
+      }
+      enabledNpcs.forEach(npc => {
+        allNpcs.push({ ...npc, owner: chat.name });
+      });
+    }
     let playerOptions = [
       ...singleChats.map(c => ({ id: c.id, name: c.name, avatar: c.settings.aiAvatar, type: '角色' })),
       ...allNpcs.map(n => ({ id: n.id, name: n.name, avatar: n.avatar, type: `NPC (${n.owner})` })),
