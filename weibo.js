@@ -593,11 +593,17 @@ async function showWeiboScreen() {
   // 1. 计算关注数
   const allSingleChats = Object.values(state.chats).filter(chat => !chat.isGroup);
   let totalNpcCount = 0;
-  allSingleChats.forEach(chat => {
-    if (chat.npcLibrary && chat.npcLibrary.length > 0) {
-      totalNpcCount += chat.npcLibrary.length;
+  for (const chat of allSingleChats) {
+    // 【NPC库优化】从全局NPC库获取启用的NPC
+    let npcCount = 0;
+    if (typeof getEnabledNpcs === 'function') {
+      const npcs = await getEnabledNpcs(chat);
+      npcCount = npcs.length;
+    } else if (chat.enabledNpcIds && chat.enabledNpcIds.length > 0) {
+      npcCount = chat.enabledNpcIds.length;
     }
-  });
+    totalNpcCount += npcCount;
+  }
   const followingCount = allSingleChats.length + totalNpcCount;
 
   // 2. 更新页面上的元素
@@ -621,14 +627,20 @@ async function renderWeiboProfile() {
   document.getElementById('weibo-fans-count').textContent = settings.weiboFansCount;
   document.getElementById('weibo-background-img').src = settings.weiboBackground;
 
-  // 动态计算关注数 (这部分不变)
+  // 动态计算关注数 (使用全局NPC库)
   const allSingleChats = Object.values(state.chats).filter(chat => !chat.isGroup);
   let totalNpcCount = 0;
-  allSingleChats.forEach(chat => {
-    if (chat.npcLibrary && chat.npcLibrary.length > 0) {
-      totalNpcCount += chat.npcLibrary.length;
+  for (const chat of allSingleChats) {
+    // 【NPC库优化】从全局NPC库获取启用的NPC
+    let npcCount = 0;
+    if (typeof getEnabledNpcs === 'function') {
+      const npcs = await getEnabledNpcs(chat);
+      npcCount = npcs.length;
+    } else if (chat.enabledNpcIds && chat.enabledNpcIds.length > 0) {
+      npcCount = chat.enabledNpcIds.length;
     }
-  });
+    totalNpcCount += npcCount;
+  }
   document.getElementById('weibo-following-count').textContent = allSingleChats.length + totalNpcCount;
 
   // 动态计算微博数
@@ -1295,7 +1307,7 @@ async function deleteWeiboComment(postId, commentId) {
   }
 }
 
-function showFollowingList() {
+async function showFollowingList() {
   const modal = document.getElementById('weibo-following-modal');
   const listContainer = document.getElementById('weibo-following-list-container');
   listContainer.innerHTML = '';
@@ -1305,7 +1317,7 @@ function showFollowingList() {
   if (allSingleChats.length === 0) {
     listContainer.innerHTML = '<p style="text-align:center; color:grey; padding: 20px;">还没有关注任何人哦</p>';
   } else {
-    allSingleChats.forEach(chat => {
+    for (const chat of allSingleChats) {
       const charItem = document.createElement('div');
       charItem.className = 'weibo-following-item';
       charItem.innerHTML = `
@@ -1320,8 +1332,16 @@ function showFollowingList() {
             `;
       listContainer.appendChild(charItem);
 
-      if (chat.npcLibrary && chat.npcLibrary.length > 0) {
-        chat.npcLibrary.forEach(npc => {
+      // 【NPC库优化】从全局NPC库获取启用的NPC
+      let enabledNpcs = [];
+      if (typeof getEnabledNpcs === 'function') {
+        enabledNpcs = await getEnabledNpcs(chat);
+      } else if (chat.enabledNpcIds && chat.enabledNpcIds.length > 0) {
+        const allNpcs = await db.globalNpcs.toArray();
+        enabledNpcs = allNpcs.filter(npc => chat.enabledNpcIds.includes(npc.id));
+      }
+      if (enabledNpcs.length > 0) {
+        enabledNpcs.forEach(npc => {
           const npcItem = document.createElement('div');
           npcItem.className = 'weibo-following-item';
           npcItem.style.paddingLeft = '30px';

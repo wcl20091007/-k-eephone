@@ -180,12 +180,14 @@ function selectGenericImagePrompt(productName) {
 /**
  * 为Prompt生成并加载图片
  * @param {string} prompt - 用于生成图片的英文提示词
- * @returns {Promise<string>} - 返回一个Promise，它最终会resolve为一个有效的图片URL
+ * @param {number} maxRetries - 最大重试次数，默认5次
+ * @returns {Promise<string>} - 返回一个Promise，它最终会resolve为一个有效的图片URL，失败时抛出错误
  */
-async function generateAndLoadImage(prompt) {
-  while (true) {
-    // ★★★ 核心修改：这是一个无限循环 ★★★
+async function generateAndLoadImage(prompt, maxRetries = 5) {
+  let attempt = 0;
+  while (attempt < maxRetries) {
     try {
+      attempt++;
       const encodedPrompt = encodeURIComponent(prompt);
       const seed = Math.floor(Math.random() * 100000);
 
@@ -195,9 +197,20 @@ async function generateAndLoadImage(prompt) {
       const loadImage = url =>
         new Promise((resolve, reject) => {
           const img = new Image();
+          // 设置超时，避免无限等待
+          const timeout = setTimeout(() => {
+            reject(new Error(`图片加载超时: ${url}`));
+          }, 30000); // 30秒超时
+          
+          img.onload = () => {
+            clearTimeout(timeout);
+            resolve(url);
+          };
+          img.onerror = () => {
+            clearTimeout(timeout);
+            reject(new Error(`URL加载失败: ${url}`));
+          };
           img.src = url;
-          img.onload = () => resolve(url);
-          img.onerror = () => reject(new Error(`URL加载失败: ${url}`));
         });
 
       const imageUrl = await loadImage(primaryUrl).catch(async () => {
@@ -210,50 +223,18 @@ async function generateAndLoadImage(prompt) {
       return imageUrl;
     } catch (error) {
       // 如果主域名和备用域名都失败了...
-      console.error(`图片生成彻底失败，将在5秒后重试。错误: ${error.message}`);
+      if (attempt >= maxRetries) {
+        console.error(`图片生成失败，已达到最大重试次数(${maxRetries})。错误: ${error.message}`);
+        throw new Error(`图片生成失败，已重试${maxRetries}次: ${error.message}`);
+      }
+      console.error(`图片生成失败 (第${attempt}/${maxRetries}次)，将在5秒后重试。错误: ${error.message}`);
       // 等待5秒钟，然后循环会继续，开始下一次尝试
       await new Promise(resolve => setTimeout(resolve, 5000));
     }
   }
-}
-
-/**
- * 为Prompt生成并加载图片
- * @param {string} prompt - 用于生成图片的英文提示词
- * @returns {Promise<string>} - 返回一个Promise，它最终会resolve为一个有效的图片URL
- */
-async function generateAndLoadImage(prompt) {
-  while (true) {
-    try {
-      const encodedPrompt = encodeURIComponent(prompt);
-      const seed = Math.floor(Math.random() * 100000);
-
-      // 尝试主域名
-      const primaryUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=640&seed=${seed}`;
-
-      const loadImage = url =>
-        new Promise((resolve, reject) => {
-          const img = new Image();
-          img.src = url;
-          img.onload = () => resolve(url);
-          img.onerror = () => reject(new Error(`URL加载失败: ${url}`));
-        });
-
-      const imageUrl = await loadImage(primaryUrl).catch(async () => {
-        console.warn(`主URL加载失败，尝试备用URL for: ${prompt}`);
-        const fallbackUrl = `https://pollinations.ai/p/${encodedPrompt}?width=1024&height=640&seed=${seed}`;
-        return await loadImage(fallbackUrl);
-      });
-
-      // 如果任何一个URL成功加载，就返回结果，并跳出循环
-      return imageUrl;
-    } catch (error) {
-      // 如果主域名和备用域名都失败了...
-      console.error(`图片生成彻底失败，将在5秒后重试。错误: ${error.message}`);
-      // 等待5秒钟，然后循环会继续，开始下一次尝试
-      await new Promise(resolve => setTimeout(resolve, 5000));
-    }
-  }
+  
+  // 理论上不应该到达这里，但为了安全起见
+  throw new Error(`图片生成失败，已重试${maxRetries}次`);
 }
 
 /**

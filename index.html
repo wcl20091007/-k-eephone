@@ -33008,11 +33008,12 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               });
             });
 
-          // 2. 添加所有角色库里的NPC，并自动去重
+          // 2. 添加所有角色库里的NPC，并自动去重（使用全局NPC库）
           const npcMap = new Map();
-          Object.values(state.chats).forEach((chat) => {
-            if (chat.npcLibrary) {
-              chat.npcLibrary.forEach((npc) => {
+          for (const chat of Object.values(state.chats)) {
+            if (!chat.isGroup) {
+              const enabledNpcs = await getEnabledNpcs(chat);
+              enabledNpcs.forEach((npc) => {
                 // 使用NPC的ID作为key，确保同一个NPC不会被重复添加
                 if (!npcMap.has(npc.id)) {
                   npcMap.set(npc.id, {
@@ -33025,7 +33026,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                 }
               });
             }
-          });
+          }
           allAvailablePeople.push(...Array.from(npcMap.values()));
 
           if (allAvailablePeople.length === 0) {
@@ -33099,18 +33100,10 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                 groupTitle: "",
               });
             } else {
-              // 处理NPC的逻辑
+              // 处理NPC的逻辑（从全局NPC库查找）
               let foundNpc = null;
-              // 遍历所有角色，查找他们各自的NPC库
-              for (const chat of Object.values(state.chats)) {
-                if (chat.npcLibrary) {
-                  const npc = chat.npcLibrary.find((n) => n.id === contactId);
-                  if (npc) {
-                    foundNpc = npc;
-                    break; // 找到了就跳出循环
-                  }
-                }
-              }
+              const allNpcs = await db.globalNpcs.toArray();
+              foundNpc = allNpcs.find((n) => n.id === contactId);
               // 如果找到了这个NPC，就把它添加到成员列表里
               if (foundNpc) {
                 members.push({
@@ -33463,19 +33456,12 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                 isAdmin: false,
                 groupTitle: "",
               });
-              addedNames.push(`“${contactChat.name}”`);
+              addedNames.push(`"${contactChat.name}"`);
             } else {
-              // 处理NPC的逻辑
+              // 处理NPC的逻辑（从全局NPC库查找）
               let foundNpc = null;
-              for (const c of Object.values(state.chats)) {
-                if (c.npcLibrary) {
-                  const npc = c.npcLibrary.find((n) => n.id === contactId);
-                  if (npc) {
-                    foundNpc = npc;
-                    break;
-                  }
-                }
-              }
+              const allNpcs = await db.globalNpcs.toArray();
+              foundNpc = allNpcs.find((n) => n.id === contactId);
               if (foundNpc) {
                 chat.members.push({
                   id: foundNpc.id,
@@ -33641,9 +33627,10 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               });
             });
           const npcMap = new Map();
-          Object.values(state.chats).forEach((c) => {
-            if (c.npcLibrary) {
-              c.npcLibrary.forEach((npc) => {
+          for (const c of Object.values(state.chats)) {
+            if (!c.isGroup) {
+              const enabledNpcs = await getEnabledNpcs(c);
+              enabledNpcs.forEach((npc) => {
                 if (!npcMap.has(npc.id)) {
                   npcMap.set(npc.id, {
                     id: npc.id,
@@ -33654,7 +33641,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                 }
               });
             }
-          });
+          }
           allAvailablePeople.push(...Array.from(npcMap.values()));
 
           // 过滤掉已经是群成员的人
@@ -39953,7 +39940,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
         /**
          * 打开生成聊天对象的选择弹窗
          */
-        function openChatGenerationModal() {
+        async function openChatGenerationModal() {
           const listEl = document.getElementById("chat-gen-list");
           listEl.innerHTML = "";
 
@@ -39971,17 +39958,16 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           // 2. 收集所有可选项 (NPC + 其他主角)
           const options = [];
 
-          // A. 当前角色的 NPC 库
-          if (currentChat.npcLibrary) {
-            currentChat.npcLibrary.forEach((npc) => {
-              options.push({
-                type: "NPC",
-                name: npc.name,
-                persona: npc.persona,
-                avatar: npc.avatar || defaultGroupMemberAvatar,
-              });
+          // A. 当前角色的 NPC 库（使用全局NPC库）
+          const currentChatNpcs = await getEnabledNpcs(currentChat);
+          currentChatNpcs.forEach((npc) => {
+            options.push({
+              type: "NPC",
+              name: npc.name,
+              persona: npc.persona,
+              avatar: npc.avatar || defaultGroupMemberAvatar,
             });
-          }
+          });
 
           // B. 其他主角 (state.chats 里的单聊角色，排除自己)
           Object.values(state.chats).forEach((otherChat) => {
@@ -40227,7 +40213,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                 .join("\n\n");
           }
 
-          const npcLibrary = chat.npcLibrary || [];
+          const npcLibrary = await getEnabledNpcs(chat);
             let npcContext = "";
             // 如果有指定对象，就【不使用】默认的 NPC 随机列表，避免混淆
             if (!specificPromptInject) {
@@ -40663,7 +40649,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                   .map((book) => `[${book.name}]: ${book.content}`)
                   .join("\n\n");
             }
-            const npcLibrary = chat.npcLibrary || [];
+            const npcLibrary = await getEnabledNpcs(chat);
             let npcContext = "";
             if (npcLibrary.length > 0) {
               npcContext =
@@ -41003,7 +40989,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
         /**
          * 渲染角色手机的聊天列表 (支持透明磨砂分组)
          */
-        function renderCharacterChatList() {
+        async function renderCharacterChatList() {
           const listEl = document.getElementById("character-chat-list");
           const characterChat = state.chats[activeCharacterPhoneId];
           if (!characterChat) return;
@@ -41061,7 +41047,8 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               npcChatItem.dataset.contactName = contactName;
 
               let npcAvatarHtml;
-              const npcFromLibrary = (characterChat.npcLibrary || []).find(
+              const enabledNpcs = await getEnabledNpcs(characterChat);
+              const npcFromLibrary = enabledNpcs.find(
                 (npc) => npc.name === contactName
               );
               if (npcFromLibrary && npcFromLibrary.avatar) {
@@ -41098,7 +41085,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
         /**
          * 渲染角色手机的具体聊天记录 (分页加载)
          */
-        function renderCharacterChatHistory(
+        async function renderCharacterChatHistory(
           contactName,
           isUserChat = false,
           loadOffset = 0
@@ -41166,6 +41153,13 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           const fragment = document.createDocumentFragment(); // 使用文档片段提升性能
           const characterName = characterChat.name;
 
+          // 【NPC库优化】在循环外获取NPC数据
+          let npcData = null;
+          if (!isUserChat) {
+            const enabledNpcs = await getEnabledNpcs(characterChat);
+            npcData = enabledNpcs.find((npc) => npc.name === contactName);
+          }
+
           // (渲染逻辑与之前版本基本相同，只是添加到了 fragment 中)
           historyToShow.forEach((msg, index) => {
             if (msg.isHidden) return;
@@ -41193,9 +41187,6 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                   characterChat.settings.myAvatar || defaultMyGroupAvatar
                 }" class="character-chat-avatar">`;
               } else {
-                const npcData = (characterChat.npcLibrary || []).find(
-                  (npc) => npc.name === contactName
-                );
                 if (npcData && npcData.avatar) {
                   avatarHtml = `<img src="${npcData.avatar}" class="character-chat-avatar">`;
                 } else {
@@ -42185,20 +42176,23 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
          */
         async function handleCharPostCommentTrigger(post, authorId) {
           const authorChar = state.chats[authorId];
-          if (
-            !authorChar ||
-            !authorChar.npcLibrary ||
-            authorChar.npcLibrary.length === 0
-          ) {
-            alert(`角色“${authorChar.name}”还没有自己的NPC朋友哦！`);
+          if (!authorChar) {
+            alert(`找不到角色信息！`);
+            return;
+          }
+
+          // 【NPC库优化】使用getEnabledNpcs从全局NPC库获取启用的NPC
+          const npcLibrary = await getEnabledNpcs(authorChar);
+          if (!npcLibrary || npcLibrary.length === 0) {
+            alert(`角色"${authorChar.name}"还没有自己的NPC朋友哦！`);
             return;
           }
 
           // 只使用这个角色自己的NPC库
-          // 把作者本人(authorChar)作为“主人”传进去
+          // 把作者本人(authorChar)作为"主人"传进去
           await generateNpcCommentsForPost(
             post,
-            authorChar.npcLibrary,
+            npcLibrary,
             authorChar
           );
         }
@@ -42217,11 +42211,17 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
 
           modalTitle.textContent = "选择要召唤的NPC";
 
-          // 筛选出所有拥有NPC库的角色
-          const charsWithNpcs = Object.values(state.chats).filter(
-            (chat) =>
-              !chat.isGroup && chat.npcLibrary && chat.npcLibrary.length > 0
+          // 【NPC库优化】筛选出所有拥有NPC库的角色（使用getEnabledNpcs）
+          const allSingleChats = Object.values(state.chats).filter(
+            (chat) => !chat.isGroup
           );
+          const charsWithNpcs = [];
+          for (const chat of allSingleChats) {
+            const npcs = await getEnabledNpcs(chat);
+            if (npcs && npcs.length > 0) {
+              charsWithNpcs.push({ chat, npcs });
+            }
+          }
 
           if (charsWithNpcs.length === 0) {
             alert("当前没有任何角色拥有NPC库。");
@@ -42231,8 +42231,8 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           // 构建选择列表的HTML
           let optionsHtml = '<div style="text-align: left;">';
           optionsHtml += `<label style="display: block; padding: 5px;"><input type="radio" name="npc_summon_choice" value="all" checked> 召唤所有人</label>`;
-          charsWithNpcs.forEach((char) => {
-            optionsHtml += `<label style="display: block; padding: 5px;"><input type="radio" name="npc_summon_choice" value="${char.id}"> 只召唤 ${char.name} 的朋友</label>`;
+          charsWithNpcs.forEach(({ chat }) => {
+            optionsHtml += `<label style="display: block; padding: 5px;"><input type="radio" name="npc_summon_choice" value="${chat.id}"> 只召唤 ${chat.name} 的朋友</label>`;
           });
           optionsHtml += "</div>";
 
@@ -42251,15 +42251,15 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
 
             if (selectedValue === "all") {
               // 集合所有角色的所有NPC
-              charsWithNpcs.forEach((char) => {
-                npcsToSummon.push(...char.npcLibrary);
-              });
+              for (const { npcs } of charsWithNpcs) {
+                npcsToSummon.push(...npcs);
+              }
               // 召唤所有人时，我们不指定特定的主人
             } else {
               // 只获取被选中的那个角色的NPC
               const selectedChar = state.chats[selectedValue];
               if (selectedChar) {
-                npcsToSummon = selectedChar.npcLibrary;
+                npcsToSummon = await getEnabledNpcs(selectedChar);
                 ownerChar = selectedChar; // 把选中的角色存为主人
               }
             }
@@ -52644,9 +52644,17 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               }
             });
 
-          document
-            .getElementById("create-weibo-post-btn")
-            .addEventListener("click", openWeiboPublisherClean);
+          // 安全地绑定微博发布按钮事件，确保函数已定义
+          const createWeiboPostBtn = document.getElementById("create-weibo-post-btn");
+          if (createWeiboPostBtn) {
+            createWeiboPostBtn.addEventListener("click", (e) => {
+              if (typeof openWeiboPublisherClean === 'function') {
+                openWeiboPublisherClean(e);
+              } else {
+                console.error('openWeiboPublisherClean函数未定义，请检查weibo.js是否已加载');
+              }
+            });
+          }
 
           document
             .getElementById("delete-expired-songs-btn")
@@ -59314,7 +59322,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           /**
            * 获取QQ消息界面的信息（聊天对象、备注名、置顶信息等）
            */
-          function getQQMessageInfo() {
+          async function getQQMessageInfo() {
             const screenId = getCurrentScreenId();
             if (screenId !== "character-chat-list-screen") {
               return null;
@@ -59369,7 +59377,8 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               const lastMessageTime = lastMsg?.timestamp || 0;
 
               // 判断是私信还是群聊
-              const npcFromLibrary = (characterChat.npcLibrary || []).find(
+              const enabledNpcs = await getEnabledNpcs(characterChat);
+              const npcFromLibrary = enabledNpcs.find(
                 (npc) => npc.name === contactName
               );
               
@@ -59483,7 +59492,7 @@ ${content ? `# 页面内容\n${content}\n` : ""}
 请从【窥屏、查用户手机】的角度开始思考。你是在偷偷观察用户的手机，想要了解用户的行为和动态。
 
 # 任务
-根据以上信息，用符合你人设的方式，简短地表达你作为窥屏者的想法或反应（1-3句话）。你可以：
+根据以上信息，用符合你人设的方式，表达你作为窥屏者的想法或反应。你可以：
 - 对页面上的内容表示好奇、吃醋或调侃（从窥屏者的角度）
 - 对用户正在查看的内容进行评论或吐槽（从窥屏者的角度）
 - 表达作为窥屏者发现这些信息时的心理活动

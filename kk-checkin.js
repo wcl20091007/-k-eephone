@@ -109,7 +109,15 @@ async function generateHouseData(charId, includeComputer = true) {
       linkedMemoryContext = allContexts.filter(Boolean).join('\n');
     }
 
-    const npcLibrary = chat.npcLibrary || [];
+    // 【NPC库优化】从全局NPC库获取启用的NPC
+    let npcLibrary = [];
+    if (typeof getEnabledNpcs === 'function') {
+      npcLibrary = await getEnabledNpcs(chat);
+    } else if (chat.enabledNpcIds && chat.enabledNpcIds.length > 0) {
+      // 如果getEnabledNpcs不可用，直接查询全局NPC库
+      const allNpcs = await db.globalNpcs.toArray();
+      npcLibrary = allNpcs.filter(npc => chat.enabledNpcIds.includes(npc.id));
+    }
     let npcContext = '';
     if (npcLibrary.length > 0) {
       npcContext = '# 你的专属NPC好友列表' + npcLibrary.map(npc => `- **${npc.name}**: ${npc.persona}`).join('\n');
@@ -217,24 +225,29 @@ async function generateHouseData(charId, includeComputer = true) {
     // ▼▼▼ 逐张生成图片逻辑 (保持不变) ▼▼▼
     (async () => {
       // ... (这里保留你原本的图片生成逻辑，不用动) ...
-      const generateWithRetry = async (prompt, description) => {
+      const generateWithRetry = async (prompt, description, maxRetries = 5) => {
         let attempt = 1;
-        while (true) {
+        while (attempt <= maxRetries) {
           try {
-            console.log(`[${attempt}次尝试] 正在为“${description}”生成图片...`);
-            const url = await generateAndLoadImage(prompt);
+            console.log(`[${attempt}/${maxRetries}次尝试] 正在为"${description}"生成图片...`);
+            const url = await generateAndLoadImage(prompt, maxRetries);
             if (url && url.length > 100) {
-              console.log(`✅ “${description}”生成成功！`);
+              console.log(`✅ "${description}"生成成功！`);
               return url;
             } else {
               throw new Error('生成的图片URL无效');
             }
           } catch (e) {
-            console.warn(`❌ “${description}”生成失败: ${e.message}。3秒后自动重试...`);
+            if (attempt >= maxRetries) {
+              console.error(`❌ "${description}"生成失败，已达到最大重试次数(${maxRetries}): ${e.message}`);
+              throw new Error(`图片生成失败，已重试${maxRetries}次: ${e.message}`);
+            }
+            console.warn(`❌ "${description}"生成失败: ${e.message}。3秒后自动重试...`);
             await new Promise(resolve => setTimeout(resolve, 3000));
             attempt++;
           }
         }
+        throw new Error(`图片生成失败，已重试${maxRetries}次`);
       };
 
       try {
