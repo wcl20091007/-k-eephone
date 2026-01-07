@@ -1364,7 +1364,43 @@
             </div>
           </div>
 
-          <!-- 4. 图像生成卡片 -->
+          <!-- 4. 浏览器通知权限卡片 -->
+          <div class="moe-card">
+            <div class="moe-card-header">
+              <span class="icon">🔔</span>
+              <h3>浏览器通知</h3>
+            </div>
+            <div class="moe-card-body">
+              <div class="form-group">
+                <p style="color: #666; font-size: 14px; margin-bottom: 15px;">
+                  ✅ <strong>后台通知已启用</strong><br>
+                  启用浏览器原生通知后，即使网站关闭或切换到后台，也能收到消息提醒（支持 Android、iOS、PC）<br>
+                  <span style="color: #888; font-size: 12px;">
+                    💡 提示：添加到主屏幕后，通知功能会更稳定
+                  </span>
+                </p>
+                <div id="notification-permission-status" style="margin-bottom: 15px; padding: 10px; border-radius: 8px; background: #f0f0f0;">
+                  <strong>当前状态：</strong>
+                  <span id="notification-status-text">检查中...</span>
+                </div>
+                <div id="service-worker-status" style="margin-bottom: 15px; padding: 10px; border-radius: 8px; background: #f0f0f0; display: none;">
+                  <strong>Service Worker：</strong>
+                  <span id="service-worker-status-text">检查中...</span>
+                </div>
+                <button id="request-notification-permission-btn" class="moe-btn-secondary" style="width: 100%;">
+                  🔔 请求通知权限
+                </button>
+                <button id="test-notification-btn" class="moe-btn-secondary" style="width: 100%; margin-top: 10px;">
+                  🧪 测试通知（立即显示）
+                </button>
+                <button id="test-background-notification-btn" class="moe-btn-secondary" style="width: 100%; margin-top: 10px;">
+                  🔄 测试后台通知（5秒后发送）
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 5. 图像生成卡片 -->
           <div class="moe-card">
             <div class="moe-card-header">
               <span class="icon">🎨</span>
@@ -15861,6 +15897,73 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
       };
       document.addEventListener("DOMContentLoaded", () => {
         // ===================================================================
+        // 0. Service Worker 注册 (PWA 通知支持)
+        // ===================================================================
+        // 检测浏览器兼容性
+        const isServiceWorkerSupported = 'serviceWorker' in navigator;
+        const isNotificationSupported = 'Notification' in window;
+        const isPushManagerSupported = 'PushManager' in window;
+        
+        console.log('浏览器兼容性检查:', {
+          serviceWorker: isServiceWorkerSupported,
+          notification: isNotificationSupported,
+          pushManager: isPushManagerSupported,
+          userAgent: navigator.userAgent
+        });
+
+        if (isServiceWorkerSupported) {
+          // 注册 Service Worker
+          window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./sw.js', {
+              scope: './'
+            })
+            .then((registration) => {
+              console.log('✅ Service Worker 注册成功:', registration);
+              console.log('Service Worker 作用域:', registration.scope);
+              
+              // 检查更新
+              registration.addEventListener('updatefound', () => {
+                console.log('发现 Service Worker 更新');
+                const newWorker = registration.installing;
+                newWorker.addEventListener('statechange', () => {
+                  if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                    console.log('新的 Service Worker 已安装，刷新页面以使用新版本');
+                  }
+                });
+              });
+            })
+            .catch((error) => {
+              console.error('❌ Service Worker 注册失败:', error);
+              // 在非 HTTPS 环境下，Service Worker 无法注册
+              if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+                console.warn('⚠️ Service Worker 需要 HTTPS 环境（Netlify 会自动提供 HTTPS）');
+              }
+            });
+          });
+
+          // 监听来自 Service Worker 的消息
+          navigator.serviceWorker.addEventListener('message', (event) => {
+            console.log('收到 Service Worker 消息:', event.data);
+            if (event.data && event.data.type === 'OPEN_CHAT') {
+              const chatId = event.data.chatId;
+              if (chatId && typeof openChat === 'function') {
+                showScreen('chat-interface-screen');
+                openChat(chatId);
+              }
+            }
+          });
+
+          // 监听 Service Worker 控制器变化
+          navigator.serviceWorker.addEventListener('controllerchange', () => {
+            console.log('Service Worker 控制器已更新');
+            window.location.reload();
+          });
+        } else {
+          console.warn('⚠️ 此浏览器不支持 Service Worker');
+          console.warn('支持的浏览器：Chrome, Edge, Firefox, Safari (iOS 需要添加到主屏幕)');
+        }
+
+        // ===================================================================
         // 1. 所有变量和常量定义
         // ===================================================================
         // 宠物数值衰减相关的全局变量和常量
@@ -20306,11 +20409,182 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           return `${hours}:${minutes}`;
         }
 
+        // ===================================================================
+        // 浏览器原生通知管理函数
+        // ===================================================================
+        /**
+         * 请求浏览器通知权限
+         * @returns {Promise<boolean>} 是否获得权限
+         */
+        async function requestNotificationPermission() {
+          if (!('Notification' in window)) {
+            console.warn('此浏览器不支持通知功能');
+            return false;
+          }
+
+          if (Notification.permission === 'granted') {
+            return true;
+          }
+
+          if (Notification.permission !== 'denied') {
+            const permission = await Notification.requestPermission();
+            return permission === 'granted';
+          }
+
+          return false;
+        }
+
+        /**
+         * 发送浏览器原生通知（支持后台发送，跨浏览器兼容）
+         * @param {string} title - 通知标题
+         * @param {object} options - 通知选项
+         */
+        async function showBrowserNotification(title, options = {}) {
+          // 检查是否支持通知
+          if (!('Notification' in window)) {
+            console.warn('❌ 此浏览器不支持通知功能');
+            await showCustomAlert("不支持", "您的浏览器不支持通知功能。\n\n支持的浏览器：\n• Chrome/Edge (Windows/Mac/Android)\n• Firefox (Windows/Mac/Android)\n• Safari (Mac/iOS - 需添加到主屏幕)");
+            return;
+          }
+
+          // 如果权限已授予，直接显示通知
+          if (Notification.permission === 'granted') {
+            // 优先使用 Service Worker 发送通知（这样即使页面关闭或后台也能收到）
+            if ('serviceWorker' in navigator) {
+              try {
+                const registration = await navigator.serviceWorker.ready;
+                
+                // 准备通知选项（跨浏览器兼容）
+                const notificationOptions = {
+                  body: options.body || '',
+                  icon: options.icon || 'https://i.postimg.cc/Kj8JnRcp/267611-CC01-F8-A3-B4910-A2-C2-FFDE479-DC.jpg',
+                  badge: options.badge || 'https://i.postimg.cc/Kj8JnRcp/267611-CC01-F8-A3-B4910-A2-C2-FFDE479-DC.jpg',
+                  tag: options.tag || 'ephone-notification',
+                  requireInteraction: options.requireInteraction || false,
+                  silent: options.silent || false,
+                  data: options.data || {}
+                };
+
+                // 添加震动（仅支持移动设备）
+                if ('vibrate' in navigator && options.vibrate) {
+                  notificationOptions.vibrate = options.vibrate;
+                }
+
+                // 方法1: 直接使用 registration.showNotification（推荐，支持后台）
+                // 这是最可靠的方法，支持所有现代浏览器
+                await registration.showNotification(title, notificationOptions);
+                console.log('✅ 通过 Service Worker 发送通知成功');
+                return;
+              } catch (error) {
+                console.error('❌ Service Worker 通知失败，尝试备用方法:', error);
+                // 备用方法：通过 postMessage 发送
+                try {
+                  const registration = await navigator.serviceWorker.ready;
+                  if (registration.active) {
+                    registration.active.postMessage({
+                      type: 'SHOW_NOTIFICATION',
+                      title: title,
+                      options: notificationOptions
+                    });
+                    console.log('✅ 通过 postMessage 发送通知请求');
+                    return;
+                  }
+                } catch (error2) {
+                  console.error('❌ Service Worker postMessage 失败:', error2);
+                }
+              }
+            }
+
+            // 降级到普通通知（仅当页面在前台时有效）
+            try {
+              const fallbackOptions = {
+                body: options.body || '',
+                icon: options.icon || 'https://i.postimg.cc/Kj8JnRcp/267611-CC01-F8-A3-B4910-A2-C2-FFDE479-DC.jpg',
+                badge: options.badge || 'https://i.postimg.cc/Kj8JnRcp/267611-CC01-F8-A3-B4910-A2-C2-FFDE479-DC.jpg',
+                tag: options.tag || 'ephone-notification',
+                requireInteraction: options.requireInteraction || false,
+                silent: options.silent || false,
+                data: options.data || {}
+              };
+
+              // 某些浏览器不支持某些选项
+              const notification = new Notification(title, fallbackOptions);
+              console.log('✅ 使用普通 Notification API 发送通知');
+              
+              // 添加点击事件
+              notification.onclick = function() {
+                console.log('通知被点击');
+                window.focus();
+                notification.close();
+              };
+            } catch (error) {
+              console.error('❌ 普通通知也失败:', error);
+              await showCustomAlert("通知失败", "发送通知时出错：" + error.message);
+            }
+          } else if (Notification.permission !== 'denied') {
+            // 如果权限未请求，尝试请求权限
+            const permission = await Notification.requestPermission();
+            if (permission === 'granted') {
+              // 权限已授予，重新调用
+              showBrowserNotification(title, options);
+            } else {
+              console.warn('用户拒绝了通知权限');
+            }
+          } else {
+            console.warn('通知权限已被拒绝，需要在浏览器设置中手动允许');
+            await showCustomAlert("权限被拒绝", "通知权限已被拒绝。\n\n请在浏览器设置中允许此网站的通知权限：\n• Chrome/Edge: 设置 > 隐私和安全 > 网站设置 > 通知\n• Firefox: 设置 > 隐私与安全 > 权限 > 通知\n• Safari: 系统偏好设置 > 通知");
+          }
+        }
+
+        /**
+         * 订阅 Push Notification（需要服务器端支持）
+         * @returns {Promise<PushSubscription|null>} 推送订阅对象
+         */
+        async function subscribeToPushNotifications() {
+          if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+            console.warn('此浏览器不支持 Push Notification');
+            return null;
+          }
+
+          try {
+            const registration = await navigator.serviceWorker.ready;
+            
+            // 检查是否已经订阅
+            let subscription = await registration.pushManager.getSubscription();
+            
+            if (!subscription) {
+              // 创建新的订阅
+              // 注意：这里需要服务器端的 VAPID 公钥
+              // 如果你有服务器端支持，可以在这里添加 VAPID 公钥
+              const applicationServerKey = null; // 需要服务器端提供 VAPID 公钥
+              
+              if (!applicationServerKey) {
+                console.warn('未配置 VAPID 公钥，无法订阅 Push Notification');
+                console.info('提示：Push Notification 需要服务器端支持。当前使用 Service Worker 通知，在后台也能工作。');
+                return null;
+              }
+
+              subscription = await registration.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: applicationServerKey
+              });
+            }
+
+            console.log('Push Notification 订阅成功:', subscription);
+            return subscription;
+          } catch (error) {
+            console.error('订阅 Push Notification 失败:', error);
+            return null;
+          }
+        }
+
         function showNotification(chatId, messageContent) {
           playNotificationSound();
           clearTimeout(notificationTimeout);
           const chat = state.chats[chatId];
           if (!chat) return;
+
+          // 原有的页面内通知栏显示
           const bar = document.getElementById("notification-bar");
           document.getElementById("notification-avatar").src =
             chat.settings.aiAvatar ||
@@ -20336,6 +20610,24 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           notificationTimeout = setTimeout(() => {
             newBar.classList.remove("visible");
           }, 4000);
+
+          // 发送浏览器原生通知（如果已授权）
+          if (Notification.permission === 'granted') {
+            const avatarUrl = chat.settings.aiAvatar ||
+              chat.settings.groupAvatar ||
+              defaultAvatar;
+            
+            showBrowserNotification(notifName, {
+              body: messageContent,
+              icon: avatarUrl,
+              badge: avatarUrl,
+              tag: `chat-${chatId}`,
+              data: { chatId: chatId },
+              requireInteraction: false,
+              silent: false,
+              vibrate: [200, 100, 200]
+            });
+          }
         }
 
         /**
@@ -21291,6 +21583,130 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             });
           }
           calculateTotalImageSize();
+
+          // 更新通知权限状态
+          updateNotificationPermissionStatus();
+        }
+
+        /**
+         * 检测浏览器类型
+         */
+        function detectBrowser() {
+          const ua = navigator.userAgent;
+          if (ua.includes('Edg/')) return 'Edge';
+          if (ua.includes('Chrome/')) return 'Chrome';
+          if (ua.includes('Firefox/')) return 'Firefox';
+          if (ua.includes('Safari/') && !ua.includes('Chrome/')) return 'Safari';
+          if (ua.includes('Opera/') || ua.includes('OPR/')) return 'Opera';
+          return 'Unknown';
+        }
+
+        /**
+         * 检测操作系统
+         */
+        function detectOS() {
+          const ua = navigator.userAgent;
+          if (ua.includes('Windows')) return 'Windows';
+          if (ua.includes('Mac OS')) return 'macOS';
+          if (ua.includes('Android')) return 'Android';
+          if (ua.includes('iPhone') || ua.includes('iPad')) return 'iOS';
+          if (ua.includes('Linux')) return 'Linux';
+          return 'Unknown';
+        }
+
+        /**
+         * 更新通知权限状态显示
+         */
+        async function updateNotificationPermissionStatus() {
+          const statusText = document.getElementById("notification-status-text");
+          const statusDiv = document.getElementById("notification-permission-status");
+          const requestBtn = document.getElementById("request-notification-permission-btn");
+          const testBtn = document.getElementById("test-notification-btn");
+          const testBackgroundBtn = document.getElementById("test-background-notification-btn");
+          const swStatusDiv = document.getElementById("service-worker-status");
+          const swStatusText = document.getElementById("service-worker-status-text");
+
+          // 如果元素不存在，直接返回
+          if (!statusText || !statusDiv) {
+            console.warn('通知状态元素不存在');
+            return;
+          }
+
+          const browser = detectBrowser();
+          const os = detectOS();
+          const isHTTPS = location.protocol === 'https:' || location.hostname === 'localhost';
+
+          // 先显示基本信息，避免一直显示"检查中..."
+          statusText.textContent = "正在检查...";
+
+          // 检查 Service Worker 状态（添加超时）
+          if ('serviceWorker' in navigator) {
+            try {
+              // 设置超时，避免一直等待
+              const swCheckPromise = navigator.serviceWorker.ready;
+              const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Service Worker 检查超时')), 3000)
+              );
+
+              const registration = await Promise.race([swCheckPromise, timeoutPromise]);
+              const isIOS = os === 'iOS';
+              const isStandalone = window.matchMedia('(display-mode: standalone)').matches || 
+                                   window.navigator.standalone || 
+                                   document.referrer.includes('android-app://');
+              
+              let swStatus = "✅ 已激活 - 支持后台通知";
+              if (isIOS && !isStandalone) {
+                swStatus += "\n⚠️ iOS 需要添加到主屏幕才能使用后台通知";
+              }
+              if (!isHTTPS) {
+                swStatus += "\n⚠️ 需要 HTTPS（Netlify 会自动提供）";
+              }
+
+              swStatusText.textContent = swStatus;
+              swStatusDiv.style.background = "#efe";
+              swStatusDiv.style.display = "block";
+            } catch (error) {
+              console.warn('Service Worker 检查失败:', error);
+              swStatusText.textContent = "⚠️ 未激活或检查超时\n提示：刷新页面后重试";
+              swStatusDiv.style.background = "#fff3cd";
+              swStatusDiv.style.display = "block";
+            }
+          } else {
+            swStatusText.textContent = "❌ 不支持 Service Worker\n当前浏览器：" + browser + " (" + os + ")";
+            swStatusDiv.style.background = "#fee";
+            swStatusDiv.style.display = "block";
+          }
+
+          // 检查通知支持
+          if (!('Notification' in window)) {
+            statusText.textContent = "❌ 浏览器不支持通知功能\n当前：" + browser + " (" + os + ")";
+            statusDiv.style.background = "#fee";
+            requestBtn.style.display = "none";
+            // 测试按钮保持可见，但点击时会提示不支持
+            return;
+          }
+
+          // 检查通知权限状态
+          const permission = Notification.permission;
+          if (permission === 'granted') {
+            statusText.textContent = "✅ 已授权 - 可以接收通知（包括后台）\n浏览器：" + browser + " | 系统：" + os;
+            statusDiv.style.background = "#efe";
+            requestBtn.textContent = "✅ 已授权";
+            requestBtn.disabled = true;
+            // 测试按钮始终可见
+          } else if (permission === 'denied') {
+            statusText.textContent = "❌ 已拒绝 - 请在浏览器设置中允许通知\n浏览器：" + browser + " | 系统：" + os;
+            statusDiv.style.background = "#fee";
+            requestBtn.textContent = "🔔 重新请求权限";
+            requestBtn.disabled = false;
+            // 测试按钮保持可见，但点击时会提示需要权限
+          } else {
+            statusText.textContent = "⏳ 未授权 - 点击下方按钮请求权限\n浏览器：" + browser + " | 系统：" + os;
+            statusDiv.style.background = "#fff3cd";
+            requestBtn.textContent = "🔔 请求通知权限";
+            requestBtn.disabled = false;
+            // 测试按钮保持可见，但点击时会提示需要权限
+          }
         }
 
         /**
@@ -53664,6 +54080,111 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             .getElementById("fetch-minimax-speech-models-btn")
             .addEventListener("click", fetchMinimaxSpeechModels);
 
+          // 通知权限管理事件监听器
+          document
+            .getElementById("request-notification-permission-btn")
+            .addEventListener("click", async () => {
+              const granted = await requestNotificationPermission();
+              if (granted) {
+                updateNotificationPermissionStatus();
+                await showCustomAlert("权限已授予", "浏览器通知功能已启用！现在即使关闭网站也能收到消息提醒。");
+              } else {
+                updateNotificationPermissionStatus();
+                await showCustomAlert("权限被拒绝", "您拒绝了通知权限。如需启用，请在浏览器设置中允许此网站的通知权限。");
+              }
+            });
+
+          document
+            .getElementById("test-notification-btn")
+            .addEventListener("click", async () => {
+              // 检查权限
+              if (!('Notification' in window)) {
+                await showCustomAlert("不支持", "您的浏览器不支持通知功能。");
+                return;
+              }
+
+              if (Notification.permission !== 'granted') {
+                const result = await showChoiceModal(
+                  "需要权限", 
+                  [{ text: "立即请求权限", value: "request" }, { text: "取消", value: "cancel" }]
+                );
+                if (result === "request") {
+                  document.getElementById("request-notification-permission-btn").click();
+                } else {
+                  await showCustomAlert("提示", "请先点击上方的「请求通知权限」按钮授权通知权限，然后再测试。");
+                }
+                return;
+              }
+
+              try {
+                // 立即显示测试通知
+                await showBrowserNotification("🧪 测试通知", {
+                  body: "✅ 这是一条测试通知！如果您看到这条消息，说明通知功能正常工作。\n\n支持平台：\n• Windows (Edge/Chrome)\n• Android (Chrome)\n• iOS (Safari - 需添加到主屏幕)",
+                  icon: "https://i.postimg.cc/Kj8JnRcp/267611-CC01-F8-A3-B4910-A2-C2-FFDE479-DC.jpg",
+                  badge: "https://i.postimg.cc/Kj8JnRcp/267611-CC01-F8-A3-B4910-A2-C2-FFDE479-DC.jpg",
+                  tag: "test-notification-" + Date.now(), // 使用时间戳确保每次都显示
+                  requireInteraction: false,
+                  silent: false,
+                  vibrate: [200, 100, 200],
+                  data: { test: true, timestamp: Date.now() }
+                });
+                
+                // 显示成功提示
+                console.log('✅ 测试通知已发送');
+              } catch (error) {
+                console.error('测试通知失败:', error);
+                await showCustomAlert("测试失败", "发送测试通知时出错：" + error.message);
+              }
+            });
+
+          document
+            .getElementById("test-background-notification-btn")
+            .addEventListener("click", async () => {
+              // 检查权限
+              if (!('Notification' in window)) {
+                await showCustomAlert("不支持", "您的浏览器不支持通知功能。");
+                return;
+              }
+
+              if (Notification.permission !== 'granted') {
+                const result = await showChoiceModal(
+                  "需要权限", 
+                  [{ text: "立即请求权限", value: "request" }, { text: "取消", value: "cancel" }]
+                );
+                if (result === "request") {
+                  document.getElementById("request-notification-permission-btn").click();
+                } else {
+                  await showCustomAlert("提示", "请先点击上方的「请求通知权限」按钮授权通知权限，然后再测试。");
+                }
+                return;
+              }
+
+              await showCustomAlert("后台通知测试", "5秒后将发送一条后台通知。请在此期间切换到其他应用或最小化窗口，以测试后台通知功能。");
+              
+              setTimeout(async () => {
+                // 通过 Service Worker 发送通知，确保即使在后台也能收到
+                if ('serviceWorker' in navigator) {
+                  try {
+                    const registration = await navigator.serviceWorker.ready;
+                    await registration.showNotification("后台通知测试", {
+                      body: "✅ 如果您看到这条通知，说明后台通知功能正常工作！即使应用在后台或关闭，也能收到通知。",
+                      icon: "https://i.postimg.cc/Kj8JnRcp/267611-CC01-F8-A3-B4910-A2-C2-FFDE479-DC.jpg",
+                      badge: "https://i.postimg.cc/Kj8JnRcp/267611-CC01-F8-A3-B4910-A2-C2-FFDE479-DC.jpg",
+                      tag: "test-background-notification",
+                      requireInteraction: false,
+                      vibrate: [200, 100, 200],
+                      data: { test: true }
+                    });
+                  } catch (error) {
+                    console.error('后台通知测试失败:', error);
+                    await showCustomAlert("测试失败", "后台通知测试失败：" + error.message);
+                  }
+                } else {
+                  await showCustomAlert("不支持", "您的浏览器不支持 Service Worker，无法测试后台通知。");
+                }
+              }, 5000);
+            });
+
           // NovelAI系统的JavaScript事件监听器
           document
             .getElementById("novelai-switch")
@@ -59574,11 +60095,6 @@ ${content ? `# 页面内容\n${content}\n` : ""}
               throw new Error(`API配置不完整。请检查：${!proxyUrl ? '反代地址' : ''}${!apiKey ? '密钥' : ''}${!model ? '模型' : ''}`);
             }
 
-            // 检查是否使用file://协议（会导致CORS错误）
-            if (window.location.protocol === 'file:') {
-              throw new Error('检测到使用file://协议打开文件，这会导致CORS错误。请使用本地服务器打开（例如：python -m http.server 或使用VS Code的Live Server扩展）');
-            }
-
             const messagesForApi = [{ role: "user", content: systemPrompt }];
             const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models";
             const isGemini = proxyUrl === GEMINI_API_URL || proxyUrl?.includes("generativelanguage.googleapis.com");
@@ -59607,10 +60123,7 @@ ${content ? `# 页面内容\n${content}\n` : ""}
                 });
               }
             } catch (fetchError) {
-              // 处理网络错误（包括CORS）
-              if (fetchError.message.includes('Failed to fetch') || fetchError.message.includes('CORS')) {
-                throw new Error('网络请求失败，可能是CORS错误。请确保使用http://或https://协议打开页面，而不是file://协议。');
-              }
+              // 处理网络错误
               throw new Error(`网络请求失败: ${fetchError.message}`);
             }
 
