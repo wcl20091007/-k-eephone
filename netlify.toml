@@ -1,0 +1,41 @@
+# Netlify 配置文件
+# 确保 Service Worker 和 PWA 功能正常工作
+
+[build]
+  # 如果使用构建命令，在这里配置
+  # command = "npm run build"
+  # publish = "dist"
+
+# 重定向规则
+[[redirects]]
+  from = "/sw.js"
+  to = "/sw.js"
+  status = 200
+  force = true
+  headers = {X-Content-Type-Options = "nosniff", X-Frame-Options = "DENY"}
+
+# 安全头设置
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-XSS-Protection = "1; mode=block"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "notifications=*, geolocation=*"
+
+# Service Worker 特殊配置
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Content-Type = "application/javascript; charset=utf-8"
+    Service-Worker-Allowed = "/"
+    Cache-Control = "no-cache, no-store, must-revalidate"
+
+# Manifest 文件配置
+[[headers]]
+  for = "/manifest.json"
+  [headers.values]
+    Content-Type = "application/manifest+json"
+    Cache-Control = "public, max-age=3600"
+
