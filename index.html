@@ -59574,34 +59574,50 @@ ${content ? `# 页面内容\n${content}\n` : ""}
               throw new Error(`API配置不完整。请检查：${!proxyUrl ? '反代地址' : ''}${!apiKey ? '密钥' : ''}${!model ? '模型' : ''}`);
             }
 
+            // 检查是否使用file://协议（会导致CORS错误）
+            if (window.location.protocol === 'file:') {
+              throw new Error('检测到使用file://协议打开文件，这会导致CORS错误。请使用本地服务器打开（例如：python -m http.server 或使用VS Code的Live Server扩展）');
+            }
+
             const messagesForApi = [{ role: "user", content: systemPrompt }];
             const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models";
             const isGemini = proxyUrl === GEMINI_API_URL || proxyUrl?.includes("generativelanguage.googleapis.com");
             
             let response;
-            if (isGemini) {
-              if (window.toGeminiRequestData) {
-                const geminiConfig = window.toGeminiRequestData(model, apiKey, systemPrompt, messagesForApi, true, 0.8);
-                response = await fetch(geminiConfig.url, geminiConfig.data);
+            try {
+              if (isGemini) {
+                if (window.toGeminiRequestData) {
+                  const geminiConfig = window.toGeminiRequestData(model, apiKey, systemPrompt, messagesForApi, true, 0.8);
+                  response = await fetch(geminiConfig.url, geminiConfig.data);
+                } else {
+                  response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${model}:generateContent?key=${apiKey}`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      contents: [{ role: "user", parts: [{ text: systemPrompt }] }],
+                      generationConfig: { temperature: 0.8 }
+                    })
+                  });
+                }
               } else {
-                response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${model}:generateContent?key=${apiKey}`, {
+                response = await fetch(`${proxyUrl}/v1/chat/completions`, {
                   method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    contents: [{ role: "user", parts: [{ text: systemPrompt }] }],
-                    generationConfig: { temperature: 0.8 }
-                  })
+                  headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+                  body: JSON.stringify({ model, messages: messagesForApi, temperature: 0.8 })
                 });
               }
-            } else {
-              response = await fetch(`${proxyUrl}/v1/chat/completions`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-                body: JSON.stringify({ model, messages: messagesForApi, temperature: 0.8 })
-              });
+            } catch (fetchError) {
+              // 处理网络错误（包括CORS）
+              if (fetchError.message.includes('Failed to fetch') || fetchError.message.includes('CORS')) {
+                throw new Error('网络请求失败，可能是CORS错误。请确保使用http://或https://协议打开页面，而不是file://协议。');
+              }
+              throw new Error(`网络请求失败: ${fetchError.message}`);
             }
 
-            if (!response.ok) throw new Error(`API请求失败: ${response.status} - ${await response.text()}`);
+            if (!response.ok) {
+              const errorText = await response.text().catch(() => '无法读取错误信息');
+              throw new Error(`API请求失败: ${response.status} - ${errorText}`);
+            }
             
             const data = await response.json();
             if (data.error) throw new Error(`API返回错误: ${data.error.message || JSON.stringify(data.error)}`);
@@ -59791,6 +59807,88 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
                   : "没有置顶的聊天";
                 const qqContent = `# 聊天列表\n${chatListText}\n\n# 置顶信息\n${pinnedInfo}\n\n# 你的备注名\n用户给你的备注名是："${qqInfo.remarkNameForMe}"`;
                 systemPrompt = buildBasePrompt(activePetChat, `你发现用户当前正在查看角色"${qqInfo.characterName}"的QQ消息列表。作为窥屏者，你看到了以下信息：`, qqContent);
+              }
+            } else if (screenId === "calendar-screen") {
+              // 日历界面 - 读取选中日期的信息
+              try {
+                // 获取选中日期（从全局变量或DOM）
+                const selectedDateEl = document.getElementById("calendar-selected-date");
+                const selectedDateText = selectedDateEl?.textContent || "未选择日期";
+                
+                // 获取选中日期的完整信息
+                let calendarInfo = `# 当前选中日期\n${selectedDateText}\n\n`;
+                
+                // 尝试获取选中日期的行程和待办
+                if (typeof window.selectedDate === "string" && window.selectedDate) {
+                  const focusDateStr = window.selectedDate;
+                  const focusDateObj = new Date(focusDateStr);
+                  const focusDateLabel = `${focusDateObj.getMonth() + 1}月${focusDateObj.getDate()}日`;
+                  
+                  calendarInfo += `# 聚焦日期: ${focusDateLabel}\n\n`;
+                  
+                  // 获取行程和待办
+                  if (typeof getCalendarDataForDate === "function") {
+                    const { events = [], todos = [] } = await getCalendarDataForDate(focusDateStr);
+                    
+                    if (events.length > 0) {
+                      calendarInfo += `# 行程安排\n${events.map(e => {
+                        const time = e.startTime || e.time || "";
+                        const endTime = e.endTime ? ` - ${e.endTime}` : "";
+                        return `- ${time}${endTime} ${e.content}`;
+                      }).join("\n")}\n\n`;
+                    } else {
+                      calendarInfo += `# 行程安排\n暂无\n\n`;
+                    }
+                    
+                    if (todos.length > 0) {
+                      calendarInfo += `# 待办事项\n${todos.map(t => {
+                        const status = t.completed ? "✓" : "○";
+                        return `${status} ${t.content}`;
+                      }).join("\n")}\n\n`;
+                    } else {
+                      calendarInfo += `# 待办事项\n暂无\n\n`;
+                    }
+                  }
+                  
+                  // 获取月经记录
+                  if (typeof getPeriodDataForDate === "function") {
+                    const periodData = await getPeriodDataForDate(focusDateStr);
+                    if (periodData) {
+                      const flowMap = { light: "少", medium: "中", heavy: "大" };
+                      const painMap = { none: "不痛", mild: "痛", severe: "非常痛" };
+                      calendarInfo += `# 月经记录\n- 经量: ${flowMap[periodData.flow] || periodData.flow}\n- 疼痛: ${painMap[periodData.pain] || periodData.pain}\n\n`;
+                    }
+                  }
+                  
+                  // 获取该日的聊天记录
+                  if (activePetChat && Array.isArray(activePetChat.history)) {
+                    const startOfDay = new Date(focusDateStr);
+                    startOfDay.setHours(0, 0, 0, 0);
+                    const endOfDay = new Date(startOfDay);
+                    endOfDay.setDate(endOfDay.getDate() + 1);
+                    
+                    const dayMessages = activePetChat.history.filter(
+                      msg => msg.timestamp && 
+                      msg.timestamp >= startOfDay.getTime() && 
+                      msg.timestamp < endOfDay.getTime() &&
+                      !msg.isHidden
+                    );
+                    
+                    if (dayMessages.length > 0) {
+                      calendarInfo += `# 该日聊天记录（最近6条）\n${dayMessages.slice(-6).map(msg => {
+                        const sender = msg.role === "user" ? "用户" : activePetChat.name;
+                        return `${sender}: ${String(msg.content).substring(0, 100)}`;
+                      }).join("\n")}\n`;
+                    }
+                  }
+                } else {
+                  calendarInfo += "用户正在查看日历，但未选中具体日期。";
+                }
+                
+                systemPrompt = buildBasePrompt(activePetChat, "你发现用户当前正在查看日历界面。作为窥屏者，你看到了以下信息：", calendarInfo);
+              } catch (error) {
+                console.error("获取日历信息失败:", error);
+                systemPrompt = buildBasePrompt(activePetChat, "你发现用户正在查看日历界面，但无法获取详细信息。");
               }
             } else {
               // 【通用方法】使用自动提取的页面内容

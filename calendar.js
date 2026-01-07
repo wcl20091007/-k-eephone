@@ -6,6 +6,16 @@ let currentCalendarDate = new Date();
 let selectedDate = null; // 当前选中的日期 (YYYY-MM-DD格式)
 let currentTab = 'events'; // 当前显示的标签：'events' 或 'todos'
 
+// 将selectedDate暴露到全局作用域，供桌宠等功能使用
+if (typeof window !== 'undefined') {
+  Object.defineProperty(window, 'selectedDate', {
+    get: () => selectedDate,
+    set: (value) => { selectedDate = value; },
+    enumerable: true,
+    configurable: true
+  });
+}
+
 /**
  * 初始化日历App
  */
@@ -28,6 +38,32 @@ async function initCalendar() {
     if (calendarScreen && floatingAddBtn) {
       if (calendarScreen.classList.contains('active')) {
         floatingAddBtn.style.display = 'flex';
+        
+        // 每次进入月历时，自动选中今天（使用立即执行的异步函数）
+        (async () => {
+          const today = formatDate(new Date());
+          const todayDate = new Date();
+          const currentYear = todayDate.getFullYear();
+          const currentMonth = todayDate.getMonth();
+          
+          // 如果当前显示的月份不是今天所在的月份，切换到当前月份
+          if (currentCalendarDate.getFullYear() !== currentYear || 
+              currentCalendarDate.getMonth() !== currentMonth) {
+            currentCalendarDate = new Date(currentYear, currentMonth, 1);
+          }
+          
+          // 如果当前没有选中日期，或者选中的不是今天，则选中今天
+          if (!selectedDate || selectedDate !== today) {
+            selectedDate = today;
+            // 重新渲染日历以显示选中状态
+            await renderCalendar(currentCalendarDate);
+            // 加载今天的信息
+            await loadDayInfo(selectedDate);
+          } else {
+            // 即使已经选中今天，也确保日历已正确渲染（防止月份切换后状态丢失）
+            await renderCalendar(currentCalendarDate);
+          }
+        })();
       } else {
         floatingAddBtn.style.display = 'none';
       }
@@ -39,6 +75,28 @@ async function initCalendar() {
     // 初始化显示状态
     if (calendarScreen.classList.contains('active') && floatingAddBtn) {
       floatingAddBtn.style.display = 'flex';
+      // 如果初始化时日历界面已经激活，确保选中今天（使用立即执行的异步函数）
+      (async () => {
+        const today = formatDate(new Date());
+        const todayDate = new Date();
+        const currentYear = todayDate.getFullYear();
+        const currentMonth = todayDate.getMonth();
+        
+        // 如果当前显示的月份不是今天所在的月份，切换到当前月份
+        if (currentCalendarDate.getFullYear() !== currentYear || 
+            currentCalendarDate.getMonth() !== currentMonth) {
+          currentCalendarDate = new Date(currentYear, currentMonth, 1);
+        }
+        
+        // 确保选中今天
+        if (!selectedDate || selectedDate !== today) {
+          selectedDate = today;
+          // 重新渲染日历以显示选中状态
+          await renderCalendar(currentCalendarDate);
+          // 加载今天的信息
+          await loadDayInfo(selectedDate);
+        }
+      })();
     }
   }
 
@@ -425,16 +483,10 @@ async function renderCalendar(date) {
 
     // 设置样式（在创建dayNumber之后）
     // 优先级：选中状态 > 月经记录 > 今天标记
-    // 月经记录的粉色背景需要一直存在，即使被选中
     if (isSelected) {
-      // 选中状态：如果有月经记录，背景是粉色，边框是蓝色；否则背景是蓝色
-      if (hasPeriod) {
-        dayCell.style.setProperty('background-color', '#ffb3d9', 'important');
-        dayCell.style.setProperty('border', '2px solid var(--accent-color)', 'important');
-      } else {
-        dayCell.style.setProperty('background-color', 'var(--accent-color)', 'important');
-        dayCell.style.setProperty('border', '2px solid var(--accent-color)', 'important');
-      }
+      // 选中状态统一深蓝底+白字，月经日也保持一致
+      dayCell.style.setProperty('background-color', 'var(--accent-color)', 'important');
+      dayCell.style.setProperty('border', '2px solid var(--accent-color)', 'important');
       dayCell.style.setProperty('color', 'white', 'important');
       dayNumber.style.setProperty('color', 'white', 'important');
       dayCell.classList.add('calendar-day-selected');
@@ -604,15 +656,8 @@ async function renderCalendar(date) {
         });
         
         // 更新当前选中日期的样式 - 使用setProperty确保样式优先级
-        // 如果有月经记录，背景是粉色，边框是蓝色；否则背景是蓝色
-        const hasPeriodSelected = periodDates.has(dateStr);
-        if (hasPeriodSelected) {
-          dayCell.style.setProperty('background-color', '#ffb3d9', 'important');
-          dayCell.style.setProperty('border', '2px solid var(--accent-color)', 'important');
-        } else {
-          dayCell.style.setProperty('background-color', 'var(--accent-color)', 'important');
-          dayCell.style.setProperty('border', '2px solid var(--accent-color)', 'important');
-        }
+        dayCell.style.setProperty('background-color', 'var(--accent-color)', 'important');
+        dayCell.style.setProperty('border', '2px solid var(--accent-color)', 'important');
         dayCell.style.setProperty('color', 'white', 'important');
         dayNumber.style.setProperty('color', 'white', 'important');
         dayCell.classList.add('calendar-day-selected');
@@ -639,14 +684,8 @@ async function renderCalendar(date) {
     dayCell.addEventListener('mouseleave', () => {
       // 如果已选中，保持选中样式
       if (dayCell.classList.contains('calendar-day-selected')) {
-        const hasPeriodSelected = periodDates.has(dateStr);
-        if (hasPeriodSelected) {
-          dayCell.style.setProperty('background-color', '#ffb3d9', 'important');
-          dayCell.style.setProperty('border', '2px solid var(--accent-color)', 'important');
-        } else {
-          dayCell.style.setProperty('background-color', 'var(--accent-color)', 'important');
-          dayCell.style.setProperty('border', '2px solid var(--accent-color)', 'important');
-        }
+        dayCell.style.setProperty('background-color', 'var(--accent-color)', 'important');
+        dayCell.style.setProperty('border', '2px solid var(--accent-color)', 'important');
         dayCell.style.setProperty('color', 'white', 'important');
         dayNumber.style.setProperty('color', 'white', 'important');
         return;

@@ -29446,9 +29446,117 @@
          */
         async function getPetApiResponse(pet) {
           const { proxyUrl, apiKey, model } = state.apiConfig;
+          const chat = state.chats[state.activeChatId];
           if (!proxyUrl || !apiKey || !model) {
             alert("请先配置API！");
             return "（我好像断线了...）";
+          }
+
+          const formatDateSafe = (dateObj) => {
+            if (typeof formatDate === "function") {
+              return formatDate(dateObj);
+            }
+            const year = dateObj.getFullYear();
+            const month = String(dateObj.getMonth() + 1).padStart(2, "0");
+            const day = String(dateObj.getDate()).padStart(2, "0");
+            return `${year}-${month}-${day}`;
+          };
+
+          const focusDateStr =
+            typeof selectedDate === "string" && selectedDate
+              ? selectedDate
+              : formatDateSafe(new Date());
+          const focusDateObj = new Date(focusDateStr);
+          const focusDateLabel = `${focusDateObj.getMonth() + 1}月${focusDateObj.getDate()}日`;
+
+          let calendarSummary = "暂无行程/待办信息";
+          try {
+            if (typeof getCalendarDataForDate === "function") {
+              const { events = [], todos = [] } = await getCalendarDataForDate(
+                focusDateStr
+              );
+              if (typeof formatCalendarDataForAI === "function") {
+                calendarSummary = formatCalendarDataForAI(
+                  events,
+                  todos,
+                  focusDateStr
+                );
+              } else {
+                const eventText =
+                  events.length > 0
+                    ? events.map((e) => `${e.startTime || e.time || ""} ${e.content}`).join("\n")
+                    : "无行程";
+                const todoText =
+                  todos.length > 0
+                    ? todos
+                        .map(
+                          (t) => `${t.completed ? "✓" : "○"} ${t.content}`
+                        )
+                        .join("\n")
+                    : "无待办";
+                calendarSummary = `【${focusDateLabel}】\n行程：\n${eventText}\n待办：\n${todoText}`;
+              }
+            }
+          } catch (error) {
+            console.warn("生成宠物日历上下文失败:", error);
+          }
+
+          let periodSummary = "无月经记录";
+          try {
+            if (typeof getPeriodDataForDate === "function") {
+              const periodData = await getPeriodDataForDate(focusDateStr);
+              if (periodData) {
+                const duration =
+                  typeof getCurrentPeriodDuration === "function"
+                    ? await getCurrentPeriodDuration()
+                    : 0;
+                if (typeof formatPeriodDataForAI === "function") {
+                  periodSummary = formatPeriodDataForAI(periodData, duration).trim();
+                } else {
+                  periodSummary = `经量：${periodData.flow || "-"}，疼痛：${periodData.pain || "-"}`;
+                  if (duration > 0) {
+                    periodSummary += `，已持续${duration}天`;
+                  }
+                }
+              }
+            }
+          } catch (error) {
+            console.warn("生成宠物月经上下文失败:", error);
+          }
+
+          let chatSummary = "该日暂无聊天记录";
+          try {
+            if (chat && Array.isArray(chat.history)) {
+              const startOfDay = new Date(focusDateStr);
+              startOfDay.setHours(0, 0, 0, 0);
+              const endOfDay = new Date(startOfDay);
+              endOfDay.setDate(endOfDay.getDate() + 1);
+
+              const dayMessages = chat.history.filter(
+                (msg) =>
+                  msg.timestamp &&
+                  msg.timestamp >= startOfDay.getTime() &&
+                  msg.timestamp < endOfDay.getTime() &&
+                  !msg.isHidden
+              );
+
+              if (dayMessages.length > 0) {
+                chatSummary = dayMessages
+                  .slice(-6)
+                  .map((msg) => {
+                    const sender =
+                      msg.role === "user"
+                        ? "主人"
+                        : msg.role === "assistant"
+                        ? chat?.name || "TA"
+                        : "系统";
+                    return `${sender}: ${String(msg.content).substring(0, 120)}`;
+                  })
+                  .join("\n");
+              }
+            }
+          } catch (error) {
+            console.warn("生成宠物聊天摘要失败:", error);
           }
 
           // 重构对话历史的生成逻辑
@@ -29474,10 +29582,23 @@
 			- 你的名字: ${pet.name}
 			- 你的性格和背景故事: ${pet.persona}
 
+			# 需要关注的日期
+			- 当前聚焦日期: ${focusDateLabel}（若用户在日历中选中了日期，则优先使用该日期）
+
+			# 该日行程与待办（含完成状态）
+			${calendarSummary}
+
+			# 该日月经记录
+			${periodSummary}
+
+			# 该日聊天摘要（最近最多6条）
+			${chatSummary}
+
 			# 核心规则
 			1. 你【必须】完全代入你的角色设定进行回复。
 			2. 你的回复应该是简短、可爱的，符合一只宠物的说话方式（例如，使用拟声词、简单的词汇）。
-			3. 你的回复【只能是纯文本】，不要包含任何JSON或特殊格式。
+			3. 如果聊天中提到迟到、待办未完成或行程/月经相关内容，围绕上述聚焦日期的信息给出关心或吐槽。
+			4. 你的回复【只能是纯文本】，不要包含任何JSON或特殊格式。
 
 			# 最近的对话
 			${historyForPet}
