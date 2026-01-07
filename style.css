@@ -2159,7 +2159,8 @@ body {
 }
 
 .chat-group-container:first-child {
-  margin-top: 10px;
+  margin-top: 0;
+  border-top: none !important;
 }
 
 /* ▲▲▲ 新样式替换结束 ▲▲▲ */
@@ -5815,7 +5816,7 @@ body {
   border-bottom: 1px solid var(--border-color);
 }
 .chat-group-container:first-of-type {
-  border-top: 1px solid var(--border-color);
+  border-top: none;
 }
 /* ▲▲▲ 新样式粘贴结束 ▲▲▲ */
 

@@ -1108,6 +1108,19 @@
           </div>
 
           <div class="form-group">
+            <label for="world-book-type-select">属性</label>
+            <select id="world-book-type-select" class="moe-input">
+              <option value="">普通（默认）</option>
+              <option value="html">HTML（HTML内容模板，仅在私聊中使用）</option>
+              <option value="破限">破限</option>
+              <option value="人物背景">人物背景</option>
+            </select>
+            <small style="color: #888; font-size: 12px; display: block; margin-top: 4px;">
+              选择世界书条目的属性。HTML属性的条目会保持HTML格式，且仅在AI角色私聊中使用生成。
+            </small>
+          </div>
+
+          <div class="form-group">
             <label style="display: flex; align-items: center; gap: 8px;">
               <input
                 type="checkbox"
@@ -17078,6 +17091,26 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           return tempDiv.textContent || tempDiv.innerText || "";
         }
 
+        /**
+         * 【HTML格式保留优化】保留世界书中的HTML格式，用于AI生成时保持格式
+         * @param {string} text - 包含HTML的原始文本
+         * @returns {string} - 保留HTML格式的文本（已转义特殊字符以便在prompt中传递）
+         */
+        function preserveHtmlFormat(text) {
+          if (!text || typeof text !== "string") {
+            return "";
+          }
+          // 保留HTML标签，但转义可能影响prompt解析的特殊字符
+          // 将换行符转换为可见格式，确保AI能理解结构
+          let preservedText = text
+            .replace(/\n/g, "\n") // 保留换行
+            .replace(/\r/g, ""); // 移除回车符
+          
+          // 确保HTML标签在prompt中能正确传递
+          // 不需要额外转义，因为JSON.stringify会自动处理
+          return preservedText;
+        }
+
         window.showCustomPrompt = function (
           title,
           placeholder,
@@ -22593,6 +22626,10 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           const prioritySelect = document.getElementById("world-book-priority-select");
           prioritySelect.value = book.priority || "medium"; // 默认为中优先级
 
+          // 【属性】加载属性设置
+          const typeSelect = document.getElementById("world-book-type-select");
+          typeSelect.value = book.type || ""; // 默认为空（普通）
+
           // 填充分类下拉菜单
           const selectEl = document.getElementById(
             "world-book-category-select"
@@ -24084,38 +24121,54 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             const sortedBooks = sortWorldBooksByPriority(filteredBooks);
             
             // 构建各优先级的内容
+            // 【HTML属性优化】只有html属性的条目保留HTML格式，私聊和群聊都支持HTML
+            // 这是聊天页面，需要支持HTML格式生成
             const highPriorityContent = sortedBooks.high
               .map((worldBook) => {
-                return `\n\n## 世界书条目: ${worldBook.name}\n${stripHtmlAndCode(
-                  worldBook.content
-                )}`;
+                const shouldPreserveHtml = worldBook.type === "html";
+                const processedContent = shouldPreserveHtml 
+                  ? preserveHtmlFormat(worldBook.content)
+                  : stripHtmlAndCode(worldBook.content);
+                return `\n\n## 世界书条目: ${worldBook.name}\n${processedContent}`;
               })
               .join("");
             
             const mediumPriorityContent = sortedBooks.medium
               .map((worldBook) => {
-                return `\n\n## 世界书条目: ${worldBook.name}\n${stripHtmlAndCode(
-                  worldBook.content
-                )}`;
+                const shouldPreserveHtml = worldBook.type === "html";
+                const processedContent = shouldPreserveHtml 
+                  ? preserveHtmlFormat(worldBook.content)
+                  : stripHtmlAndCode(worldBook.content);
+                return `\n\n## 世界书条目: ${worldBook.name}\n${processedContent}`;
               })
               .join("");
             
             const lowPriorityContent = sortedBooks.low
               .map((worldBook) => {
-                return `\n\n## 世界书条目: ${worldBook.name}\n${stripHtmlAndCode(
-                  worldBook.content
-                )}`;
+                const shouldPreserveHtml = worldBook.type === "html";
+                const processedContent = shouldPreserveHtml 
+                  ? preserveHtmlFormat(worldBook.content)
+                  : stripHtmlAndCode(worldBook.content);
+                return `\n\n## 世界书条目: ${worldBook.name}\n${processedContent}`;
               })
               .join("");
             
+            // 如果存在html属性条目，添加HTML格式保留提示（私聊和群聊都需要）
+            const hasHtmlEntries = sortedBooks.high.some(wb => wb.type === "html") ||
+                                   sortedBooks.medium.some(wb => wb.type === "html") ||
+                                   sortedBooks.low.some(wb => wb.type === "html");
+            const htmlFormatInstruction = hasHtmlEntries 
+              ? "\n【【【重要：HTML格式保留】】】以下标记为HTML属性的世界书内容中可能包含HTML标签（如<div>、<span>、<b>、<i>等），你【必须】在生成回复时保持这些HTML格式，不要将它们转换为纯文本。如果世界书中使用了HTML格式来展示特定样式或结构，你需要在回复中同样使用相同的HTML格式。\n"
+              : "";
+            
             if (highPriorityContent) {
-              worldBookContextHigh = `\n\n# 【高优先级】核心世界观设定 (必须严格遵守以下所有设定)\n${highPriorityContent}\n`;
+              worldBookContextHigh = `\n\n# 【高优先级】核心世界观设定 (必须严格遵守以下所有设定)${htmlFormatInstruction}${highPriorityContent}\n`;
             }
             if (mediumPriorityContent) {
-              worldBookContextMedium = `\n\n# 【中优先级】核心世界观设定 (必须严格遵守以下所有设定)\n${mediumPriorityContent}\n`;
+              worldBookContextMedium = `\n\n# 【中优先级】核心世界观设定 (必须严格遵守以下所有设定)${htmlFormatInstruction}${mediumPriorityContent}\n`;
             }
             if (lowPriorityContent) {
-              worldBookContextLow = `\n\n# 【低优先级】核心世界观设定 (必须严格遵守以下所有设定)\n${lowPriorityContent}\n`;
+              worldBookContextLow = `\n\n# 【低优先级】核心世界观设定 (必须严格遵守以下所有设定)${htmlFormatInstruction}${lowPriorityContent}\n`;
             }
           }
           
@@ -25180,41 +25233,57 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               const sortedBooks = sortWorldBooksByPriority(filteredBooks);
               
               // 构建高优先级世界书内容
+              // 【HTML属性优化】只有html属性的条目保留HTML格式，私聊和群聊都支持HTML
+              // 这是聊天页面，需要支持HTML格式生成
               const highPriorityContent = sortedBooks.high
                 .map((worldBook) => {
-                  return `\n\n## 世界书: ${worldBook.name}\n${stripHtmlAndCode(
-                    worldBook.content
-                  )}`;
+                  const shouldPreserveHtml = worldBook.type === "html";
+                  const processedContent = shouldPreserveHtml 
+                    ? preserveHtmlFormat(worldBook.content)
+                    : stripHtmlAndCode(worldBook.content);
+                  return `\n\n## 世界书: ${worldBook.name}\n${processedContent}`;
                 })
                 .join("");
               
               // 构建中优先级世界书内容
               const mediumPriorityContent = sortedBooks.medium
                 .map((worldBook) => {
-                  return `\n\n## 世界书: ${worldBook.name}\n${stripHtmlAndCode(
-                    worldBook.content
-                  )}`;
+                  const shouldPreserveHtml = worldBook.type === "html";
+                  const processedContent = shouldPreserveHtml 
+                    ? preserveHtmlFormat(worldBook.content)
+                    : stripHtmlAndCode(worldBook.content);
+                  return `\n\n## 世界书: ${worldBook.name}\n${processedContent}`;
                 })
                 .join("");
               
               // 构建低优先级世界书内容
               const lowPriorityContent = sortedBooks.low
                 .map((worldBook) => {
-                  return `\n\n## 世界书: ${worldBook.name}\n${stripHtmlAndCode(
-                    worldBook.content
-                  )}`;
+                  const shouldPreserveHtml = worldBook.type === "html";
+                  const processedContent = shouldPreserveHtml 
+                    ? preserveHtmlFormat(worldBook.content)
+                    : stripHtmlAndCode(worldBook.content);
+                  return `\n\n## 世界书: ${worldBook.name}\n${processedContent}`;
                 })
                 .join("");
               
+              // 如果存在html属性条目，添加HTML格式保留提示（私聊和群聊都需要）
+              const hasHtmlEntries = sortedBooks.high.some(wb => wb.type === "html") ||
+                                     sortedBooks.medium.some(wb => wb.type === "html") ||
+                                     sortedBooks.low.some(wb => wb.type === "html");
+              const htmlFormatInstruction = hasHtmlEntries 
+                ? "\n【【【重要：HTML格式保留】】】以下标记为HTML属性的世界书内容中可能包含HTML标签（如<div>、<span>、<b>、<i>等），你【必须】在生成回复时保持这些HTML格式，不要将它们转换为纯文本。如果世界书中使用了HTML格式来展示特定样式或结构，你需要在回复中同样使用相同的HTML格式。\n"
+                : "";
+              
               // 分别构建各优先级的内容
               if (highPriorityContent) {
-                worldBookContentHigh = `\n\n# 【高优先级】核心世界观设定 (必须严格遵守以下所有设定)\n${highPriorityContent}\n`;
+                worldBookContentHigh = `\n\n# 【高优先级】核心世界观设定 (必须严格遵守以下所有设定)${htmlFormatInstruction}${highPriorityContent}\n`;
               }
               if (mediumPriorityContent) {
-                worldBookContentMedium = `\n\n# 【中优先级】核心世界观设定 (必须严格遵守以下所有设定)\n${mediumPriorityContent}\n`;
+                worldBookContentMedium = `\n\n# 【中优先级】核心世界观设定 (必须严格遵守以下所有设定)${htmlFormatInstruction}${mediumPriorityContent}\n`;
               }
               if (lowPriorityContent) {
-                worldBookContentLow = `\n\n# 【低优先级】核心世界观设定 (必须严格遵守以下所有设定)\n${lowPriorityContent}\n`;
+                worldBookContentLow = `\n\n# 【低优先级】核心世界观设定 (必须严格遵守以下所有设定)${htmlFormatInstruction}${lowPriorityContent}\n`;
               }
             }
             let musicContext = "";
@@ -31919,21 +31988,22 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             const sortedBooks = sortWorldBooksByPriority(filteredBooks);
             
             // 构建各优先级的内容
+            // 【HTML属性优化】非私聊场景中，所有条目都清理HTML格式
             const highPriorityContent = sortedBooks.high
               .map((worldBook) => {
-                return `\n\n## 世界书: ${worldBook.name}\n${worldBook.content}`;
+                return `\n\n## 世界书: ${worldBook.name}\n${stripHtmlAndCode(worldBook.content)}`;
               })
               .join("");
             
             const mediumPriorityContent = sortedBooks.medium
               .map((worldBook) => {
-                return `\n\n## 世界书: ${worldBook.name}\n${worldBook.content}`;
+                return `\n\n## 世界书: ${worldBook.name}\n${stripHtmlAndCode(worldBook.content)}`;
               })
               .join("");
             
             const lowPriorityContent = sortedBooks.low
               .map((worldBook) => {
-                return `\n\n## 世界书: ${worldBook.name}\n${worldBook.content}`;
+                return `\n\n## 世界书: ${worldBook.name}\n${stripHtmlAndCode(worldBook.content)}`;
               })
               .join("");
             
@@ -34985,21 +35055,22 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             const sortedBooks = sortWorldBooksByPriority(filteredBooks);
             
             // 构建各优先级的内容
+            // 【HTML属性优化】视频通话场景中，所有条目都清理HTML格式
             const highPriorityContent = sortedBooks.high
               .map((worldBook) => {
-                return `\n\n## 世界书: ${worldBook.name}\n${worldBook.content}`;
+                return `\n\n## 世界书: ${worldBook.name}\n${stripHtmlAndCode(worldBook.content)}`;
               })
               .join("");
             
             const mediumPriorityContent = sortedBooks.medium
               .map((worldBook) => {
-                return `\n\n## 世界书: ${worldBook.name}\n${worldBook.content}`;
+                return `\n\n## 世界书: ${worldBook.name}\n${stripHtmlAndCode(worldBook.content)}`;
               })
               .join("");
             
             const lowPriorityContent = sortedBooks.low
               .map((worldBook) => {
-                return `\n\n## 世界书: ${worldBook.name}\n${worldBook.content}`;
+                return `\n\n## 世界书: ${worldBook.name}\n${stripHtmlAndCode(worldBook.content)}`;
               })
               .join("");
             
@@ -35573,21 +35644,22 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             const sortedBooks = sortWorldBooksByPriority(filteredBooks);
             
             // 构建各优先级的内容
+            // 【HTML属性优化】拉黑场景中，所有条目都清理HTML格式
             const highPriorityContent = sortedBooks.high
               .map((worldBook) => {
-                return `\n\n## 世界书: ${worldBook.name}\n${worldBook.content}`;
+                return `\n\n## 世界书: ${worldBook.name}\n${stripHtmlAndCode(worldBook.content)}`;
               })
               .join("");
             
             const mediumPriorityContent = sortedBooks.medium
               .map((worldBook) => {
-                return `\n\n## 世界书: ${worldBook.name}\n${worldBook.content}`;
+                return `\n\n## 世界书: ${worldBook.name}\n${stripHtmlAndCode(worldBook.content)}`;
               })
               .join("");
             
             const lowPriorityContent = sortedBooks.low
               .map((worldBook) => {
-                return `\n\n## 世界书: ${worldBook.name}\n${worldBook.content}`;
+                return `\n\n## 世界书: ${worldBook.name}\n${stripHtmlAndCode(worldBook.content)}`;
               })
               .join("");
             
@@ -35607,7 +35679,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
 
           const systemPrompt = `
 			# 你的任务
-			你现在是角色“${chat.name}”。你之前被用户（你的聊天对象）拉黑了，你们已经有一段时间没有联系了。
+			你现在是角色"${chat.name}"。你之前被用户（你的聊天对象）拉黑了，你们已经有一段时间没有联系了。
 			现在，你非常希望能够和好，重新和用户聊天。请你仔细分析下面的“被拉黑前的对话摘要”，理解当时发生了什么，然后思考一个真诚的、符合你人设、并且【针对具体事件】的申请理由。
 			${worldBookContentHigh}
 			# 你的角色设定
@@ -36680,21 +36752,22 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               const sortedBooks = sortWorldBooksByPriority(filteredBooks);
               
               // 构建各优先级的内容
+              // 【HTML属性优化】后台群聊场景中，所有条目都清理HTML格式
               const highPriorityContent = sortedBooks.high
                 .map((worldBook) => {
-                  return `\n\n## 世界书: ${worldBook.name}\n${worldBook.content}`;
+                  return `\n\n## 世界书: ${worldBook.name}\n${stripHtmlAndCode(worldBook.content)}`;
                 })
                 .join("");
               
               const mediumPriorityContent = sortedBooks.medium
                 .map((worldBook) => {
-                  return `\n\n## 世界书: ${worldBook.name}\n${worldBook.content}`;
+                  return `\n\n## 世界书: ${worldBook.name}\n${stripHtmlAndCode(worldBook.content)}`;
                 })
                 .join("");
               
               const lowPriorityContent = sortedBooks.low
                 .map((worldBook) => {
-                  return `\n\n## 世界书: ${worldBook.name}\n${worldBook.content}`;
+                  return `\n\n## 世界书: ${worldBook.name}\n${stripHtmlAndCode(worldBook.content)}`;
                 })
                 .join("");
               
@@ -54522,6 +54595,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                   isGlobal: false, // 【全局世界书】初始化全局世界书开关
                   isRequired: false, // 【必读】初始化必读开关
                   priority: "medium", // 【优先级】初始化优先级，默认为中
+                  type: null, // 【属性】初始化属性，默认为null（普通）
                 };
                 await db.worldBooks.add(newBook);
                 state.worldBooks.push(newBook);
@@ -54568,6 +54642,10 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
 
                 // 【优先级】保存优先级设置
                 book.priority = document.getElementById("world-book-priority-select").value || "medium";
+
+                // 【属性】保存属性设置
+                const typeValue = document.getElementById("world-book-type-select").value.trim();
+                book.type = typeValue || null; // 如果为空则设为null
 
                 await db.worldBooks.put(book);
                 document.getElementById("world-book-editor-title").textContent =
