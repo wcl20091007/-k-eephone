@@ -11063,7 +11063,7 @@ body {
 /* 分页小圆点的容器 */
 .pagination-dots {
   position: absolute;
-  bottom: calc(100px + env(safe-area-inset-bottom)); /* 放在Dock栏上方 */
+  bottom: calc(138px + env(safe-area-inset-bottom)); /* 放在Dock栏上方约10px，模仿iOS界面 */
   left: 50%;
   transform: translateX(-50%);
   display: flex;

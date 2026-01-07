@@ -23937,7 +23937,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                 <div class="html-document-container" style="width: 100%; max-width: 100%; overflow: hidden; border-radius: 8px; background: #f2f2f7;">
                   <iframe 
                     id="${iframeId}"
-                    style="width: 100%; border: none; min-height: 400px; max-height: 600px; overflow: auto; display: block;"
+                    style="width: 100%; max-width: 100%; border: none; min-height: 400px; max-height: 600px; overflow-y: auto; overflow-x: hidden; display: block;"
                     sandbox="allow-same-origin allow-scripts"
                     scrolling="yes">
                   </iframe>
@@ -23949,8 +23949,16 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                 const iframe = document.getElementById(iframeId);
                 if (iframe && iframe.contentDocument) {
                   const doc = iframe.contentDocument;
+                  // 添加CSS确保内容不会横向溢出
+                  const overflowFixStyles = `
+                    * { box-sizing: border-box; max-width: 100%; }
+                    html, body { width: 100%; overflow-x: hidden; word-wrap: break-word; }
+                    body { margin: 0; padding: 15px; background: #f2f2f7; }
+                    img, video, iframe, table { max-width: 100%; height: auto; }
+                    pre, code { overflow-x: auto; word-wrap: break-word; white-space: pre-wrap; }
+                  `;
                   doc.open();
-                  doc.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${extractedStyles}</style></head><body style="margin:0;padding:15px;background:#f2f2f7;">${bodyContent}</body></html>`);
+                  doc.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><style>${overflowFixStyles}${extractedStyles}</style></head><body>${bodyContent}</body></html>`);
                   doc.close();
                   // 调整iframe高度以适应内容
                   setTimeout(() => {
