@@ -23896,7 +23896,75 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               msg.fullPrompt || msg.prompt || "NovelAI生成"
             }">`;
           } else {
-            contentHtml = String(msg.content || "").replace(/\n/g, "<br>");
+            let rawContent = String(msg.content || "");
+            
+            // 【HTML文档隔离修复】检测并处理完整的HTML文档
+            // 如果内容是完整的HTML文档（包含DOCTYPE、html、head、body等），需要隔离处理
+            if (rawContent.trim().startsWith('<!DOCTYPE html') || 
+                (rawContent.includes('<html') && rawContent.includes('</html>'))) {
+              
+              // 提取body中的内容
+              const bodyMatch = rawContent.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+              let bodyContent = '';
+              if (bodyMatch && bodyMatch[1]) {
+                bodyContent = bodyMatch[1];
+              } else {
+                // 如果没有body标签，移除HTML结构标签
+                bodyContent = rawContent
+                  .replace(/<!DOCTYPE[^>]*>/gi, '')
+                  .replace(/<html[^>]*>/gi, '')
+                  .replace(/<\/html>/gi, '')
+                  .replace(/<head[^>]*>[\s\S]*?<\/head>/gi, '')
+                  .replace(/<body[^>]*>/gi, '')
+                  .replace(/<\/body>/gi, '');
+              }
+              
+              // 提取style标签中的CSS
+              const styleMatch = rawContent.match(/<style[^>]*>([\s\S]*?)<\/style>/gi);
+              let extractedStyles = '';
+              if (styleMatch) {
+                extractedStyles = styleMatch.map(s => {
+                  const match = s.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
+                  return match ? match[1] : '';
+                }).join('\n');
+                // 从body内容中移除style标签
+                bodyContent = bodyContent.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
+              }
+              
+              // 使用iframe来完全隔离HTML内容和样式
+              const iframeId = `html-content-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+              contentHtml = `
+                <div class="html-document-container" style="width: 100%; max-width: 100%; overflow: hidden; border-radius: 8px; background: #f2f2f7;">
+                  <iframe 
+                    id="${iframeId}"
+                    style="width: 100%; border: none; min-height: 400px; max-height: 600px; overflow: auto; display: block;"
+                    sandbox="allow-same-origin allow-scripts"
+                    scrolling="yes">
+                  </iframe>
+                </div>
+              `;
+              
+              // 使用setTimeout确保DOM已渲染后再设置iframe内容
+              setTimeout(() => {
+                const iframe = document.getElementById(iframeId);
+                if (iframe && iframe.contentDocument) {
+                  const doc = iframe.contentDocument;
+                  doc.open();
+                  doc.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${extractedStyles}</style></head><body style="margin:0;padding:15px;background:#f2f2f7;">${bodyContent}</body></html>`);
+                  doc.close();
+                  // 调整iframe高度以适应内容
+                  setTimeout(() => {
+                    if (iframe.contentDocument && iframe.contentDocument.body) {
+                      const height = Math.min(iframe.contentDocument.body.scrollHeight + 20, 600);
+                      iframe.style.height = height + 'px';
+                    }
+                  }, 100);
+                }
+              }, 0);
+            } else {
+              // 普通文本消息，正常处理
+              contentHtml = rawContent.replace(/\n/g, "<br>");
+            }
           }
 
           // 1. 检查消息对象中是否存在引用信息 (msg.quote)
