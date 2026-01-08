@@ -1015,9 +1015,24 @@ async function generateHotSearchFeed(topic) {
   const allChars = Object.values(state.chats)
     .filter(c => !c.isGroup)
     .map(c => ({ name: c.name, persona: c.settings.aiPersona.substring(0, 100) }));
-  const allNpcs = Object.values(state.chats)
-    .flatMap(c => c.npcLibrary || [])
-    .map(npc => ({ name: npc.name, persona: npc.persona.substring(0, 100) }));
+  // 【修复重复NPC问题】从全局NPC库获取所有NPC，并基于ID去重
+  const npcMap = new Map();
+  const allSingleChats = Object.values(state.chats).filter(c => !c.isGroup);
+  for (const chat of allSingleChats) {
+    let enabledNpcs = [];
+    if (typeof getEnabledNpcs === 'function') {
+      enabledNpcs = await getEnabledNpcs(chat);
+    } else if (chat.enabledNpcIds && chat.enabledNpcIds.length > 0) {
+      const allNpcsFromDb = await db.globalNpcs.toArray();
+      enabledNpcs = allNpcsFromDb.filter(npc => chat.enabledNpcIds.includes(npc.id));
+    }
+    enabledNpcs.forEach(npc => {
+      if (!npcMap.has(npc.id)) {
+        npcMap.set(npc.id, npc);
+      }
+    });
+  }
+  const allNpcs = Array.from(npcMap.values()).map(npc => ({ name: npc.name, persona: npc.persona.substring(0, 100) }));
   const allPeople = [...allChars, ...allNpcs];
 
   const systemPrompt = `

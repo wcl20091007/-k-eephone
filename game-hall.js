@@ -169,7 +169,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const singleChats = Object.values(state.chats).filter(chat => !chat.isGroup);
     // 【NPC库优化】从全局NPC库获取所有角色的启用NPC
-    const allNpcs = [];
+    // 【修复重复NPC问题】使用Map基于NPC ID去重
+    const npcMap = new Map();
     for (const chat of singleChats) {
       let enabledNpcs = [];
       if (typeof getEnabledNpcs === 'function') {
@@ -179,9 +180,19 @@ document.addEventListener('DOMContentLoaded', () => {
         enabledNpcs = allNpcsFromDb.filter(npc => chat.enabledNpcIds.includes(npc.id));
       }
       enabledNpcs.forEach(npc => {
-        allNpcs.push({ ...npc, owner: chat.name });
+        // 如果NPC已存在，合并owner信息（显示多个拥有者）
+        if (npcMap.has(npc.id)) {
+          const existing = npcMap.get(npc.id);
+          if (!existing.owners.includes(chat.name)) {
+            existing.owners.push(chat.name);
+            existing.owner = existing.owners.join('、');
+          }
+        } else {
+          npcMap.set(npc.id, { ...npc, owner: chat.name, owners: [chat.name] });
+        }
       });
     }
+    const allNpcs = Array.from(npcMap.values());
 
     let playerOptions = [
       ...singleChats.map(c => ({ id: c.id, name: c.name, avatar: c.settings.aiAvatar, type: '角色' })),
@@ -266,7 +277,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // 添加被邀请的AI和NPC
-    selectedCheckboxes.forEach(checkbox => {
+    // 【修复bug】使用for...of代替forEach以支持await
+    const allNpcs = await db.globalNpcs.toArray();
+    for (const checkbox of selectedCheckboxes) {
       const playerId = checkbox.value;
       const chat = Object.values(state.chats).find(c => c.id === playerId);
       if (chat) {
@@ -280,23 +293,20 @@ document.addEventListener('DOMContentLoaded', () => {
           isUser: false,
         });
       } else {
-        // 是NPC
-        for (const c of Object.values(state.chats)) {
-          const npc = (c.npcLibrary || []).find(n => n.id === playerId);
-          if (npc) {
-            werewolfGameState.players.push({
-              id: npc.id,
-              name: npc.name,
-              avatar: npc.avatar,
-              persona: npc.persona,
-              isAlive: true,
-              isUser: false,
-            });
-            break;
-          }
+        // 是NPC - 【修复重复NPC问题】从全局NPC库查找
+        const npc = allNpcs.find(n => n.id === playerId);
+        if (npc) {
+          werewolfGameState.players.push({
+            id: npc.id,
+            name: npc.name,
+            avatar: npc.avatar,
+            persona: npc.persona,
+            isAlive: true,
+            isUser: false,
+          });
         }
       }
-    });
+    }
 
     // 打乱玩家顺序（座位顺序）
     werewolfGameState.players.sort(() => Math.random() - 0.5);
@@ -1472,7 +1482,8 @@ ${jsonFormat}
 
     const singleChats = Object.values(state.chats).filter(chat => !chat.isGroup);
     // 【NPC库优化】从全局NPC库获取所有角色的启用NPC
-    const allNpcs = [];
+    // 【修复重复NPC问题】使用Map基于NPC ID去重
+    const npcMap = new Map();
     for (const chat of singleChats) {
       let enabledNpcs = [];
       if (typeof getEnabledNpcs === 'function') {
@@ -1482,9 +1493,19 @@ ${jsonFormat}
         enabledNpcs = allNpcsFromDb.filter(npc => chat.enabledNpcIds.includes(npc.id));
       }
       enabledNpcs.forEach(npc => {
-        allNpcs.push({ ...npc, owner: chat.name });
+        // 如果NPC已存在，合并owner信息（显示多个拥有者）
+        if (npcMap.has(npc.id)) {
+          const existing = npcMap.get(npc.id);
+          if (!existing.owners.includes(chat.name)) {
+            existing.owners.push(chat.name);
+            existing.owner = existing.owners.join('、');
+          }
+        } else {
+          npcMap.set(npc.id, { ...npc, owner: chat.name, owners: [chat.name] });
+        }
       });
     }
+    const allNpcs = Array.from(npcMap.values());
 
     let playerOptions = [
       ...singleChats.map(c => ({ id: c.id, name: c.name, avatar: c.settings.aiAvatar, type: '角色' })),
@@ -1533,7 +1554,9 @@ ${jsonFormat}
         persona: '一个好奇的普通人',
       },
     ];
-    selectedCheckboxes.forEach(checkbox => {
+    // 【修复bug】使用for...of代替forEach以支持await
+    const allNpcs = await db.globalNpcs.toArray();
+    for (const checkbox of selectedCheckboxes) {
       const playerId = checkbox.value;
       const chat = Object.values(state.chats).find(c => c.id === playerId);
       if (chat) {
@@ -1546,16 +1569,13 @@ ${jsonFormat}
           isUser: false,
         });
       } else {
-        // 是NPC
-        for (const c of Object.values(state.chats)) {
-          const npc = (c.npcLibrary || []).find(n => n.id === playerId);
-          if (npc) {
-            players.push({ id: npc.id, name: npc.name, avatar: npc.avatar, persona: npc.persona, isUser: false });
-            break;
-          }
+        // 是NPC - 【修复重复NPC问题】从全局NPC库查找
+        const npc = allNpcs.find(n => n.id === playerId);
+        if (npc) {
+          players.push({ id: npc.id, name: npc.name, avatar: npc.avatar, persona: npc.persona, isUser: false });
         }
       }
-    });
+    }
     players.sort(() => Math.random() - 0.5); // 打乱座位顺序
     seaTurtleSoupState.players = players;
 
@@ -2362,7 +2382,8 @@ ${gameLogText}
 
     const singleChats = Object.values(state.chats).filter(chat => !chat.isGroup);
     // 【NPC库优化】从全局NPC库获取所有角色的启用NPC
-    const allNpcs = [];
+    // 【修复重复NPC问题】使用Map基于NPC ID去重
+    const npcMap = new Map();
     for (const chat of singleChats) {
       let enabledNpcs = [];
       if (typeof getEnabledNpcs === 'function') {
@@ -2372,9 +2393,19 @@ ${gameLogText}
         enabledNpcs = allNpcsFromDb.filter(npc => chat.enabledNpcIds.includes(npc.id));
       }
       enabledNpcs.forEach(npc => {
-        allNpcs.push({ ...npc, owner: chat.name });
+        // 如果NPC已存在，合并owner信息（显示多个拥有者）
+        if (npcMap.has(npc.id)) {
+          const existing = npcMap.get(npc.id);
+          if (!existing.owners.includes(chat.name)) {
+            existing.owners.push(chat.name);
+            existing.owner = existing.owners.join('、');
+          }
+        } else {
+          npcMap.set(npc.id, { ...npc, owner: chat.name, owners: [chat.name] });
+        }
       });
     }
+    const allNpcs = Array.from(npcMap.values());
 
     let playerOptions = [
       ...singleChats.map(c => ({ id: c.id, name: c.name, avatar: c.settings.aiAvatar, type: '角色' })),
@@ -2494,9 +2525,11 @@ ${gameLogText}
       discussionRound: 1, // <--- ★★★ 在这里添加这一行 ★★★
       collectedClueIds: new Set(),
     };
-    // 2. 收集玩家信息 (这部分不变)
+    // 2. 收集玩家信息
+    // 【修复bug】使用for...of代替forEach以支持await
     let invitedPlayers = [];
-    selectedCheckboxes.forEach(checkbox => {
+    const allNpcs = await db.globalNpcs.toArray();
+    for (const checkbox of selectedCheckboxes) {
       const playerId = checkbox.value;
       const chat = Object.values(state.chats).find(c => c.id === playerId);
       if (chat) {
@@ -2508,21 +2541,19 @@ ${gameLogText}
           isUser: false,
         });
       } else {
-        for (const c of Object.values(state.chats)) {
-          const npc = (c.npcLibrary || []).find(n => n.id === playerId);
-          if (npc) {
-            invitedPlayers.push({
-              id: npc.id,
-              name: npc.name,
-              avatar: npc.avatar,
-              persona: npc.persona,
-              isUser: false,
-            });
-            break;
-          }
+        // 【修复重复NPC问题】从全局NPC库查找
+        const npc = allNpcs.find(n => n.id === playerId);
+        if (npc) {
+          invitedPlayers.push({
+            id: npc.id,
+            name: npc.name,
+            avatar: npc.avatar,
+            persona: npc.persona,
+            isUser: false,
+          });
         }
       }
-    });
+    }
     const userPlayer = {
       id: 'user',
       name: state.qzoneSettings.nickname || '我',
@@ -4106,7 +4137,8 @@ ${formattedLog}
 
     const singleChats = Object.values(state.chats).filter(chat => !chat.isGroup);
     // 【NPC库优化】从全局NPC库获取所有角色的启用NPC
-    const allNpcs = [];
+    // 【修复重复NPC问题】使用Map基于NPC ID去重
+    const npcMap = new Map();
     for (const chat of singleChats) {
       let enabledNpcs = [];
       if (typeof getEnabledNpcs === 'function') {
@@ -4116,9 +4148,19 @@ ${formattedLog}
         enabledNpcs = allNpcsFromDb.filter(npc => chat.enabledNpcIds.includes(npc.id));
       }
       enabledNpcs.forEach(npc => {
-        allNpcs.push({ ...npc, owner: chat.name });
+        // 如果NPC已存在，合并owner信息（显示多个拥有者）
+        if (npcMap.has(npc.id)) {
+          const existing = npcMap.get(npc.id);
+          if (!existing.owners.includes(chat.name)) {
+            existing.owners.push(chat.name);
+            existing.owner = existing.owners.join('、');
+          }
+        } else {
+          npcMap.set(npc.id, { ...npc, owner: chat.name, owners: [chat.name] });
+        }
       });
     }
+    const allNpcs = Array.from(npcMap.values());
     let playerOptions = [
       ...singleChats.map(c => ({ id: c.id, name: c.name, avatar: c.settings.aiAvatar, type: '角色' })),
       ...allNpcs.map(n => ({ id: n.id, name: n.name, avatar: n.avatar, type: `NPC (${n.owner})` })),
@@ -4186,12 +4228,11 @@ ${formattedLog}
     if (chat) {
       opponentInfo = { id: chat.id, name: chat.name, avatar: chat.settings.aiAvatar, persona: chat.settings.aiPersona };
     } else {
-      for (const c of Object.values(state.chats)) {
-        const npc = (c.npcLibrary || []).find(n => n.id === opponentId);
-        if (npc) {
-          opponentInfo = { id: npc.id, name: npc.name, avatar: npc.avatar, persona: npc.persona };
-          break;
-        }
+      // 【修复重复NPC问题】从全局NPC库查找
+      const allNpcs = await db.globalNpcs.toArray();
+      const npc = allNpcs.find(n => n.id === opponentId);
+      if (npc) {
+        opponentInfo = { id: npc.id, name: npc.name, avatar: npc.avatar, persona: npc.persona };
       }
     }
     if (!opponentInfo) {
@@ -4796,7 +4837,8 @@ ${formattedLog}
     // 【核心修改】为了保持统一，我们在这里也加载NPC作为可选玩伴
     const singleChats = Object.values(state.chats).filter(chat => !chat.isGroup);
     // 【NPC库优化】从全局NPC库获取所有角色的启用NPC
-    const allNpcs = [];
+    // 【修复重复NPC问题】使用Map基于NPC ID去重
+    const npcMap = new Map();
     for (const chat of singleChats) {
       let enabledNpcs = [];
       if (typeof getEnabledNpcs === 'function') {
@@ -4806,9 +4848,19 @@ ${formattedLog}
         enabledNpcs = allNpcsFromDb.filter(npc => chat.enabledNpcIds.includes(npc.id));
       }
       enabledNpcs.forEach(npc => {
-        allNpcs.push({ ...npc, owner: chat.name });
+        // 如果NPC已存在，合并owner信息（显示多个拥有者）
+        if (npcMap.has(npc.id)) {
+          const existing = npcMap.get(npc.id);
+          if (!existing.owners.includes(chat.name)) {
+            existing.owners.push(chat.name);
+            existing.owner = existing.owners.join('、');
+          }
+        } else {
+          npcMap.set(npc.id, { ...npc, owner: chat.name, owners: [chat.name] });
+        }
       });
     }
+    const allNpcs = Array.from(npcMap.values());
     let playerOptions = [
       ...singleChats.map(c => ({ id: c.id, name: c.name, avatar: c.settings.aiAvatar, type: '角色' })),
       ...allNpcs.map(n => ({ id: n.id, name: n.name, avatar: n.avatar, type: `NPC (${n.owner})` })),
@@ -4872,11 +4924,16 @@ ${formattedLog}
       return;
     }
     const opponentId = selectedOpponentRadio.value;
-    const opponentChat =
-      state.chats[opponentId] ||
-      Object.values(state.chats)
-        .flatMap(c => c.npcLibrary)
-        .find(n => n.id === opponentId);
+    // 【修复重复NPC问题】从全局NPC库查找NPC，而不是从旧的npcLibrary
+    let opponentChat = state.chats[opponentId];
+    if (!opponentChat) {
+      // 从全局NPC库查找
+      const allNpcs = await db.globalNpcs.toArray();
+      const npc = allNpcs.find(n => n.id === opponentId);
+      if (npc) {
+        opponentChat = npc;
+      }
+    }
 
     const selectedBankId = parseInt(document.getElementById('ludo-question-bank-select').value);
     if (isNaN(selectedBankId)) {
@@ -4884,18 +4941,15 @@ ${formattedLog}
       return;
     }
 
-    // 查找对手的完整信息（和旧逻辑一样）
+    // 查找对手的完整信息（复用上面已经查找的opponentChat）
     let opponentInfo = null;
-    const mainChat = Object.values(state.chats).find(c => c.id === opponentId);
-    if (mainChat) {
-      opponentInfo = { ...mainChat, persona: mainChat.settings.aiPersona, avatar: mainChat.settings.aiAvatar };
-    } else {
-      for (const c of Object.values(state.chats)) {
-        const npc = (c.npcLibrary || []).find(n => n.id === opponentId);
-        if (npc) {
-          opponentInfo = npc;
-          break;
-        }
+    if (opponentChat) {
+      // 如果是主要角色
+      if (opponentChat.settings) {
+        opponentInfo = { ...opponentChat, persona: opponentChat.settings.aiPersona, avatar: opponentChat.settings.aiAvatar };
+      } else {
+        // 如果是NPC（从全局NPC库找到的）
+        opponentInfo = opponentChat;
       }
     }
     if (!opponentInfo) {
@@ -6034,7 +6088,8 @@ ${eventPrompt}
     // 复用狼人杀的玩家加载逻辑，非常方便
     const singleChats = Object.values(state.chats).filter(chat => !chat.isGroup);
     // 【NPC库优化】从全局NPC库获取所有角色的启用NPC
-    const allNpcs = [];
+    // 【修复重复NPC问题】使用Map基于NPC ID去重
+    const npcMap = new Map();
     for (const chat of singleChats) {
       let enabledNpcs = [];
       if (typeof getEnabledNpcs === 'function') {
@@ -6044,9 +6099,19 @@ ${eventPrompt}
         enabledNpcs = allNpcsFromDb.filter(npc => chat.enabledNpcIds.includes(npc.id));
       }
       enabledNpcs.forEach(npc => {
-        allNpcs.push({ ...npc, owner: chat.name });
+        // 如果NPC已存在，合并owner信息（显示多个拥有者）
+        if (npcMap.has(npc.id)) {
+          const existing = npcMap.get(npc.id);
+          if (!existing.owners.includes(chat.name)) {
+            existing.owners.push(chat.name);
+            existing.owner = existing.owners.join('、');
+          }
+        } else {
+          npcMap.set(npc.id, { ...npc, owner: chat.name, owners: [chat.name] });
+        }
       });
     }
+    const allNpcs = Array.from(npcMap.values());
     let playerOptions = [
       ...singleChats.map(c => ({ id: c.id, name: c.name, avatar: c.settings.aiAvatar, type: '角色' })),
       ...allNpcs.map(n => ({ id: n.id, name: n.name, avatar: n.avatar, type: `NPC (${n.owner})` })),
@@ -6090,7 +6155,9 @@ ${eventPrompt}
         alert(`游戏最少需要3人！当前手动选择了 ${selectedCheckboxes.length} 人。`);
         return;
       }
-      selectedCheckboxes.forEach(checkbox => {
+      // 【修复bug】使用for...of代替forEach以支持await
+      const allNpcs = await db.globalNpcs.toArray();
+      for (const checkbox of selectedCheckboxes) {
         const playerId = checkbox.value;
         const chat = Object.values(state.chats).find(c => c.id === playerId);
         if (chat) {
@@ -6102,21 +6169,19 @@ ${eventPrompt}
             isUser: false,
           });
         } else {
-          for (const c of Object.values(state.chats)) {
-            const npc = (c.npcLibrary || []).find(n => n.id === playerId);
-            if (npc) {
-              invitedPlayerInfos.push({
-                id: npc.id,
-                name: npc.name,
-                avatar: npc.avatar,
-                persona: npc.persona,
-                isUser: false,
-              });
-              break;
-            }
+          // 【修复重复NPC问题】从全局NPC库查找
+          const npc = allNpcs.find(n => n.id === playerId);
+          if (npc) {
+            invitedPlayerInfos.push({
+              id: npc.id,
+              name: npc.name,
+              avatar: npc.avatar,
+              persona: npc.persona,
+              isUser: false,
+            });
           }
         }
-      });
+      }
     } else {
       // 'random' mode
       const randomPlayerCount = parseInt(document.getElementById('undercover-random-player-count').value);
@@ -6127,9 +6192,23 @@ ${eventPrompt}
       totalPlayers = randomPlayerCount + 1;
 
       const singleChats = Object.values(state.chats).filter(chat => !chat.isGroup);
-      const allNpcs = Object.values(state.chats).flatMap(chat =>
-        (chat.npcLibrary || []).map(npc => ({ ...npc, owner: chat.name })),
-      );
+      // 【修复重复NPC问题】从全局NPC库获取所有角色的启用NPC，并基于ID去重
+      const npcMap = new Map();
+      for (const chat of singleChats) {
+        let enabledNpcs = [];
+        if (typeof getEnabledNpcs === 'function') {
+          enabledNpcs = await getEnabledNpcs(chat);
+        } else if (chat.enabledNpcIds && chat.enabledNpcIds.length > 0) {
+          const allNpcsFromDb = await db.globalNpcs.toArray();
+          enabledNpcs = allNpcsFromDb.filter(npc => chat.enabledNpcIds.includes(npc.id));
+        }
+        enabledNpcs.forEach(npc => {
+          if (!npcMap.has(npc.id)) {
+            npcMap.set(npc.id, { ...npc, owner: chat.name, owners: [chat.name] });
+          }
+        });
+      }
+      const allNpcs = Array.from(npcMap.values());
       let allAvailablePlayers = [
         ...singleChats.map(c => ({
           id: c.id,
