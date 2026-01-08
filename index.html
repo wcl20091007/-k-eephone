@@ -1212,11 +1212,14 @@
               </div>
               <div class="form-group">
                 <label>密钥 (Key)</label>
+                <form id="api-settings-form" style="display: none;"></form>
                 <input
                   type="password"
                   id="api-key"
                   placeholder="sk-..."
                   class="moe-input"
+                  autocomplete="new-password"
+                  form="api-settings-form"
                 />
               </div>
               <div class="form-group">
@@ -1274,7 +1277,8 @@
               </div>
               <div class="form-group">
                 <label>API Key</label>
-                <input type="password" id="minimax-api-key" class="moe-input" />
+                <form id="minimax-settings-form" style="display: none;"></form>
+                <input type="password" id="minimax-api-key" class="moe-input" autocomplete="new-password" form="minimax-settings-form" />
               </div>
               <div class="form-group">
                 <label>服务区域</label>
@@ -1440,6 +1444,7 @@
                     <option value="nai-diffusion-3">V3 Anime</option>
                   </select>
                 </div>
+                <form id="novelai-settings-form" style="display: none;"></form>
                 <div class="form-group">
                   <label>API Key</label>
                   <div style="position: relative">
@@ -1447,6 +1452,8 @@
                       type="password"
                       id="novelai-api-key"
                       class="moe-input"
+                      autocomplete="new-password"
+                      form="novelai-settings-form"
                     />
                     <span
                       id="novelai-key-toggle"
@@ -1528,6 +1535,7 @@
               >
                 ☁️ GitHub 云备份
               </h4>
+              <form id="github-settings-form" style="display: none;"></form>
               <div class="form-group">
                 <input
                   type="password"
@@ -1535,6 +1543,8 @@
                   placeholder="Token"
                   class="moe-input"
                   style="margin-bottom: 5px"
+                  autocomplete="new-password"
+                  form="github-settings-form"
                 />
                 <input
                   type="text"
@@ -4828,7 +4838,9 @@
     <div id="password-modal-overlay" class="modal">
       <div class="password-modal-content">
         <p>请输入密码</p>
-        <input type="password" id="password-input-field" maxlength="20" />
+        <form id="password-form" onsubmit="return false;">
+          <input type="password" id="password-input-field" maxlength="20" autocomplete="current-password" />
+        </form>
         <div class="password-actions">
           <button id="password-cancel-btn">取消</button>
           <button id="password-confirm-btn">进入</button>
@@ -15934,8 +15946,6 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               console.log('✅ Service Worker 注册成功:', registration);
               console.log('Service Worker 作用域:', registration.scope);
               
-              // Service Worker 注册成功
-              console.log('Service Worker 已成功注册');
               
               // 检查更新
               registration.addEventListener('updatefound', () => {
@@ -15979,49 +15989,6 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           console.warn('支持的浏览器：Chrome, Edge, Firefox, Safari (iOS 需要添加到主屏幕)');
         }
 
-        // ===================================================================
-        // 防止 Edge 浏览器显示 PWA 系统提示弹窗
-        // ===================================================================
-        // 检测是否在 PWA 模式下运行（安全地检查 referrer）
-        const isPWA = window.matchMedia('(display-mode: standalone)').matches || 
-                     window.navigator.standalone || 
-                     (document.referrer && document.referrer.includes('android-app://'));
-        
-        if (isPWA) {
-          console.log('✅ 检测到 PWA 模式，已添加到桌面');
-        }
-
-        // 拦截 beforeinstallprompt 事件，防止 Edge 显示安装提示
-        // 使用 try-catch 确保不会因为错误导致页面卡死
-        try {
-          let deferredPrompt;
-          window.addEventListener('beforeinstallprompt', (e) => {
-            try {
-              console.log('拦截 beforeinstallprompt 事件，防止显示系统提示');
-              // 阻止默认的安装提示
-              e.preventDefault();
-              // 保存事件以便后续使用（如果需要）
-              deferredPrompt = e;
-            } catch (err) {
-              console.error('处理 beforeinstallprompt 事件时出错:', err);
-            }
-          });
-
-          // 如果已经安装为 PWA，确保不会再次显示提示
-          if (isPWA) {
-            // 清除任何可能触发的安装提示
-            window.addEventListener('appinstalled', () => {
-              try {
-                console.log('PWA 已安装，清除安装提示');
-                deferredPrompt = null;
-              } catch (err) {
-                console.error('处理 appinstalled 事件时出错:', err);
-              }
-            });
-          }
-        } catch (err) {
-          console.error('初始化 PWA 提示拦截时出错:', err);
-        }
 
         // ===================================================================
         // 1. 所有变量和常量定义
@@ -30569,7 +30536,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           element.addEventListener("mouseleave", cancelPress);
           element.addEventListener("touchstart", startPress, { passive: true });
           element.addEventListener("touchend", cancelPress);
-          element.addEventListener("touchmove", cancelPress);
+          element.addEventListener("touchmove", cancelPress, { passive: true });
         }
 
         async function handleListenTogetherClick() {

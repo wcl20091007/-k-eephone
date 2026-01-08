@@ -25,10 +25,7 @@ self.addEventListener('activate', (event) => {
   console.log('Service Worker 已激活');
   event.waitUntil(
     Promise.all([
-      // 立即控制页面（恢复原始行为，避免卡死）
-      self.clients.claim().catch(err => {
-        console.log('Service Worker 控制页面失败:', err);
-      }),
+      self.clients.claim(), // 立即控制所有页面
       // 清理旧缓存
       caches.keys().then((cacheNames) => {
         return Promise.all(
