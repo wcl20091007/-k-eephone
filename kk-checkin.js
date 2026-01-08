@@ -72,6 +72,7 @@ async function generateHouseData(charId, includeComputer = true) {
     if (!proxyUrl || !apiKey || !model) throw new Error('API未配置');
 
     // 【全局世界书优化】根据插入位置构建世界书内容
+    const userNickname = chat.settings.myNickname || state.qzoneSettings.nickname || '我';
     const recentMessages = chat.history
       .slice(-chat.settings.maxMemory || 20)
       .map(msg => {
@@ -79,7 +80,6 @@ async function generateHouseData(charId, includeComputer = true) {
         return `${sender}: ${msg.content}`;
       })
       .join('\n');
-    const userNickname = chat.settings.myNickname || '我';
     const recentHistory = chat.history
       .slice(-chat.settings.maxMemory || 20)
       .map(msg => {
@@ -87,7 +87,10 @@ async function generateHouseData(charId, includeComputer = true) {
         return `${sender}: ${msg.content}`;
       })
       .join('\n');
-    const worldBookByPosition = window.buildWorldBookContentByPosition(chat, recentHistory, false);
+    // 安全获取世界书内容，如果函数不存在则返回空对象
+    const worldBookByPosition = (typeof window.buildWorldBookContentByPosition === 'function')
+      ? window.buildWorldBookContentByPosition(chat, recentHistory, false)
+      : { all: '' };
     const worldBookContext = worldBookByPosition.all ? worldBookByPosition.all.replace(/# 核心世界观设定/g, '--- 世界观设定 (必须严格遵守) ---') : '';
 
     let linkedMemoryContext = '';
@@ -992,14 +995,18 @@ async function generateInitialSurveillanceFeeds(charId) {
     if (!proxyUrl || !apiKey || !model) throw new Error('API未配置');
 
     // 【全局世界书优化】根据插入位置构建世界书内容
+    const userNickname = chat.settings.myNickname || state.qzoneSettings.nickname || '我';
     const recentHistory = chat.history
       .slice(-10)
       .map(msg => {
-        const sender = msg.role === 'user' ? chat.settings.myNickname || '我' : chat.name;
+        const sender = msg.role === 'user' ? userNickname : chat.name;
         return `${sender}: ${msg.content}`;
       })
       .join('\n');
-    const worldBookByPosition = window.buildWorldBookContentByPosition(chat, recentHistory, false);
+    // 安全获取世界书内容，如果函数不存在则返回空对象
+    const worldBookByPosition = (typeof window.buildWorldBookContentByPosition === 'function')
+      ? window.buildWorldBookContentByPosition(chat, recentHistory, false)
+      : { all: '' };
     const worldBookContext = worldBookByPosition.all || '';
 
     const userPersona = state.chats[charId]?.settings?.myPersona || '一个普通的观察者。';
