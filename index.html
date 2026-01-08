@@ -60704,7 +60704,12 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
             let touchStartX = 0;
             let touchStartY = 0;
             let touchMoved = false;
+            let lastTouchEndTime = 0;
+            let lastTouchEndX = 0;
+            let lastTouchEndY = 0;
             const TOUCH_MOVE_THRESHOLD = 10; // 触摸移动阈值，超过这个距离认为是拖拽
+            const DOUBLE_TAP_DISTANCE_THRESHOLD = 50; // 双击时两次触摸之间的距离阈值
+            const DOUBLE_TAP_TIME_THRESHOLD = 300; // 双击的时间间隔阈值（毫秒）
 
             // PC端鼠标双击处理
             petContainer.addEventListener("click", (e) => {
@@ -60727,24 +60732,19 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
               }
             });
 
-            // 移动端触摸双击处理
+            // 移动端触摸双击处理 - 使用捕获阶段以确保先于拖拽功能处理
             petContainer.addEventListener("touchstart", (e) => {
-              // 如果正在拖拽，不处理双击
-              if (petContainer.classList.contains("dragging")) {
-                touchMoved = true;
-                return;
-              }
-
+              // 不在touchstart时阻止事件，让拖拽功能也能正常工作
               const touch = e.touches[0];
               touchStartTime = Date.now();
               touchStartX = touch.clientX;
               touchStartY = touch.clientY;
               touchMoved = false;
-            }, { passive: true });
+            }, { passive: true, capture: false });
 
-            petContainer.addEventListener("touchmove", (e) => {
-              // 检测触摸是否移动了足够距离（可能是拖拽）
-              if (!touchMoved && touchStartTime > 0) {
+            // 监听touchmove，检测是否发生了移动（拖拽）
+            const handleTouchMove = (e) => {
+              if (touchStartTime > 0 && e.touches && e.touches.length > 0) {
                 const touch = e.touches[0];
                 const deltaX = Math.abs(touch.clientX - touchStartX);
                 const deltaY = Math.abs(touch.clientY - touchStartY);
@@ -60752,40 +60752,81 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
                   touchMoved = true;
                 }
               }
-            }, { passive: true });
+            };
+
+            petContainer.addEventListener("touchmove", handleTouchMove, { passive: true });
 
             petContainer.addEventListener("touchend", (e) => {
-              // 如果正在拖拽，不触发双击
-              if (petContainer.classList.contains("dragging") || touchMoved) {
+              const touchEndTime = Date.now();
+              
+              // 如果发生了移动（拖拽），重置状态，不处理双击
+              if (touchMoved || touchStartTime === 0) {
+                lastTouchEndTime = 0; // 如果拖拽了，清除之前的触摸记录
+                lastTouchEndX = 0;
+                lastTouchEndY = 0;
                 touchStartTime = 0;
+                touchMoved = false;
                 return;
               }
 
-              const touchEndTime = Date.now();
               const timeDiff = touchEndTime - touchStartTime;
+              const touch = e.changedTouches[0];
+              if (!touch) {
+                touchStartTime = 0;
+                return;
+              }
+              
+              const touchEndX = touch.clientX;
+              const touchEndY = touch.clientY;
 
               // 如果触摸时间太短或太长，认为是无效触摸
-              if (timeDiff < 50 || timeDiff > 500) {
+              if (timeDiff < 30 || timeDiff > 500) {
+                // 即使时间不符合，也要清除之前的记录
+                lastTouchEndTime = 0;
+                lastTouchEndX = 0;
+                lastTouchEndY = 0;
                 touchStartTime = 0;
                 return;
               }
 
-              // 检测双击
-              clickCount++;
-              
-              if (clickCount === 1) {
-                clickTimer = setTimeout(() => {
-                  clickCount = 0;
-                  touchStartTime = 0;
-                }, 300); // 300ms内没有第二次触摸则重置
-              } else if (clickCount === 2) {
-                clearTimeout(clickTimer);
-                clickCount = 0;
+              // 检测是否为双击（两次触摸之间时间间隔和位置距离都符合要求）
+              const timeSinceLastTouch = lastTouchEndTime > 0 ? touchEndTime - lastTouchEndTime : Infinity;
+              const distanceFromLastTouch = lastTouchEndTime > 0 ? Math.sqrt(
+                Math.pow(touchEndX - lastTouchEndX, 2) + 
+                Math.pow(touchEndY - lastTouchEndY, 2)
+              ) : Infinity;
+
+              if (timeSinceLastTouch <= DOUBLE_TAP_TIME_THRESHOLD && 
+                  distanceFromLastTouch <= DOUBLE_TAP_DISTANCE_THRESHOLD &&
+                  lastTouchEndTime > 0) {
+                // 检测到双击！
+                e.preventDefault(); // 阻止可能的默认行为
+                lastTouchEndTime = 0;
+                lastTouchEndX = 0;
+                lastTouchEndY = 0;
                 touchStartTime = 0;
+                touchMoved = false;
                 // 触发AI回复
                 triggerPetAIResponse();
+              } else {
+                // 记录这次触摸的信息，等待可能的第二次触摸
+                lastTouchEndTime = touchEndTime;
+                lastTouchEndX = touchEndX;
+                lastTouchEndY = touchEndY;
+                
+                // 设置超时，如果300ms内没有第二次触摸则清除记录
+                setTimeout(() => {
+                  if (lastTouchEndTime === touchEndTime) {
+                    lastTouchEndTime = 0;
+                    lastTouchEndX = 0;
+                    lastTouchEndY = 0;
+                  }
+                }, DOUBLE_TAP_TIME_THRESHOLD);
               }
-            }, { passive: true });
+              
+              touchStartTime = 0;
+              touchMoved = false;
+            }, { passive: false });
           }
 
           // 初始化双击功能
