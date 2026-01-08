@@ -60090,13 +60090,36 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               
               // 如果有保存的位置，应用它
               if (activePetChat.settings.desktopPetPosition) {
-                petContainer.style.top = activePetChat.settings.desktopPetPosition.top + "px";
-                petContainer.style.left = activePetChat.settings.desktopPetPosition.left + "px";
+                const pos = activePetChat.settings.desktopPetPosition;
+                petContainer.style.top = pos.top + "px";
+                petContainer.style.left = pos.left + "px";
+                
+                // 恢复吸附状态
+                if (pos.isSnapped && pos.snapSide) {
+                  petContainer.classList.add("snapped", "snapped-" + pos.snapSide);
+                  // 根据吸附方向调整位置
+                  if (pos.snapSide === "left") {
+                    petContainer.style.left = -(petContainer.offsetWidth / 2) + "px";
+                    petContainer.style.right = "auto";
+                  } else if (pos.snapSide === "right") {
+                    petContainer.style.left = "auto";
+                    petContainer.style.right = -(petContainer.offsetWidth / 2) + "px";
+                  } else if (pos.snapSide === "top") {
+                    petContainer.style.top = -(petContainer.offsetHeight / 2) + "px";
+                    petContainer.style.bottom = "auto";
+                  } else if (pos.snapSide === "bottom") {
+                    petContainer.style.top = "auto";
+                    petContainer.style.bottom = -(petContainer.offsetHeight / 2) + "px";
+                  }
+                } else {
+                  petContainer.classList.remove("snapped", "snapped-left", "snapped-right", "snapped-top", "snapped-bottom");
+                }
               } else {
                 // 默认位置
                 petContainer.style.top = "150px";
                 petContainer.style.left = "auto";
                 petContainer.style.right = "20px";
+                petContainer.classList.remove("snapped", "snapped-left", "snapped-right", "snapped-top", "snapped-bottom");
               }
             } else {
               // 隐藏桌宠
@@ -60153,6 +60176,11 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               petContainer.style.top = newTop + "px";
               petContainer.style.right = "auto";
               
+              // 更新气泡位置（如果正在显示）
+              if (typeof updatePetWaitingBubblePosition === 'function') {
+                updatePetWaitingBubblePosition();
+              }
+              
               e.preventDefault();
             };
 
@@ -60162,17 +60190,72 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               isDragging = false;
               petContainer.classList.remove("dragging");
               
+              const phoneScreen = document.getElementById("phone-screen");
+              const screenRect = phoneScreen.getBoundingClientRect();
+              const rect = petContainer.getBoundingClientRect();
+              const petWidth = petContainer.offsetWidth;
+              const petHeight = petContainer.offsetHeight;
+              
+              // 检查是否靠近屏幕边缘（吸附阈值：20px）
+              const SNAP_THRESHOLD = 20;
+              const petLeft = rect.left - screenRect.left;
+              const petTop = rect.top - screenRect.top;
+              const petRight = screenRect.width - petLeft - petWidth;
+              const petBottom = screenRect.height - petTop - petHeight;
+              
+              let isSnapped = false;
+              let snapSide = null;
+              
+              // 检查是否应该吸附到边缘
+              if (petLeft < SNAP_THRESHOLD) {
+                // 吸附到左边
+                petContainer.style.left = -(petWidth / 2) + "px";
+                petContainer.style.right = "auto";
+                isSnapped = true;
+                snapSide = "left";
+                petContainer.classList.add("snapped", "snapped-left");
+              } else if (petRight < SNAP_THRESHOLD) {
+                // 吸附到右边
+                petContainer.style.left = "auto";
+                petContainer.style.right = -(petWidth / 2) + "px";
+                isSnapped = true;
+                snapSide = "right";
+                petContainer.classList.add("snapped", "snapped-right");
+              } else if (petTop < SNAP_THRESHOLD) {
+                // 吸附到上边
+                petContainer.style.top = -(petHeight / 2) + "px";
+                petContainer.style.bottom = "auto";
+                isSnapped = true;
+                snapSide = "top";
+                petContainer.classList.add("snapped", "snapped-top");
+              } else if (petBottom < SNAP_THRESHOLD) {
+                // 吸附到下边
+                petContainer.style.top = "auto";
+                petContainer.style.bottom = -(petHeight / 2) + "px";
+                isSnapped = true;
+                snapSide = "bottom";
+                petContainer.classList.add("snapped", "snapped-bottom");
+              } else {
+                // 不在边缘，移除吸附状态
+                petContainer.classList.remove("snapped", "snapped-left", "snapped-right", "snapped-top", "snapped-bottom");
+              }
+              
+              // 更新气泡位置
+              if (typeof updatePetWaitingBubblePosition === 'function') {
+                updatePetWaitingBubblePosition();
+              }
+              
               // 保存位置到当前显示的桌宠角色
               for (const chatId in state.chats) {
                 const chat = state.chats[chatId];
                 if (!chat.isGroup && chat.settings?.desktopPetEnabled) {
-                  const rect = petContainer.getBoundingClientRect();
-                  const phoneScreen = document.getElementById("phone-screen");
-                  const screenRect = phoneScreen.getBoundingClientRect();
+                  const finalRect = petContainer.getBoundingClientRect();
                   
                   chat.settings.desktopPetPosition = {
-                    top: rect.top - screenRect.top,
-                    left: rect.left - screenRect.left
+                    top: finalRect.top - screenRect.top,
+                    left: finalRect.left - screenRect.left,
+                    isSnapped: isSnapped,
+                    snapSide: snapSide
                   };
                   
                   await db.chats.put(chat);
@@ -60442,6 +60525,25 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           }
 
           /**
+           * 更新等待气泡的位置（跟随桌宠移动）
+           */
+          function updatePetWaitingBubblePosition() {
+            const bubble = document.getElementById("desktop-pet-waiting-bubble");
+            if (!bubble || bubble.style.display === "none") return;
+            
+            const petContainer = document.getElementById("desktop-pet-container");
+            if (!petContainer) return;
+            
+            const petRect = petContainer.getBoundingClientRect();
+            const phoneScreen = document.getElementById("phone-screen");
+            const screenRect = phoneScreen.getBoundingClientRect();
+            
+            // 将气泡定位在桌宠旁边
+            bubble.style.left = (petRect.left - screenRect.left + petRect.width + 10) + "px";
+            bubble.style.top = (petRect.top - screenRect.top) + "px";
+          }
+
+          /**
            * 显示等待状态的小对话泡
            */
           function showPetWaitingBubble() {
@@ -60454,16 +60556,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               document.getElementById("phone-screen").appendChild(bubble);
             }
             
-            const petContainer = document.getElementById("desktop-pet-container");
-            if (!petContainer) return;
-            
-            const petRect = petContainer.getBoundingClientRect();
-            const phoneScreen = document.getElementById("phone-screen");
-            const screenRect = phoneScreen.getBoundingClientRect();
-            
-            // 将气泡定位在桌宠旁边
-            bubble.style.left = (petRect.left - screenRect.left + petRect.width + 10) + "px";
-            bubble.style.top = (petRect.top - screenRect.top) + "px";
+            updatePetWaitingBubblePosition();
             bubble.style.display = "block";
           }
 
@@ -60892,9 +60985,67 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
             const DOUBLE_TAP_TIME_THRESHOLD = 300; // 双击的时间间隔阈值（毫秒）
 
             // PC端鼠标双击处理
-            petContainer.addEventListener("click", (e) => {
+            petContainer.addEventListener("click", async (e) => {
               // 如果正在拖拽，不触发双击
               if (petContainer.classList.contains("dragging")) {
+                return;
+              }
+
+              // 如果桌宠处于吸附状态，单击恢复原貌
+              if (petContainer.classList.contains("snapped")) {
+                e.stopPropagation();
+                // 恢复原貌：移除吸附状态
+                const phoneScreen = document.getElementById("phone-screen");
+                const screenRect = phoneScreen.getBoundingClientRect();
+                const rect = petContainer.getBoundingClientRect();
+                
+                // 计算恢复后的位置（从吸附位置稍微移出一点）
+                const petWidth = petContainer.offsetWidth;
+                const petHeight = petContainer.offsetHeight;
+                let newLeft, newTop;
+                
+                if (petContainer.classList.contains("snapped-left")) {
+                  newLeft = 10;
+                  newTop = rect.top - screenRect.top;
+                } else if (petContainer.classList.contains("snapped-right")) {
+                  newLeft = screenRect.width - petWidth - 10;
+                  newTop = rect.top - screenRect.top;
+                } else if (petContainer.classList.contains("snapped-top")) {
+                  newLeft = rect.left - screenRect.left;
+                  newTop = 10;
+                } else if (petContainer.classList.contains("snapped-bottom")) {
+                  newLeft = rect.left - screenRect.left;
+                  newTop = screenRect.height - petHeight - 10;
+                } else {
+                  return;
+                }
+                
+                // 应用新位置
+                petContainer.style.left = newLeft + "px";
+                petContainer.style.top = newTop + "px";
+                petContainer.style.right = "auto";
+                petContainer.style.bottom = "auto";
+                petContainer.classList.remove("snapped", "snapped-left", "snapped-right", "snapped-top", "snapped-bottom");
+                
+                // 更新气泡位置
+                if (typeof updatePetWaitingBubblePosition === 'function') {
+                  updatePetWaitingBubblePosition();
+                }
+                
+                // 保存位置
+                for (const chatId in state.chats) {
+                  const chat = state.chats[chatId];
+                  if (!chat.isGroup && chat.settings?.desktopPetEnabled) {
+                    chat.settings.desktopPetPosition = {
+                      top: newTop,
+                      left: newLeft,
+                      isSnapped: false,
+                      snapSide: null
+                    };
+                    await db.chats.put(chat);
+                    break;
+                  }
+                }
                 return;
               }
 
@@ -60936,12 +61087,78 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
 
             petContainer.addEventListener("touchmove", handleTouchMove, { passive: true });
 
-            petContainer.addEventListener("touchend", (e) => {
+            petContainer.addEventListener("touchend", async (e) => {
               const touchEndTime = Date.now();
               
               // 如果发生了移动（拖拽），重置状态，不处理双击
               if (touchMoved || touchStartTime === 0) {
                 lastTouchEndTime = 0; // 如果拖拽了，清除之前的触摸记录
+                lastTouchEndX = 0;
+                lastTouchEndY = 0;
+                touchStartTime = 0;
+                touchMoved = false;
+                return;
+              }
+
+              // 如果桌宠处于吸附状态，单击恢复原貌
+              if (petContainer.classList.contains("snapped")) {
+                e.preventDefault();
+                // 恢复原貌：移除吸附状态
+                const phoneScreen = document.getElementById("phone-screen");
+                const screenRect = phoneScreen.getBoundingClientRect();
+                const rect = petContainer.getBoundingClientRect();
+                
+                // 计算恢复后的位置（从吸附位置稍微移出一点）
+                const petWidth = petContainer.offsetWidth;
+                const petHeight = petContainer.offsetHeight;
+                let newLeft, newTop;
+                
+                if (petContainer.classList.contains("snapped-left")) {
+                  newLeft = 10;
+                  newTop = rect.top - screenRect.top;
+                } else if (petContainer.classList.contains("snapped-right")) {
+                  newLeft = screenRect.width - petWidth - 10;
+                  newTop = rect.top - screenRect.top;
+                } else if (petContainer.classList.contains("snapped-top")) {
+                  newLeft = rect.left - screenRect.left;
+                  newTop = 10;
+                } else if (petContainer.classList.contains("snapped-bottom")) {
+                  newLeft = rect.left - screenRect.left;
+                  newTop = screenRect.height - petHeight - 10;
+                } else {
+                  touchStartTime = 0;
+                  return;
+                }
+                
+                // 应用新位置
+                petContainer.style.left = newLeft + "px";
+                petContainer.style.top = newTop + "px";
+                petContainer.style.right = "auto";
+                petContainer.style.bottom = "auto";
+                petContainer.classList.remove("snapped", "snapped-left", "snapped-right", "snapped-top", "snapped-bottom");
+                
+                // 更新气泡位置
+                if (typeof updatePetWaitingBubblePosition === 'function') {
+                  updatePetWaitingBubblePosition();
+                }
+                
+                // 保存位置
+                for (const chatId in state.chats) {
+                  const chat = state.chats[chatId];
+                  if (!chat.isGroup && chat.settings?.desktopPetEnabled) {
+                    chat.settings.desktopPetPosition = {
+                      top: newTop,
+                      left: newLeft,
+                      isSnapped: false,
+                      snapSide: null
+                    };
+                    await db.chats.put(chat);
+                    break;
+                  }
+                }
+                
+                // 重置触摸状态
+                lastTouchEndTime = 0;
                 lastTouchEndX = 0;
                 lastTouchEndY = 0;
                 touchStartTime = 0;

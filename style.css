@@ -20538,6 +20538,42 @@ body {
   background-color: rgba(0, 0, 0, 0.3);
 }
 
+/* ▼▼▼ 桌宠吸附状态样式 ▼▼▼ */
+#desktop-pet-container.snapped {
+  opacity: 0.5;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  cursor: pointer;
+}
+
+#desktop-pet-container.snapped:hover {
+  opacity: 0.8;
+}
+
+#desktop-pet-container.snapped #desktop-pet-circle {
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+/* 吸附到左边 */
+#desktop-pet-container.snapped-left {
+  transform: translateX(0);
+}
+
+/* 吸附到右边 */
+#desktop-pet-container.snapped-right {
+  transform: translateX(0);
+}
+
+/* 吸附到上边 */
+#desktop-pet-container.snapped-top {
+  transform: translateY(0);
+}
+
+/* 吸附到下边 */
+#desktop-pet-container.snapped-bottom {
+  transform: translateY(0);
+}
+/* ▲▲▲ 桌宠吸附状态样式结束 ▲▲▲ */
+
 /* ▼▼▼ 桌宠等待气泡样式 ▼▼▼ */
 #desktop-pet-waiting-bubble {
   position: absolute;
