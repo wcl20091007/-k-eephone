@@ -1,6 +1,6 @@
 {
-  "name": "EPhone（兔k机 砂砂版）",
-  "short_name": "EPhone（兔k机 砂砂版）",
+  "name": "EPhone（兔k机二改 砂砂版）",
+  "short_name": "EPhone（兔k机二改 砂砂版）",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#ffffff",
@@ -18,3 +18,4 @@
     }
   ]
 }
+
