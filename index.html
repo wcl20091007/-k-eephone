@@ -41,7 +41,7 @@
     />
 
     <!-- 5. (可选) 设置应用在主屏幕上显示的标题 -->
-    <meta name="apple-mobile-web-app-title" content="EPhone（兔k机版）" />
+    <meta name="apple-mobile-web-app-title" content="EPhone（兔k机二改 砂砂版）" />
 
     <!-- 6. (兼容) 为部分安卓浏览器提供支持 -->
     <meta name="mobile-web-app-capable" content="yes" />
@@ -53,7 +53,7 @@
       href="https://i.postimg.cc/Kj8JnRcp/267611-CC01-F8-A3-B4910-A2-C2-FFDE479-DC.jpg"
     />
 
-    <title>EPhone（兔k机版）</title>
+    <title>EPhone（兔k机二改 砂砂版）</title>
 
     <link rel="stylesheet" href="style.css" />
     <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
@@ -20645,20 +20645,24 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           }, 4000);
 
           // 发送浏览器原生通知（如果已授权）
+          // 无论页面是否可见，都显示通知（这样即使页面在前台也能收到通知）
           if (Notification.permission === 'granted') {
             const avatarUrl = chat.settings.aiAvatar ||
               chat.settings.groupAvatar ||
               defaultAvatar;
             
+            // 使用时间戳确保每次通知都能显示（不会被相同tag覆盖）
             showBrowserNotification(notifName, {
               body: messageContent,
               icon: avatarUrl,
               badge: avatarUrl,
-              tag: `chat-${chatId}`,
+              tag: `chat-${chatId}-${Date.now()}`, // 使用时间戳确保每次都显示
               data: { chatId: chatId },
               requireInteraction: false,
               silent: false,
               vibrate: [200, 100, 200]
+            }).catch(error => {
+              console.error('显示浏览器通知失败:', error);
             });
           }
         }
@@ -23952,8 +23956,8 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                   // 添加CSS确保内容不会横向溢出
                   const overflowFixStyles = `
                     * { box-sizing: border-box; max-width: 100%; }
-                    html, body { width: 100%; overflow-x: hidden; word-wrap: break-word; }
-                    body { margin: 0; padding: 15px; background: #f2f2f7; }
+                    html, body { width: 100%; overflow-x: hidden; word-wrap: break-word; margin: 0; padding: 0; }
+                    body { background: #f2f2f7; }
                     img, video, iframe, table { max-width: 100%; height: auto; }
                     pre, code { overflow-x: auto; word-wrap: break-word; white-space: pre-wrap; }
                   `;
@@ -23962,8 +23966,11 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                   doc.close();
                   // 调整iframe高度以适应内容
                   setTimeout(() => {
-                    if (iframe.contentDocument && iframe.contentDocument.body) {
-                      const height = Math.min(iframe.contentDocument.body.scrollHeight + 20, 600);
+                    if (iframe.contentDocument && iframe.contentDocument.documentElement) {
+                      const doc = iframe.contentDocument;
+                      // 使用documentElement.scrollHeight获取整个文档的准确高度
+                      // 这比body.scrollHeight更准确，因为它包含了所有内容
+                      const height = Math.min(doc.documentElement.scrollHeight, 600);
                       iframe.style.height = height + 'px';
                     }
                   }, 100);
@@ -30197,38 +30204,96 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                 // 1. 将新消息存入历史记录
                 chat.history.push(aiMessage);
 
-                if (!isViewingThisChat && !notificationShown) {
-                  let notificationText;
-                  switch (aiMessage.type) {
-                    case "transfer":
-                      notificationText = `[收到一笔转账]`;
-                      break;
-                    case "waimai_request":
-                      notificationText = `[收到一个外卖代付请求]`;
-                      break;
-                    case "ai_image":
-                      notificationText = `[图片]`;
-                      break;
-                    case "voice_message":
-                      notificationText = `[语音]`;
-                      break;
-                    case "sticker":
-                      notificationText = aiMessage.meaning
-                        ? `[表情: ${aiMessage.meaning}]`
-                        : "[表情]";
-                      break;
-                    default:
-                      notificationText = String(aiMessage.content || "");
+                // 准备通知文本
+                let notificationText;
+                switch (aiMessage.type) {
+                  case "transfer":
+                    notificationText = `[收到一笔转账]`;
+                    break;
+                  case "waimai_request":
+                    notificationText = `[收到一个外卖代付请求]`;
+                    break;
+                  case "ai_image":
+                    notificationText = `[图片]`;
+                    break;
+                  case "voice_message":
+                    notificationText = `[语音]`;
+                    break;
+                  case "sticker":
+                    notificationText = aiMessage.meaning
+                      ? `[表情: ${aiMessage.meaning}]`
+                      : "[表情]";
+                    break;
+                  default:
+                    notificationText = String(aiMessage.content || "");
+                }
+                const finalNotifText = chat.isGroup
+                  ? `${aiMessage.senderName}: ${notificationText}`
+                  : notificationText;
+
+                // 【优化】每条消息都显示浏览器通知，模拟真实短信通知
+                // 如果用户不在当前聊天界面，显示页面内通知条（只显示一次）和浏览器通知（每条都显示）
+                if (!isViewingThisChat) {
+                  // 页面内通知条只显示一次（避免重复显示）
+                  if (!notificationShown) {
+                    showNotification(
+                      chatId,
+                      finalNotifText.substring(0, 40) +
+                        (finalNotifText.length > 40 ? "..." : "")
+                    );
+                    notificationShown = true;
+                  } else {
+                    // 后续消息只显示浏览器通知，不显示页面内通知条
+                    if (Notification.permission === 'granted') {
+                      const notifName =
+                        !chat.isGroup && chat.settings.remarkName
+                          ? chat.settings.remarkName
+                          : chat.name;
+                      const avatarUrl = chat.settings.aiAvatar ||
+                        chat.settings.groupAvatar ||
+                        defaultAvatar;
+                      
+                      showBrowserNotification(notifName, {
+                        body: finalNotifText.substring(0, 100) +
+                          (finalNotifText.length > 100 ? "..." : ""),
+                        icon: avatarUrl,
+                        badge: avatarUrl,
+                        tag: `chat-${chatId}-${Date.now()}-${Math.random()}`, // 使用时间戳和随机数确保每次都显示
+                        data: { chatId: chatId },
+                        requireInteraction: false,
+                        silent: false,
+                        vibrate: [200, 100, 200]
+                      }).catch(error => {
+                        console.error('显示浏览器通知失败:', error);
+                      });
+                    }
                   }
-                  const finalNotifText = chat.isGroup
-                    ? `${aiMessage.senderName}: ${notificationText}`
-                    : notificationText;
-                  showNotification(
-                    chatId,
-                    finalNotifText.substring(0, 40) +
-                      (finalNotifText.length > 40 ? "..." : "")
-                  );
-                  notificationShown = true; // 确保只通知一次
+                } else {
+                  // 如果用户在当前聊天界面，每条消息都显示浏览器通知（不显示页面内通知条）
+                  // 这样即使页面在后台或用户切换到其他标签页，也能收到通知
+                  if (Notification.permission === 'granted') {
+                    const notifName =
+                      !chat.isGroup && chat.settings.remarkName
+                        ? chat.settings.remarkName
+                        : chat.name;
+                    const avatarUrl = chat.settings.aiAvatar ||
+                      chat.settings.groupAvatar ||
+                      defaultAvatar;
+                    
+                    showBrowserNotification(notifName, {
+                      body: finalNotifText.substring(0, 100) +
+                        (finalNotifText.length > 100 ? "..." : ""),
+                      icon: avatarUrl,
+                      badge: avatarUrl,
+                      tag: `chat-${chatId}-${Date.now()}-${Math.random()}`, // 使用时间戳和随机数确保每次都显示
+                      data: { chatId: chatId },
+                      requireInteraction: false,
+                      silent: false,
+                      vibrate: [200, 100, 200]
+                    }).catch(error => {
+                      console.error('显示浏览器通知失败:', error);
+                    });
+                  }
                 }
 
                 if (!isViewingThisChat) {
@@ -32431,7 +32496,40 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                 chat.unreadCount = (chat.unreadCount || 0) + 1;
                 chat.history.push(aiMessage);
                 await db.chats.put(chat);
+                
+                // 确保显示浏览器通知（无论页面是否可见）
+                console.log(`[后台活动通知] 角色 "${chat.name}" 主动发送了消息，准备显示通知...`);
                 showNotification(chatId, aiMessage.content);
+                
+                // 额外确保浏览器通知显示（即使showNotification可能因为某些原因失败）
+                if (Notification.permission === 'granted') {
+                  const notifName =
+                    !chat.isGroup && chat.settings.remarkName
+                      ? chat.settings.remarkName
+                      : chat.name;
+                  const avatarUrl = chat.settings.aiAvatar ||
+                    chat.settings.groupAvatar ||
+                    defaultAvatar;
+                  
+                  // 直接调用showBrowserNotification确保通知显示
+                  showBrowserNotification(notifName, {
+                    body: String(aiMessage.content).substring(0, 100) +
+                      (aiMessage.content.length > 100 ? "..." : ""),
+                    icon: avatarUrl,
+                    badge: avatarUrl,
+                    tag: `chat-${chatId}-bg-${Date.now()}`, // 使用时间戳确保每次都显示
+                    data: { chatId: chatId },
+                    requireInteraction: false,
+                    silent: false,
+                    vibrate: [200, 100, 200]
+                  }).catch(error => {
+                    console.error('[后台活动通知] 显示浏览器通知失败:', error);
+                  });
+                  console.log(`[后台活动通知] 浏览器通知已发送`);
+                } else {
+                  console.warn(`[后台活动通知] 通知权限未授予: ${Notification.permission}`);
+                }
+                
                 renderChatList();
                 console.log(
                   `后台活动: 角色 "${chat.name}" 主动发送了消息: ${aiMessage.content}`
