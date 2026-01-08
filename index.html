@@ -1,3 +1,4 @@
+<!DOCTYPE html>
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
@@ -5,6 +6,12 @@
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    
+    <!-- Content Security Policy - Edge浏览器兼容性修复 -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self' https: data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https: data: blob:; style-src 'self' 'unsafe-inline' https: data:; font-src 'self' https: data: blob:; img-src 'self' https: data: blob:; connect-src 'self' https: data: blob: wss: ws:; frame-src 'self' https: data: blob:;"
     />
 
     <!-- 1. (核心) 为苹果设备设置主屏幕图标 -->
@@ -1212,14 +1219,11 @@
               </div>
               <div class="form-group">
                 <label>密钥 (Key)</label>
-                <form id="api-settings-form" style="display: none;"></form>
                 <input
                   type="password"
                   id="api-key"
                   placeholder="sk-..."
                   class="moe-input"
-                  autocomplete="new-password"
-                  form="api-settings-form"
                 />
               </div>
               <div class="form-group">
@@ -1277,8 +1281,7 @@
               </div>
               <div class="form-group">
                 <label>API Key</label>
-                <form id="minimax-settings-form" style="display: none;"></form>
-                <input type="password" id="minimax-api-key" class="moe-input" autocomplete="new-password" form="minimax-settings-form" />
+                <input type="password" id="minimax-api-key" class="moe-input" />
               </div>
               <div class="form-group">
                 <label>服务区域</label>
@@ -1444,7 +1447,6 @@
                     <option value="nai-diffusion-3">V3 Anime</option>
                   </select>
                 </div>
-                <form id="novelai-settings-form" style="display: none;"></form>
                 <div class="form-group">
                   <label>API Key</label>
                   <div style="position: relative">
@@ -1452,8 +1454,6 @@
                       type="password"
                       id="novelai-api-key"
                       class="moe-input"
-                      autocomplete="new-password"
-                      form="novelai-settings-form"
                     />
                     <span
                       id="novelai-key-toggle"
@@ -1535,7 +1535,6 @@
               >
                 ☁️ GitHub 云备份
               </h4>
-              <form id="github-settings-form" style="display: none;"></form>
               <div class="form-group">
                 <input
                   type="password"
@@ -1543,8 +1542,6 @@
                   placeholder="Token"
                   class="moe-input"
                   style="margin-bottom: 5px"
-                  autocomplete="new-password"
-                  form="github-settings-form"
                 />
                 <input
                   type="text"
@@ -4838,9 +4835,7 @@
     <div id="password-modal-overlay" class="modal">
       <div class="password-modal-content">
         <p>请输入密码</p>
-        <form id="password-form" onsubmit="return false;">
-          <input type="password" id="password-input-field" maxlength="20" autocomplete="current-password" />
-        </form>
+        <input type="password" id="password-input-field" maxlength="20" />
         <div class="password-actions">
           <button id="password-cancel-btn">取消</button>
           <button id="password-confirm-btn">进入</button>
@@ -15946,7 +15941,6 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               console.log('✅ Service Worker 注册成功:', registration);
               console.log('Service Worker 作用域:', registration.scope);
               
-              
               // 检查更新
               registration.addEventListener('updatefound', () => {
                 console.log('发现 Service Worker 更新');
@@ -15988,7 +15982,6 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           console.warn('⚠️ 此浏览器不支持 Service Worker');
           console.warn('支持的浏览器：Chrome, Edge, Firefox, Safari (iOS 需要添加到主屏幕)');
         }
-
 
         // ===================================================================
         // 1. 所有变量和常量定义
@@ -17433,10 +17426,23 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           style.id = styleId;
 
           // 直接创建一条高优先级的CSS规则来应用字体
+          // 【Edge兼容性修复】为字体URL添加CORS支持
+          const fontUrl = preset.url;
+          const fontLink = document.createElement('link');
+          fontLink.rel = 'preconnect';
+          if (fontUrl.startsWith('http://') || fontUrl.startsWith('https://')) {
+            try {
+              const urlObj = new URL(fontUrl);
+              fontLink.href = urlObj.origin;
+              document.head.appendChild(fontLink);
+            } catch (e) {
+              // URL解析失败，跳过preconnect
+            }
+          }
           style.innerHTML = `
 			        @font-face {
 			            font-family: 'preset-${preset.id}';
-			            src: url('${preset.url}');
+			            src: url('${preset.url}') format('truetype');
 			            font-display: swap;
 			        }
 
@@ -19708,10 +19714,24 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           const fontName = "custom-user-font";
 
           // 这是定义字体的样式规则
+          // 【Edge兼容性修复】为字体URL添加CORS支持
+          const fontLink = document.createElement('link');
+          fontLink.rel = 'preconnect';
+          if (fontUrl.startsWith('http://') || fontUrl.startsWith('https://')) {
+            try {
+              const urlObj = new URL(fontUrl);
+              fontLink.href = urlObj.origin;
+              if (!document.querySelector(`link[href="${urlObj.origin}"]`)) {
+                document.head.appendChild(fontLink);
+              }
+            } catch (e) {
+              // URL解析失败，跳过preconnect
+            }
+          }
           const newStyle = `
 			        @font-face {
 			          font-family: '${fontName}';
-			          src: url('${fontUrl}');
+			          src: url('${fontUrl}') format('truetype');
 			          font-display: swap;
 			        }`;
 
@@ -30536,7 +30556,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           element.addEventListener("mouseleave", cancelPress);
           element.addEventListener("touchstart", startPress, { passive: true });
           element.addEventListener("touchend", cancelPress);
-          element.addEventListener("touchmove", cancelPress, { passive: true });
+          element.addEventListener("touchmove", cancelPress);
         }
 
         async function handleListenTogetherClick() {
@@ -32519,12 +32539,70 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                   body: JSON.stringify(fullActionRequest),
                 });
             if (!response.ok) {
-              const errorData = await response.json();
+              let errorData;
+              try {
+                const contentType = response.headers.get("content-type") || "";
+                if (contentType.includes("application/json")) {
+                  errorData = await response.json();
+                } else {
+                  const errorText = await response.text();
+                  errorData = { error: errorText };
+                }
+              } catch (e) {
+                errorData = { error: `无法解析错误响应: ${e.message}` };
+              }
               throw new Error(
                 `API请求失败: ${response.status} - ${JSON.stringify(errorData)}`
               );
             }
-            const data = await response.json();
+            
+            // 【Edge浏览器兼容性修复】先检查响应内容类型，再解析JSON
+            let data;
+            try {
+              const contentType = response.headers.get("content-type") || "";
+              
+              if (contentType.includes("application/json")) {
+                // 标准JSON响应，直接解析
+                data = await response.json();
+              } else {
+                // Edge浏览器可能返回非标准Content-Type，先读取文本再尝试解析
+                const responseText = await response.text();
+                
+                // 检查文本是否看起来像JSON
+                const trimmedText = responseText.trim();
+                if (trimmedText.startsWith("{") || trimmedText.startsWith("[")) {
+                  try {
+                    data = JSON.parse(responseText);
+                    console.log(
+                      `[Edge兼容性] 成功解析非标准Content-Type的JSON响应，角色 "${chat.name}"`
+                    );
+                  } catch (parseError) {
+                    console.error(
+                      `[Edge兼容性] JSON解析失败，角色 "${chat.name}" 的本次后台活动跳过。`,
+                      `Content-Type: ${contentType}`,
+                      `响应前200字符: ${responseText.substring(0, 200)}`,
+                      parseError
+                    );
+                    return;
+                  }
+                } else {
+                  // 不是JSON格式，可能是HTML错误页面或其他内容
+                  console.error(
+                    `[Edge兼容性] 响应不是JSON格式，角色 "${chat.name}" 的本次后台活动跳过。`,
+                    `Content-Type: ${contentType}`,
+                    `响应前200字符: ${responseText.substring(0, 200)}`
+                  );
+                  return;
+                }
+              }
+            } catch (jsonError) {
+              console.error(
+                `[Edge兼容性] 读取响应失败，角色 "${chat.name}" 的本次后台活动跳过:`,
+                jsonError
+              );
+              return;
+            }
+            
             const aiResponseContent = isGemini
               ? data?.candidates?.[0]?.content?.parts?.[0]?.text
               : data?.choices?.[0]?.message?.content;
