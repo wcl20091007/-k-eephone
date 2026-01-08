@@ -32538,22 +32538,42 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                   },
                   body: JSON.stringify(fullActionRequest),
                 });
+            
+            // 【Edge兼容性修复】记录响应状态信息
+            console.log(
+              `[Edge兼容性] API响应状态 - 角色 "${chat.name}":`,
+              `状态码: ${response.status}`,
+              `状态文本: ${response.statusText}`,
+              `Content-Type: ${response.headers.get("content-type") || "未设置"}`
+            );
+            
             if (!response.ok) {
               let errorData;
               try {
                 const contentType = response.headers.get("content-type") || "";
-                if (contentType.includes("application/json")) {
-                  errorData = await response.json();
+                // 【Edge兼容性修复】先读取文本，再尝试解析JSON（响应流只能读取一次）
+                const responseText = await response.text();
+                if (contentType.includes("application/json") || responseText.trim().startsWith("{")) {
+                  try {
+                    errorData = JSON.parse(responseText);
+                  } catch (parseError) {
+                    errorData = { error: responseText, parseError: parseError.message };
+                  }
                 } else {
-                  const errorText = await response.text();
-                  errorData = { error: errorText };
+                  errorData = { error: responseText };
                 }
               } catch (e) {
-                errorData = { error: `无法解析错误响应: ${e.message}` };
+                errorData = { error: `无法读取错误响应: ${e.message}` };
               }
-              throw new Error(
-                `API请求失败: ${response.status} - ${JSON.stringify(errorData)}`
+              console.error(
+                `[Edge兼容性] API请求失败 - 角色 "${chat.name}":`,
+                `状态码: ${response.status}`,
+                `状态文本: ${response.statusText}`,
+                `错误数据:`,
+                errorData
               );
+              // 不抛出错误，直接返回，避免中断后台活动流程
+              return;
             }
             
             // 【Edge浏览器兼容性修复】先检查响应内容类型，再解析JSON
@@ -32603,13 +32623,38 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               return;
             }
             
+            // 【Edge兼容性修复】检查API是否返回了错误对象（即使状态码是200）
+            if (data && data.error) {
+              const errorMessage = data.error?.message || data.error?.code || JSON.stringify(data.error);
+              console.error(
+                `[Edge兼容性] API返回错误对象，角色 "${chat.name}" 的本次后台活动跳过。`,
+                `错误信息: ${errorMessage}`,
+                `完整错误对象:`,
+                data.error
+              );
+              return;
+            }
+            
             const aiResponseContent = isGemini
               ? data?.candidates?.[0]?.content?.parts?.[0]?.text
               : data?.choices?.[0]?.message?.content;
             if (!aiResponseContent) {
+              // 【Edge兼容性修复】提供更详细的错误信息
+              const errorInfo = data?.error ? `错误: ${JSON.stringify(data.error)}` : '无错误信息';
+              const responseStructure = {
+                hasCandidates: !!data?.candidates,
+                hasChoices: !!data?.choices,
+                candidatesLength: data?.candidates?.length || 0,
+                choicesLength: data?.choices?.length || 0,
+                dataKeys: Object.keys(data || {})
+              };
               console.warn(
-                `API为空回或格式不正确（可能因安全设置被拦截），角色 "${chat.name}" 的本次后台活动跳过。返回数据:`,
-                data
+                `API为空回或格式不正确（可能因安全设置被拦截），角色 "${chat.name}" 的本次后台活动跳过。`,
+                `返回数据结构:`,
+                responseStructure,
+                `完整返回数据:`,
+                data,
+                errorInfo
               );
               return;
             }
