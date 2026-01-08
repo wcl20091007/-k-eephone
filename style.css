@@ -20579,12 +20579,14 @@ body {
   transform: translate(-50%, -50%) scale(0.9);
   width: 80%;
   max-width: 500px;
+  max-height: 70vh;
   min-height: 100px;
   background-color: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-radius: 16px;
   padding: 20px;
+  padding-top: 20px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
   z-index: 100000;
   display: flex;
@@ -20592,6 +20594,7 @@ body {
   opacity: 0;
   transition: opacity 0.3s ease, transform 0.3s ease;
   pointer-events: auto;
+  overflow: hidden;
 }
 
 #desktop-pet-reply-bubble.visible {
@@ -20604,22 +20607,68 @@ body {
   color: var(--text-primary);
   font-size: 15px;
   line-height: 1.6;
-  margin-bottom: 10px;
   word-wrap: break-word;
   white-space: pre-wrap;
+  overflow-y: auto;
+  overflow-x: hidden;
+  max-height: calc(70vh - 65px);
+  padding-right: 5px;
+  padding-top: 0;
+}
+
+/* 自定义滚动条样式 */
+.desktop-pet-reply-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.desktop-pet-reply-content::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 3px;
+}
+
+.desktop-pet-reply-content::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+}
+
+.desktop-pet-reply-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+#phone-screen.dark-mode .desktop-pet-reply-content::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+#phone-screen.dark-mode .desktop-pet-reply-content::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+#phone-screen.dark-mode .desktop-pet-reply-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
 }
 
 .desktop-pet-reply-delete {
-  align-self: flex-end;
-  background-color: rgba(255, 59, 48, 0.1);
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background-color: rgba(255, 59, 48, 0.15);
   color: #ff3b30;
   border: 1px solid rgba(255, 59, 48, 0.3);
-  border-radius: 8px;
-  padding: 6px 12px;
-  font-size: 14px;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 16px;
+  line-height: 1;
   cursor: pointer;
   transition: all 0.2s;
-  font-weight: 500;
+  font-weight: 600;
+  z-index: 100001;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .desktop-pet-reply-delete:hover {
