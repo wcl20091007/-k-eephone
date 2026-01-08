@@ -31772,7 +31772,10 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             (chat) => !chat.isGroup
           );
 
-          if (allSingleChats.length === 0) return;
+          if (allSingleChats.length === 0) {
+            console.log("后台活动: 没有单聊角色，跳过本次检测。");
+            return;
+          }
 
           const frequencyProbabilities = {
             low: 0.3, // 低频: 每次检测有 30% 的概率行动
@@ -31781,6 +31784,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           };
 
           const config = state.globalSettings.backgroundActivityConfig || {};
+          console.log("后台活动配置:", config);
 
           allSingleChats.forEach((chat) => {
             // 检查1：处理【被用户拉黑】的角色
@@ -31797,7 +31801,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                 (state.globalSettings.blockCooldownHours || 1) * 60 * 60 * 1000;
               if (blockedDuration > cooldownMilliseconds) {
                 console.log(
-                  `角色 "${chat.name}" 的冷静期已过，触发“反思”并申请好友事件...`
+                  `角色 "${chat.name}" 的冷静期已过，触发"反思"并申请好友事件...`
                 );
                 chat.relationship.status = "pending_system_reflection";
                 triggerAiFriendApplication(chat.id);
@@ -31809,35 +31813,71 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               chat.id !== state.activeChatId
             ) {
               const frequency = config[chat.id]; // 获取当前角色的频率设置
-              const probability = frequencyProbabilities[frequency]; // 获取对应的概率
+              
+              // 添加调试日志
+              if (!frequency) {
+                console.log(
+                  `角色 "${chat.name}" (ID: ${chat.id}) 未设置后台活动频率，跳过。`
+                );
+                return;
+              }
 
-              // added by lrq 251028
-              // 添加最后一条聊天记录时间的检查，避免频繁行动
-              const lastMessage = chat.history.slice(-1)[0];
-              if (lastMessage) {
-                const timeSinceLastMessage = lastMessage
-                  ? Date.now() - lastMessage.timestamp
-                  : Infinity;
-                const minInterval =
-                  (state.globalSettings.backgroundActivityInterval || 10) *
-                  1000;
-                if (timeSinceLastMessage < minInterval) {
-                  console.log(
-                    `角色 "${chat.name}" 距离上次消息发送时间不足，跳过本次行动。`
-                  );
-                  return; // 跳过本次行动
-                }
+              const probability = frequencyProbabilities[frequency]; // 获取对应的概率
+              
+              if (!probability) {
+                console.warn(
+                  `角色 "${chat.name}" 的频率设置 "${frequency}" 无效，跳过。`
+                );
+                return;
+              }
+
+              // 修复：检查距离上次后台活动的时间，而不是最后一条消息的时间
+              // 使用角色的 lastActivityTimestamp 来记录上次后台活动时间
+              const lastActivityTimestamp = chat.settings?.backgroundActivity?.lastActivityTimestamp || 0;
+              const timeSinceLastActivity = Date.now() - lastActivityTimestamp;
+              const minInterval =
+                (state.globalSettings.backgroundActivityInterval || 60) *
+                1000;
+              
+              if (timeSinceLastActivity < minInterval) {
+                console.log(
+                  `角色 "${chat.name}" 距离上次后台活动时间不足 ${minInterval/1000} 秒 (已过 ${Math.floor(timeSinceLastActivity/1000)} 秒)，跳过本次行动。`
+                );
+                return; // 跳过本次行动
               }
 
               // 如果这个角色设置了频率，并且随机数小于它的行动概率，就触发行动
-              if (probability && Math.random() < probability) {
+              const randomValue = Math.random();
+              console.log(
+                `角色 "${chat.name}" (频率: ${frequency}, 概率: ${probability}, 随机数: ${randomValue.toFixed(3)}) 检查中...`
+              );
+              
+              if (randomValue < probability) {
                 console.log(
                   `角色 "${chat.name}" (频率: ${frequency}) 被唤醒，准备独立行动...`
                 );
+                // 更新最后活动时间戳
+                if (!chat.settings) chat.settings = {};
+                if (!chat.settings.backgroundActivity) chat.settings.backgroundActivity = {};
+                chat.settings.backgroundActivity.lastActivityTimestamp = Date.now();
+                db.chats.put(chat).catch(err => console.error("保存后台活动时间戳失败:", err));
                 triggerInactiveAiAction(chat.id);
+              } else {
+                console.log(
+                  `角色 "${chat.name}" 本次随机数未达到触发概率，跳过。`
+                );
               }
-              // 如果没有设置频率，或者随机数没达到概率，就不会行动。
-              // 这就完美地实现了“分组设置”和“不会同时行动”的需求！
+            } else {
+              // 添加调试日志，说明为什么跳过这个角色
+              if (chat.relationship?.status !== "friend") {
+                console.log(
+                  `角色 "${chat.name}" 关系状态为 "${chat.relationship?.status || "未设置"}"，不是好友关系，跳过后台活动。`
+                );
+              } else if (chat.id === state.activeChatId) {
+                console.log(
+                  `角色 "${chat.name}" 是当前正在聊天的角色，跳过后台活动。`
+                );
+              }
             }
           });
         }
@@ -32165,6 +32205,9 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             }
           }
 
+          // 组合所有优先级的内容
+          const worldBookContext = worldBookContextHigh + worldBookContextMedium + worldBookContextLow;
+
           // 【NPC库优化】从全局NPC库获取启用的NPC
           const npcLibrary = await getEnabledNpcs(chat);
           let npcContextForAction = "";
@@ -32309,7 +32352,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           const lastMessage = chat.history.slice(-1)[0];
           const timeSinceLastMessage = lastMessage
             ? Math.floor((Date.now() - lastMessage.timestamp) / 60000)
-            : infinity;
+            : Infinity;
           const systemPrompt = `
 			# 任务
 			你现在【就是】角色 "${
