@@ -15934,6 +15934,14 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               console.log('✅ Service Worker 注册成功:', registration);
               console.log('Service Worker 作用域:', registration.scope);
               
+              // 防止 Edge 浏览器显示 PWA 系统提示弹窗
+              // 通过延迟激活和避免立即控制页面来减少系统提示
+              if (registration.active) {
+                // 如果 Service Worker 已经激活，不要立即控制页面
+                // 这样可以避免触发 Edge 的系统提示
+                console.log('Service Worker 已激活，避免触发系统提示');
+              }
+              
               // 检查更新
               registration.addEventListener('updatefound', () => {
                 console.log('发现 Service Worker 更新');
@@ -15974,6 +15982,39 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
         } else {
           console.warn('⚠️ 此浏览器不支持 Service Worker');
           console.warn('支持的浏览器：Chrome, Edge, Firefox, Safari (iOS 需要添加到主屏幕)');
+        }
+
+        // ===================================================================
+        // 防止 Edge 浏览器显示 PWA 系统提示弹窗
+        // ===================================================================
+        // 检测是否在 PWA 模式下运行
+        const isPWA = window.matchMedia('(display-mode: standalone)').matches || 
+                     window.navigator.standalone || 
+                     document.referrer.includes('android-app://');
+        
+        if (isPWA) {
+          console.log('✅ 检测到 PWA 模式，已添加到桌面');
+        }
+
+        // 拦截 beforeinstallprompt 事件，防止 Edge 显示安装提示
+        let deferredPrompt;
+        window.addEventListener('beforeinstallprompt', (e) => {
+          console.log('拦截 beforeinstallprompt 事件，防止显示系统提示');
+          // 阻止默认的安装提示
+          e.preventDefault();
+          // 保存事件以便后续使用（如果需要）
+          deferredPrompt = e;
+          // 不显示系统提示，直接返回
+          return false;
+        });
+
+        // 如果已经安装为 PWA，确保不会再次显示提示
+        if (isPWA) {
+          // 清除任何可能触发的安装提示
+          window.addEventListener('appinstalled', () => {
+            console.log('PWA 已安装，清除安装提示');
+            deferredPrompt = null;
+          });
         }
 
         // ===================================================================

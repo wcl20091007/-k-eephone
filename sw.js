@@ -25,7 +25,20 @@ self.addEventListener('activate', (event) => {
   console.log('Service Worker 已激活');
   event.waitUntil(
     Promise.all([
-      self.clients.claim(), // 立即控制所有页面
+      // 延迟控制页面，避免触发 Edge 浏览器的 PWA 系统提示
+      // 只在必要时才控制页面，而不是立即控制
+      new Promise(resolve => {
+        // 延迟 100ms 后再控制页面，减少系统提示的出现
+        setTimeout(() => {
+          self.clients.claim().then(() => {
+            console.log('Service Worker 已控制页面（延迟激活）');
+            resolve();
+          }).catch(err => {
+            console.log('Service Worker 控制页面失败:', err);
+            resolve();
+          });
+        }, 100);
+      }),
       // 清理旧缓存
       caches.keys().then((cacheNames) => {
         return Promise.all(
