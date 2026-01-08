@@ -30231,10 +30231,16 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                   ? `${aiMessage.senderName}: ${notificationText}`
                   : notificationText;
 
-                // 【优化】每条消息都显示浏览器通知，模拟真实短信通知
-                // 如果用户不在当前聊天界面，显示页面内通知条（只显示一次）和浏览器通知（每条都显示）
+                // 【优化】智能通知逻辑：只在需要时显示浏览器通知
+                // 1. 如果用户不在当前聊天界面，显示页面内通知条和浏览器通知
+                // 2. 如果用户在当前聊天界面但页面在后台，只显示浏览器通知
+                // 3. 如果用户在当前聊天界面且页面在前台，不显示浏览器通知（用户正在看，不需要通知）
+                
+                const isPageHidden = document.hidden || document.visibilityState === 'hidden';
+                const shouldShowBrowserNotification = !isViewingThisChat || isPageHidden;
+                
                 if (!isViewingThisChat) {
-                  // 页面内通知条只显示一次（避免重复显示）
+                  // 用户不在当前聊天界面：显示页面内通知条（只显示一次）和浏览器通知（每条都显示）
                   if (!notificationShown) {
                     showNotification(
                       chatId,
@@ -30244,7 +30250,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                     notificationShown = true;
                   } else {
                     // 后续消息只显示浏览器通知，不显示页面内通知条
-                    if (Notification.permission === 'granted') {
+                    if (shouldShowBrowserNotification && Notification.permission === 'granted') {
                       const notifName =
                         !chat.isGroup && chat.settings.remarkName
                           ? chat.settings.remarkName
@@ -30268,9 +30274,8 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                       });
                     }
                   }
-                } else {
-                  // 如果用户在当前聊天界面，每条消息都显示浏览器通知（不显示页面内通知条）
-                  // 这样即使页面在后台或用户切换到其他标签页，也能收到通知
+                } else if (shouldShowBrowserNotification) {
+                  // 用户在当前聊天界面，但页面在后台：只显示浏览器通知（不显示页面内通知条）
                   if (Notification.permission === 'granted') {
                     const notifName =
                       !chat.isGroup && chat.settings.remarkName
@@ -30295,6 +30300,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                     });
                   }
                 }
+                // 如果用户在当前聊天界面且页面在前台，不显示任何通知（用户正在看，不需要通知）
 
                 if (!isViewingThisChat) {
                   // 如果用户不在当前聊天界面，就把这个聊天的未读数 +1
@@ -32497,38 +32503,45 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                 chat.history.push(aiMessage);
                 await db.chats.put(chat);
                 
-                // 确保显示浏览器通知（无论页面是否可见）
-                console.log(`[后台活动通知] 角色 "${chat.name}" 主动发送了消息，准备显示通知...`);
-                showNotification(chatId, aiMessage.content);
+                // 【优化】智能通知逻辑：只在需要时显示浏览器通知
+                // 1. 如果用户不在当前聊天界面，显示页面内通知条和浏览器通知
+                // 2. 如果用户在当前聊天界面但页面在后台，只显示浏览器通知
+                // 3. 如果用户在当前聊天界面且页面在前台，不显示浏览器通知（用户正在看，不需要通知）
                 
-                // 额外确保浏览器通知显示（即使showNotification可能因为某些原因失败）
-                if (Notification.permission === 'granted') {
-                  const notifName =
-                    !chat.isGroup && chat.settings.remarkName
-                      ? chat.settings.remarkName
-                      : chat.name;
-                  const avatarUrl = chat.settings.aiAvatar ||
-                    chat.settings.groupAvatar ||
-                    defaultAvatar;
-                  
-                  // 直接调用showBrowserNotification确保通知显示
-                  showBrowserNotification(notifName, {
-                    body: String(aiMessage.content).substring(0, 100) +
-                      (aiMessage.content.length > 100 ? "..." : ""),
-                    icon: avatarUrl,
-                    badge: avatarUrl,
-                    tag: `chat-${chatId}-bg-${Date.now()}`, // 使用时间戳确保每次都显示
-                    data: { chatId: chatId },
-                    requireInteraction: false,
-                    silent: false,
-                    vibrate: [200, 100, 200]
-                  }).catch(error => {
-                    console.error('[后台活动通知] 显示浏览器通知失败:', error);
-                  });
-                  console.log(`[后台活动通知] 浏览器通知已发送`);
-                } else {
-                  console.warn(`[后台活动通知] 通知权限未授予: ${Notification.permission}`);
+                const isViewingThisChat = state.activeChatId === chatId;
+                const isPageHidden = document.hidden || document.visibilityState === 'hidden';
+                const shouldShowBrowserNotification = !isViewingThisChat || isPageHidden;
+                
+                if (!isViewingThisChat) {
+                  // 用户不在当前聊天界面：显示页面内通知条和浏览器通知
+                  showNotification(chatId, aiMessage.content);
+                } else if (shouldShowBrowserNotification) {
+                  // 用户在当前聊天界面，但页面在后台：只显示浏览器通知
+                  if (Notification.permission === 'granted') {
+                    const notifName =
+                      !chat.isGroup && chat.settings.remarkName
+                        ? chat.settings.remarkName
+                        : chat.name;
+                    const avatarUrl = chat.settings.aiAvatar ||
+                      chat.settings.groupAvatar ||
+                      defaultAvatar;
+                    
+                    showBrowserNotification(notifName, {
+                      body: String(aiMessage.content).substring(0, 100) +
+                        (aiMessage.content.length > 100 ? "..." : ""),
+                      icon: avatarUrl,
+                      badge: avatarUrl,
+                      tag: `chat-${chatId}-bg-${Date.now()}-${Math.random()}`, // 使用时间戳和随机数确保每次都显示
+                      data: { chatId: chatId },
+                      requireInteraction: false,
+                      silent: false,
+                      vibrate: [200, 100, 200]
+                    }).catch(error => {
+                      console.error('[后台活动通知] 显示浏览器通知失败:', error);
+                    });
+                  }
                 }
+                // 如果用户在当前聊天界面且页面在前台，不显示任何通知（用户正在看，不需要通知）
                 
                 renderChatList();
                 console.log(
