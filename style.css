@@ -25028,6 +25028,17 @@ body {
   background: rgba(0, 0, 0, 0.2) !important;
 }
 
+/* ★★★ 修复文件查看器内容区域颜色问题 ★★★ */
+#kk-file-viewer-modal .modal-body {
+  background-color: #f0f2f5 !important;
+  color: #333 !important;
+}
+
+#kk-file-viewer-modal #kk-file-viewer-content {
+  color: #333 !important;
+  background-color: transparent !important;
+}
+
 /* --- 1. 💻 电脑界面 (赛博桌面风格) --- */
 
 /* 桌面背景 */

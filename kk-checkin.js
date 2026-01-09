@@ -1051,7 +1051,7 @@ function openFileViewer(fileName, fileContent) {
     // ★★★ 修复关键 2：移除 absolute 定位，使用标准流布局 ★★★
     // flex-shrink: 0 确保底部栏不会被压缩
     footer.style.cssText =
-      'padding: 10px 15px; border-top: 1px solid #eee; display: flex; justify-content: flex-end; gap: 10px; background: #fff; flex-shrink: 0; border-radius: 0 0 12px 12px;';
+      'padding: 10px 15px; border-top: 1px solid #eee; display: flex; justify-content: flex-end; gap: 10px; background: rgba(255, 255, 255, 0.9); flex-shrink: 0; border-radius: 0 0 12px 12px; color: #333;';
 
     // ★★★ 修复关键 3：调整内容区域样式 ★★★
     const body = modalContent.querySelector('.modal-body');
@@ -1063,6 +1063,16 @@ function openFileViewer(fileName, fileContent) {
       // 确保内容区内部可以滚动
       body.style.overflowY = 'auto';
       body.style.padding = '15px';
+      // ★★★ 修复颜色问题：确保浅色背景+深色文字 ★★★
+      body.style.backgroundColor = '#f0f2f5';
+      body.style.color = '#333';
+    }
+    
+    // ★★★ 修复文件内容文字颜色 ★★★
+    const contentEl = document.getElementById('kk-file-viewer-content');
+    if (contentEl) {
+      contentEl.style.color = '#333';
+      contentEl.style.backgroundColor = 'transparent';
     }
 
     modalContent.appendChild(footer);
