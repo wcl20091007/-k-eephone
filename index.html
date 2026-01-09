@@ -6295,23 +6295,81 @@
               </button>
             </div>
 
-            <!-- 桌宠功能开关 -->
-            <div
-              class="form-group"
-              id="desktop-pet-group"
-              style="display: none"
-            >
-              <div class="moe-divider"></div>
+          </div>
+
+          <!-- ============================== -->
+          <!-- 5.5. 桌宠设置卡片 -->
+          <!-- ============================== -->
+          <div class="settings-group-card moe-card" id="desktop-pet-settings-card" style="display: none">
+            <div class="settings-section-title">🐾 桌宠设置</div>
+
+            <!-- 桌宠开关 -->
+            <div class="form-group">
               <label style="display: flex; align-items: center; gap: 8px;">
                 <input
                   type="checkbox"
                   id="desktop-pet-switch"
                   style="width: 18px; height: 18px; cursor: pointer;"
                 />
-                <span>桌宠</span>
+                <span>启用桌宠</span>
               </label>
               <small style="color: #888; font-size: 12px; display: block; margin-top: 4px;">
                 开启后，小手机界面会出现该角色的桌宠，可以拖拽移动。同时只能有一个角色开启桌宠。
+              </small>
+            </div>
+
+            <!-- 桌宠图片设置 -->
+            <div class="form-group" id="desktop-pet-image-group">
+              <label style="font-weight: 500; margin-bottom: 8px; display: block;">桌宠图片</label>
+              <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                <img id="desktop-pet-image-preview" src="" alt="桌宠预览" style="width: 60px; height: 60px; border-radius: 50%; object-fit: cover; border: 2px solid var(--border-color);">
+                <div style="flex: 1;">
+                  <div class="moe-btn-group" style="display: flex; gap: 8px;">
+                    <button id="desktop-pet-upload-local-btn" class="moe-btn-secondary" style="flex: 1; font-size: 13px;">📁 本地上传</button>
+                    <button id="desktop-pet-upload-url-btn" class="moe-btn-secondary" style="flex: 1; font-size: 13px;">🌐 URL上传</button>
+                    <button id="desktop-pet-reset-image-btn" class="moe-btn-secondary" style="flex: 1; font-size: 13px;">🔄 恢复默认</button>
+                  </div>
+                  <input type="file" id="desktop-pet-upload-input" accept="image/*" hidden>
+                  <input type="text" id="desktop-pet-image-url" placeholder="图片URL" style="width: 100%; margin-top: 8px; padding: 8px; box-sizing: border-box; border: 1px solid var(--border-color); border-radius: 4px; font-size: 13px; display: none;" hidden>
+                </div>
+              </div>
+            </div>
+
+            <!-- 桌宠形状选择 -->
+            <div class="form-group">
+              <label style="font-weight: 500; margin-bottom: 8px; display: block;">桌宠形状</label>
+              <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                  <input type="radio" name="desktop-pet-shape" value="circle" checked style="width: 16px; height: 16px; cursor: pointer;">
+                  <span>⭕ 圆形</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                  <input type="radio" name="desktop-pet-shape" value="diamond" style="width: 16px; height: 16px; cursor: pointer;">
+                  <span>💎 菱形</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                  <input type="radio" name="desktop-pet-shape" value="square" style="width: 16px; height: 16px; cursor: pointer;">
+                  <span>⬜ 方形</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- 桌宠大小设定 -->
+            <div class="form-group">
+              <label style="font-weight: 500; margin-bottom: 8px; display: block;">
+                桌宠大小: <span id="desktop-pet-size-value">80</span>px
+              </label>
+              <input 
+                type="range" 
+                id="desktop-pet-size-slider" 
+                min="40" 
+                max="150" 
+                value="80" 
+                step="5"
+                style="width: 100%;"
+              >
+              <small style="color: #888; font-size: 11px; display: block; margin-top: 4px;">
+                范围: 40px - 150px
               </small>
             </div>
           </div>
@@ -26053,14 +26111,11 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                 })
                 .filter(Boolean);
 
-              // 【调试日志】输出群聊的完整prompt到控制台
-              console.log('========== AI群聊请求 - 完整Prompt ==========');
-              console.log('【角色】:', chat.name);
-              console.log('【System Prompt】:');
-              console.log(systemPrompt);
-              console.log('【Messages Payload】:');
-              console.log(JSON.stringify(messagesPayload, null, 2));
-              console.log('【完整请求体】:');
+              // 【调试日志】已移除大量日志输出以提升性能
+              // 如需调试，可临时取消注释以下代码
+              // console.log('========== AI群聊请求 - 完整Prompt ==========');
+              // console.log('【角色】:', chat.name);
+              // console.log('【Messages Payload 大小】:', JSON.stringify(messagesPayload).length, 'bytes');
               const fullGroupRequest = {
                 model: model,
                 messages: [
@@ -26070,8 +26125,6 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                 temperature: parseFloat(state.apiConfig.temperature) || 0.8,
                 stream: false,
               };
-              console.log(JSON.stringify(fullGroupRequest, null, 2));
-              console.log('==========================================');
             } else {
               // 【NPC库优化】从全局NPC库获取启用的NPC
               const npcLibrary = await getEnabledNpcs(chat);
@@ -26881,15 +26934,11 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               messagesPayload.push({ role: "system", content: postsContext });
             }
 
-            // 【调试日志】输出完整的prompt到控制台
-            console.log('========== AI聊天请求 - 完整Prompt ==========');
-            console.log('【角色】:', chat.name);
-            console.log('【聊天类型】:', chat.isGroup ? '群聊' : '单人聊天');
-            console.log('【System Prompt】:');
-            console.log(systemPrompt);
-            console.log('【Messages Payload】:');
-            console.log(JSON.stringify(messagesPayload, null, 2));
-            console.log('【完整请求体】:');
+            // 【调试日志】已移除大量日志输出以提升性能
+            // 如需调试，可临时取消注释以下代码
+            // console.log('========== AI聊天请求 - 完整Prompt ==========');
+            // console.log('【角色】:', chat.name);
+            // console.log('【Messages Payload 大小】:', JSON.stringify(messagesPayload).length, 'bytes');
             const fullRequest = {
               model: model,
               messages: [
@@ -26899,8 +26948,6 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               temperature: parseFloat(state.apiConfig.temperature) || 0.8,
               stream: false,
             };
-            console.log(JSON.stringify(fullRequest, null, 2));
-            console.log('==========================================');
 
             let isGemini = proxyUrl === GEMINI_API_URL;
             let geminiConfig = toGeminiRequestData(
@@ -32643,20 +32690,16 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             },
           ];
           
-          // 【调试日志】输出主动消息的完整prompt到控制台
-          console.log('========== AI主动消息请求 - 完整Prompt ==========');
-          console.log('【角色】:', chat.name);
-          console.log('【System Prompt】:');
-          console.log(systemPrompt);
-          console.log('【Messages Payload】:');
-          console.log(JSON.stringify(messagesPayload, null, 2));
-          console.log('【完整请求体】:');
+          // 【调试日志】已移除大量日志输出以提升性能
+          // 如需调试，可临时取消注释以下代码
+          // console.log('========== AI主动消息请求 - 完整Prompt ==========');
+          // console.log('【角色】:', chat.name);
+          // console.log('【Messages Payload 大小】:', JSON.stringify(messagesPayload).length, 'bytes');
           const fullActionRequest = {
             model: model,
             messages: messagesPayload,
             temperature: parseFloat(state.apiConfig.temperature) || 0.8,
           };
-          console.log(JSON.stringify(fullActionRequest, null, 2));
           console.log('==========================================');
           
           try {
@@ -55436,6 +55479,8 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             .addEventListener("click", async () => {
               if (!state.activeChatId) return;
               const chat = state.chats[state.activeChatId];
+              // 设置当前编辑的聊天ID，供桌宠设置使用
+              window.currentEditingChatId = state.activeChatId;
               const isGroup = chat.isGroup;
               document.getElementById("offline-mode-section").style.display =
                 isGroup ? "none" : "block";
@@ -55818,19 +55863,46 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               document.getElementById("assign-group-section").style.display =
                 isGroup ? "none" : "block";
 
-              // 桌宠功能开关的显示/隐藏和加载
-              const desktopPetGroup = document.getElementById("desktop-pet-group");
+              // 桌宠设置卡片的显示/隐藏和加载
+              const desktopPetCard = document.getElementById("desktop-pet-settings-card");
               if (!isGroup) {
-                desktopPetGroup.style.display = "block";
+                desktopPetCard.style.display = "block";
                 // 加载桌宠设置
                 const desktopPetEnabled = chat.settings.desktopPetEnabled || false;
                 document.getElementById("desktop-pet-switch").checked = desktopPetEnabled;
+                
+                // 加载桌宠图片（如果有自定义图片，否则使用角色头像）
+                const desktopPetImage = chat.settings.desktopPetImage || null;
+                const previewImg = document.getElementById("desktop-pet-image-preview");
+                const urlInput = document.getElementById("desktop-pet-image-url");
+                if (desktopPetImage) {
+                  previewImg.src = desktopPetImage;
+                  urlInput.value = desktopPetImage;
+                } else {
+                  const defaultAvatarUrl = chat.settings.aiAvatar || defaultAvatar;
+                  previewImg.src = defaultAvatarUrl;
+                  previewImg.dataset.defaultSrc = defaultAvatarUrl;
+                  urlInput.value = "";
+                }
+                
+                // 加载桌宠形状
+                const desktopPetShape = chat.settings.desktopPetShape || "circle";
+                const shapeRadio = document.querySelector(`input[name="desktop-pet-shape"][value="${desktopPetShape}"]`);
+                if (shapeRadio) {
+                  shapeRadio.checked = true;
+                }
+                
+                // 加载桌宠大小
+                const desktopPetSize = chat.settings.desktopPetSize || 80;
+                document.getElementById("desktop-pet-size-slider").value = desktopPetSize;
+                document.getElementById("desktop-pet-size-value").textContent = desktopPetSize;
+                
                 // 加载桌宠位置（如果有保存的话）
                 if (chat.settings.desktopPetPosition) {
                   // 位置会在显示桌宠时应用
                 }
               } else {
-                desktopPetGroup.style.display = "none";
+                desktopPetCard.style.display = "none";
               }
 
               // --- 加载表单数据 ---
@@ -56522,6 +56594,32 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                 
                 chat.settings.desktopPetEnabled = desktopPetEnabled;
                 
+                // 保存桌宠图片
+                const previewImg = document.getElementById("desktop-pet-image-preview");
+                const imageUrlInput = document.getElementById("desktop-pet-image-url");
+                const defaultAvatarUrl = chat.settings?.aiAvatar || defaultAvatar;
+                
+                if (imageUrlInput.value.trim()) {
+                  // 如果URL输入框有值，使用它
+                  chat.settings.desktopPetImage = imageUrlInput.value.trim();
+                } else if (previewImg.src && previewImg.src !== defaultAvatarUrl && !previewImg.src.includes('data:image')) {
+                  // 如果预览图不是默认头像且不是data URL，保存它
+                  chat.settings.desktopPetImage = previewImg.src;
+                } else if (previewImg.src && previewImg.src.startsWith('data:image')) {
+                  // 如果是data URL（本地上传），保存它
+                  chat.settings.desktopPetImage = previewImg.src;
+                } else {
+                  chat.settings.desktopPetImage = null; // 使用默认（角色头像）
+                }
+                
+                // 保存桌宠形状
+                const selectedShape = document.querySelector('input[name="desktop-pet-shape"]:checked').value;
+                chat.settings.desktopPetShape = selectedShape;
+                
+                // 保存桌宠大小
+                const desktopPetSize = parseInt(document.getElementById("desktop-pet-size-slider").value);
+                chat.settings.desktopPetSize = desktopPetSize;
+                
                 // 如果桌宠已显示，保存当前位置
                 const petContainer = document.getElementById("desktop-pet-container");
                 if (petContainer && petContainer.style.display !== "none") {
@@ -56532,6 +56630,11 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                     top: rect.top - screenRect.top,
                     left: rect.left - screenRect.left
                   };
+                }
+                
+                // 更新桌宠显示
+                if (typeof updateDesktopPet === 'function') {
+                  updateDesktopPet();
                 }
 
                 // 从输入框读取值并保存
@@ -60229,7 +60332,23 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
 
             if (activePetChat) {
               // 显示桌宠
-              petAvatar.src = activePetChat.settings.aiAvatar || defaultAvatar;
+              // 应用桌宠图片（自定义图片或默认角色头像）
+              const desktopPetImage = activePetChat.settings.desktopPetImage;
+              petAvatar.src = desktopPetImage || activePetChat.settings.aiAvatar || defaultAvatar;
+              
+              // 应用桌宠大小
+              const desktopPetSize = activePetChat.settings.desktopPetSize || 80;
+              petContainer.style.width = desktopPetSize + "px";
+              petContainer.style.height = desktopPetSize + "px";
+              
+              // 应用桌宠形状
+              const desktopPetShape = activePetChat.settings.desktopPetShape || "circle";
+              const petCircle = document.getElementById("desktop-pet-circle");
+              // 移除所有形状类
+              petCircle.classList.remove("shape-circle", "shape-diamond", "shape-square");
+              // 添加当前形状类
+              petCircle.classList.add("shape-" + desktopPetShape);
+              
               petContainer.style.display = "block";
               
               // 如果有保存的位置，应用它
@@ -60425,6 +60544,98 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           
           // 将函数暴露到全局，供保存设置时调用
           window.updateDesktopPet = updateDesktopPet;
+
+          // ========== 桌宠设置事件监听 ==========
+          // 本地上传按钮
+          document.getElementById("desktop-pet-upload-local-btn")?.addEventListener("click", () => {
+            document.getElementById("desktop-pet-upload-input").click();
+          });
+
+          // 文件选择处理
+          document.getElementById("desktop-pet-upload-input")?.addEventListener("change", async (e) => {
+            const file = e.target.files[0];
+            if (file) {
+              try {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                  const dataUrl = event.target.result;
+                  const previewImg = document.getElementById("desktop-pet-image-preview");
+                  const urlInput = document.getElementById("desktop-pet-image-url");
+                  previewImg.src = dataUrl;
+                  urlInput.value = dataUrl;
+                  urlInput.style.display = "block";
+                };
+                reader.readAsDataURL(file);
+              } catch (error) {
+                console.error("图片上传失败:", error);
+                alert("图片上传失败，请重试");
+              }
+            }
+            e.target.value = null; // 清空以便下次选择
+          });
+
+          // URL上传按钮
+          document.getElementById("desktop-pet-upload-url-btn")?.addEventListener("click", async () => {
+            const url = await showCustomPrompt("上传图片URL", "请输入图片URL", "", "url");
+            if (url && url.trim()) {
+              const previewImg = document.getElementById("desktop-pet-image-preview");
+              const urlInput = document.getElementById("desktop-pet-image-url");
+              previewImg.src = url.trim();
+              urlInput.value = url.trim();
+              previewImg.onerror = () => {
+                alert("图片URL无效，请检查链接");
+                previewImg.src = previewImg.dataset.defaultSrc || "";
+                urlInput.value = "";
+              };
+            }
+          });
+
+          // 恢复默认按钮
+          document.getElementById("desktop-pet-reset-image-btn")?.addEventListener("click", () => {
+            const previewImg = document.getElementById("desktop-pet-image-preview");
+            const urlInput = document.getElementById("desktop-pet-image-url");
+            // 获取当前编辑的角色头像作为默认
+            const chatId = window.currentEditingChatId || state.activeChatId;
+            if (chatId) {
+              const chat = state.chats[chatId];
+              if (chat && !chat.isGroup) {
+                const defaultAvatarUrl = chat.settings?.aiAvatar || defaultAvatar;
+                previewImg.src = defaultAvatarUrl;
+                previewImg.dataset.defaultSrc = defaultAvatarUrl;
+                urlInput.value = "";
+              }
+            }
+          });
+
+          // 大小滑块变化 - 实时渲染
+          document.getElementById("desktop-pet-size-slider")?.addEventListener("input", (e) => {
+            const size = parseInt(e.target.value);
+            document.getElementById("desktop-pet-size-value").textContent = size;
+            
+            // 实时更新桌宠大小
+            const petContainer = document.getElementById("desktop-pet-container");
+            if (petContainer && petContainer.style.display !== "none") {
+              petContainer.style.width = size + "px";
+              petContainer.style.height = size + "px";
+            }
+          });
+
+          // 形状选择变化时实时渲染
+          document.querySelectorAll('input[name="desktop-pet-shape"]')?.forEach(radio => {
+            radio.addEventListener("change", () => {
+              const selectedShape = radio.value;
+              const petContainer = document.getElementById("desktop-pet-container");
+              const petCircle = document.getElementById("desktop-pet-circle");
+              
+              if (petContainer && petCircle && petContainer.style.display !== "none") {
+                // 移除所有形状类
+                petCircle.classList.remove("shape-circle", "shape-diamond", "shape-square");
+                // 添加当前形状类
+                petCircle.classList.add("shape-" + selectedShape);
+              }
+            });
+          });
+          // ========== 桌宠设置事件监听结束 ==========
 
           // ========== 桌宠智能反应功能 ==========
           /**
