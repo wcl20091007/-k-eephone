@@ -62,10 +62,37 @@ async function openKkHouseView(charId) {
  * @param {boolean} includeComputer - 【新增】是否包含电脑数据
  * @returns {Promise<object|null>} - 返回生成的房屋数据对象，或在失败时返回null
  */
+// 用于追踪后台生成任务
+let backgroundGenerationTask = null;
+
 async function generateHouseData(charId, includeComputer = true) {
   // 默认为true兼容旧代码
   const chat = state.chats[charId];
-  showGenerationOverlay('正在努力寻找中...');
+  showGenerationOverlay('正在努力寻找中...', true); // 显示返回按钮
+
+  // 设置返回按钮点击事件
+  const backBtn = document.getElementById('generation-back-btn');
+  if (backBtn) {
+    // 移除旧的事件监听器（如果存在）
+    const newBackBtn = backBtn.cloneNode(true);
+    backBtn.parentNode.replaceChild(newBackBtn, backBtn);
+    
+    newBackBtn.addEventListener('click', () => {
+      // 隐藏覆盖层，但保持生成过程继续
+      document.getElementById('generation-overlay').classList.remove('visible');
+      // 返回主界面
+      if (typeof showScreen === 'function') {
+        showScreen('home-screen');
+      }
+    });
+  }
+
+  // 标记开始后台生成任务
+  backgroundGenerationTask = {
+    charId: charId,
+    chatName: chat.name,
+    startTime: Date.now()
+  };
 
   try {
     const { proxyUrl, apiKey, model } = state.apiConfig;
@@ -298,19 +325,85 @@ async function generateHouseData(charId, includeComputer = true) {
             }
           }
         }
+        
+        // 图片生成完成后，如果用户已经返回，也要通知
+        if (backgroundGenerationTask && backgroundGenerationTask.charId === charId) {
+          await notifyGenerationComplete(charId, chat.name, true, '（包括所有图片）');
+          backgroundGenerationTask = null;
+        }
       } catch (imgError) {
         console.error('后台图片生成流程发生不可恢复的错误:', imgError);
+        // 图片生成失败也要通知
+        if (backgroundGenerationTask && backgroundGenerationTask.charId === charId) {
+          await notifyGenerationComplete(charId, chat.name, false, `图片生成失败: ${imgError.message}`);
+          backgroundGenerationTask = null;
+        }
       }
     })();
     // ▲▲▲ 图片生成逻辑结束 ▲▲▲
 
+    // 数据生成完成，先通知用户（图片生成会在后台继续）
+    if (backgroundGenerationTask && backgroundGenerationTask.charId === charId) {
+      // 标记数据已生成，但图片还在生成中
+      backgroundGenerationTask.dataComplete = true;
+      // 不立即通知，等图片生成完成后再统一通知
+    }
+
     return houseData;
   } catch (error) {
     console.error('生成房屋数据失败:', error);
-    await showCustomAlert('生成失败', `发生错误: ${error.message}`);
+    
+    // 生成失败，也要通知用户
+    if (backgroundGenerationTask && backgroundGenerationTask.charId === charId) {
+      await notifyGenerationComplete(charId, chat.name, false, error.message);
+      backgroundGenerationTask = null;
+    } else {
+      // 如果覆盖层还在显示，正常显示错误
+      await showCustomAlert('生成失败', `发生错误: ${error.message}`);
+    }
+    
     return null;
   } finally {
-    document.getElementById('generation-overlay').classList.remove('visible');
+    // 只有在覆盖层仍然可见时才隐藏它（如果用户已经返回，覆盖层已经隐藏）
+    const overlay = document.getElementById('generation-overlay');
+    if (overlay && overlay.classList.contains('visible')) {
+      overlay.classList.remove('visible');
+    }
+  }
+}
+
+/**
+ * 通知用户生成完成
+ * @param {string} charId - 角色ID
+ * @param {string} chatName - 角色名称
+ * @param {boolean} success - 是否成功
+ * @param {string} extraInfo - 额外信息（如"（包括所有图片）"）
+ * @param {string} errorMessage - 错误信息（如果失败）
+ */
+async function notifyGenerationComplete(charId, chatName, success, extraInfo = '', errorMessage = '') {
+  // 检测页面是否在后台
+  const isPageHidden = document.hidden || document.visibilityState === 'hidden';
+  
+  if (success) {
+    const message = `查岗内容生成完成！${extraInfo}\n\n${chatName}的家已经准备好了，快去查看吧！`;
+    
+    if (isPageHidden) {
+      // 页面在后台，使用真实浏览器弹窗（alert）
+      alert(message);
+    } else {
+      // 页面在前台，使用AI char回复时的仿手机弹窗
+      await showCustomAlert('查岗完成', message);
+    }
+  } else {
+    const message = `查岗内容生成失败\n\n${errorMessage || '未知错误'}`;
+    
+    if (isPageHidden) {
+      // 页面在后台，使用真实浏览器弹窗（alert）
+      alert(message);
+    } else {
+      // 页面在前台，使用AI char回复时的仿手机弹窗
+      await showCustomAlert('生成失败', message);
+    }
   }
 }
 
@@ -1434,13 +1527,21 @@ async function generateSurveillanceUpdate(charId) {
 /**
  * 【全新】显示加载动画并设置指定的文字
  * @param {string} text - 要显示的加载提示文字
+ * @param {boolean} showBackButton - 是否显示返回按钮（用于后台生成）
  */
-function showGenerationOverlay(text) {
+function showGenerationOverlay(text, showBackButton = false) {
   const overlay = document.getElementById('generation-overlay');
   const textElement = document.getElementById('generation-text');
+  const backBtn = document.getElementById('generation-back-btn');
+  
   if (textElement) {
     textElement.textContent = text;
   }
+  
+  if (backBtn) {
+    backBtn.style.display = showBackButton ? 'block' : 'none';
+  }
+  
   overlay.classList.add('visible');
 }
 /* ================= KK查岗 - 沉浸式衣帽间 ================= */
