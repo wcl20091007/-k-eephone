@@ -34,6 +34,41 @@ async function openKkHouseView(charId) {
   const chat = state.chats[charId];
   if (!chat) return;
 
+  // 【重要】检查是否正在生成中
+  if (backgroundGenerationTask && backgroundGenerationTask.charId === charId) {
+    // 如果正在生成中，显示覆盖层并等待
+    showGenerationOverlay('正在努力寻找中...', true);
+    // 设置返回按钮事件（如果还没有设置）
+    const backBtn = document.getElementById('generation-back-btn');
+    if (backBtn) {
+      const newBackBtn = backBtn.cloneNode(true);
+      backBtn.parentNode.replaceChild(newBackBtn, backBtn);
+      newBackBtn.addEventListener('click', () => {
+        const overlay = document.getElementById('generation-overlay');
+        if (overlay) {
+          overlay.classList.remove('visible');
+        }
+        if (backgroundGenerationTask && backgroundGenerationTask.charId === charId) {
+          backgroundGenerationTask.userReturned = true;
+        }
+        if (typeof showScreen === 'function') {
+          showScreen('home-screen');
+        }
+      });
+    }
+    
+    // 检查数据是否已经生成完成（但图片可能还在生成）
+    if (backgroundGenerationTask.dataComplete && chat.houseData) {
+      // 数据已生成，可以显示房屋视图，但覆盖层保持显示直到图片生成完成
+      renderKkHouseView(chat.houseData);
+      showScreen('kk-house-view-screen');
+      // 覆盖层会继续显示，直到图片生成完成
+    } else {
+      // 数据还未生成完成，不继续执行，等待生成完成
+      return;
+    }
+  }
+
   // 检查是否已经生成过房屋数据
   if (!chat.houseData) {
     // 【修改点】询问用户是否生成电脑
@@ -337,6 +372,28 @@ async function generateHouseData(charId, includeComputer = true) {
         // 图片生成完成后，如果用户已经返回，也要通知
         if (backgroundGenerationTask && backgroundGenerationTask.charId === charId) {
           await notifyGenerationComplete(charId, chat.name, true, '（包括所有图片）');
+          
+          // 如果用户已经返回，确保数据已保存，这样重新打开时能正确显示
+          const finalChat = await db.chats.get(charId);
+          if (finalChat && finalChat.houseData) {
+            // 确保内存中的数据也更新
+            if (state.chats[charId]) {
+              state.chats[charId].houseData = finalChat.houseData;
+            }
+            
+            // 如果当前正在显示该角色的查岗界面，更新界面并隐藏覆盖层
+            if (activeKkCharId === charId) {
+              const houseScreen = document.getElementById('kk-house-view-screen');
+              if (houseScreen && houseScreen.classList.contains('active')) {
+                renderKkHouseView(finalChat.houseData);
+                const overlay = document.getElementById('generation-overlay');
+                if (overlay) {
+                  overlay.classList.remove('visible');
+                }
+              }
+            }
+          }
+          
           backgroundGenerationTask = null;
         }
       } catch (imgError) {
@@ -355,6 +412,17 @@ async function generateHouseData(charId, includeComputer = true) {
       // 标记数据已生成，但图片还在生成中
       backgroundGenerationTask.dataComplete = true;
       // 不立即通知，等图片生成完成后再统一通知
+      
+      // 如果用户已经返回，确保数据已保存
+      if (backgroundGenerationTask.userReturned) {
+        const finalChat = await db.chats.get(charId);
+        if (finalChat && finalChat.houseData) {
+          // 确保内存中的数据也更新
+          if (state.chats[charId]) {
+            state.chats[charId].houseData = finalChat.houseData;
+          }
+        }
+      }
     }
 
     return houseData;
@@ -393,9 +461,21 @@ async function sendBrowserNotification(title, body, data = {}) {
     return false;
   }
 
-  // 检查权限
-  if (Notification.permission !== 'granted') {
-    console.warn('通知权限未授予');
+  // 检查权限，如果未授予则尝试请求
+  if (Notification.permission === 'default') {
+    // 权限还未询问，尝试请求
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        console.warn('用户拒绝了通知权限');
+        return false;
+      }
+    } catch (error) {
+      console.error('请求通知权限失败:', error);
+      return false;
+    }
+  } else if (Notification.permission !== 'granted') {
+    console.warn('通知权限未授予或被拒绝');
     return false;
   }
 

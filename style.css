@@ -21087,7 +21087,7 @@ body {
 /* 返回按钮样式 - 使用fixed定位，不影响覆盖层原有样式 */
 .generation-back-btn {
   position: fixed;
-  top: 20px;
+  top: calc(env(safe-area-inset-top, 0px) + 60px); /* 考虑安全区域，下移避免被状态栏遮挡 */
   left: 20px;
   padding: 8px 16px;
   background-color: rgba(255, 255, 255, 0.9);
@@ -21101,6 +21101,13 @@ body {
   z-index: 2001;
   transition: all 0.2s ease;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .generation-back-btn {
+    top: calc(env(safe-area-inset-top, 0px) + 70px); /* 手机端再下移一点 */
+  }
 }
 
 .generation-back-btn:hover {
