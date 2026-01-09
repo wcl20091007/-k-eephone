@@ -501,9 +501,9 @@ document.addEventListener('DOMContentLoaded', () => {
           // 如果出现平票，就从所有平票的目标中随机选择一个
           const tiedTargets = Object.keys(voteCounts).filter(id => voteCounts[id] === maxVotes);
           targetId = tiedTargets[Math.floor(Math.random() * tiedTargets.length)];
-          logToWerewolfGame(
-            `(狼人内部经过一番激烈讨论，最终决定目标为 ${werewolfGameState.players.find(p => p.id === targetId).name})`,
-          );
+          // 注意：不记录狼人内部讨论到公开日志，这是狼人内部信息，好人不应知道
+          // 只在控制台记录，用于调试
+          console.log(`[狼人内部] 平票处理，最终决定目标为 ${werewolfGameState.players.find(p => p.id === targetId).name}`);
         }
 
         if (targetId) {
@@ -519,13 +519,16 @@ document.addEventListener('DOMContentLoaded', () => {
             werewolfGameState.lastNightKilled = [targetId];
             logToWerewolfGame(`狼人请闭眼。`);
           } else {
-            logToWerewolfGame(`狼人放弃了行动，今晚无人被袭击。`);
+            // 注意：不记录"狼人放弃了行动"到公开日志，这是狼人内部信息
+            // 如果狼人没行动，lastNightKilled为空，白天会显示"平安夜"
             werewolfGameState.lastNightKilled = [];
+            console.log('[狼人内部] 狼人放弃了行动，今晚无人被袭击');
           }
         } else {
           // 只有在所有狼人都没投票的情况下，才会是平安夜
-          logToWerewolfGame(`狼人放弃了行动，今晚无人被袭击。`);
+          // 注意：不记录"狼人放弃了行动"到公开日志，这是狼人内部信息
           werewolfGameState.lastNightKilled = [];
+          console.log('[狼人内部] 所有狼人都没投票，今晚无人被袭击');
         }
 
         // 进入下一个游戏阶段
@@ -1352,9 +1355,11 @@ ${formattedLog}
           /预言家请闭眼/i,
           /女巫请睁眼/i,
           /女巫请闭眼/i,
-          /狼人内部经过一番激烈讨论/i,
-          /天黑请闭眼/i,
+          /狼人内部/i,  // 匹配所有包含"狼人内部"的消息（如"狼人内部经过一番激烈讨论"）
+          /最终决定目标/i,  // 匹配"最终决定目标"等狼人内部决策信息
+          /狼人放弃/i,  // 匹配"狼人放弃了行动"等狼人内部信息
           /今晚.*被袭击了/i,  // 只有女巫知道谁被袭击，好人看不到这条信息
+          // 注意：不包含"天黑请闭眼"，因为这是公开的游戏阶段信息，所有玩家都应该知道
         ];
         
         // 如果是夜晚行动的提示，好人看不到
