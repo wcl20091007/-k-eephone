@@ -2,75 +2,122 @@ document.addEventListener("DOMContentLoaded", () => {
   // ===================================================================
   // 0. Service Worker 注册 (PWA 通知支持)
   // ===================================================================
-  // 检测浏览器兼容性
+  // 检测浏览器兼容性（支持 Chrome, Edge, Firefox, Safari, Opera, 百度浏览器等）
   const isServiceWorkerSupported = 'serviceWorker' in navigator;
   const isNotificationSupported = 'Notification' in window;
   const isPushManagerSupported = 'PushManager' in window;
+  
+  // 检测浏览器类型（用于更好的兼容性处理）
+  const userAgent = navigator.userAgent || '';
+  const isChrome = /Chrome/.test(userAgent) && /Google Inc/.test(navigator.vendor);
+  const isFirefox = /Firefox/.test(userAgent);
+  const isSafari = /Safari/.test(userAgent) && !/Chrome/.test(userAgent);
+  const isEdge = /Edg/.test(userAgent);
+  const isOpera = /Opera|OPR/.test(userAgent);
+  const isBaidu = /Baidu/.test(userAgent);
   
   console.log('浏览器兼容性检查:', {
     serviceWorker: isServiceWorkerSupported,
     notification: isNotificationSupported,
     pushManager: isPushManagerSupported,
-    userAgent: navigator.userAgent
+    browser: {
+      chrome: isChrome,
+      firefox: isFirefox,
+      safari: isSafari,
+      edge: isEdge,
+      opera: isOpera,
+      baidu: isBaidu
+    },
+    userAgent: userAgent
   });
 
   if (isServiceWorkerSupported) {
-    // 注册 Service Worker
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./sw.js', {
+    // 注册 Service Worker（兼容所有支持 Service Worker 的浏览器）
+    const registerServiceWorker = () => {
+      // 确定 Service Worker 路径（兼容 GitHub Pages 和 Netlify）
+      const swPath = './sw.js';
+      
+      navigator.serviceWorker.register(swPath, {
         scope: './'
       })
       .then((registration) => {
         console.log('✅ Service Worker 注册成功:', registration);
         console.log('Service Worker 作用域:', registration.scope);
+        console.log('部署平台:', location.hostname.includes('netlify') ? 'Netlify' : 
+                    location.hostname.includes('github.io') ? 'GitHub Pages' : '其他');
         
-        // 检查更新
-        registration.addEventListener('updatefound', () => {
-          console.log('发现 Service Worker 更新');
-          const newWorker = registration.installing;
-          newWorker.addEventListener('statechange', () => {
-            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              console.log('新的 Service Worker 已安装，刷新页面以使用新版本');
+        // 检查更新（兼容性处理）
+        if (registration.addEventListener) {
+          registration.addEventListener('updatefound', () => {
+            console.log('发现 Service Worker 更新');
+            const newWorker = registration.installing;
+            if (newWorker && newWorker.addEventListener) {
+              newWorker.addEventListener('statechange', () => {
+                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                  console.log('新的 Service Worker 已安装，刷新页面以使用新版本');
+                }
+              });
             }
           });
-        });
+        }
       })
       .catch((error) => {
         console.error('❌ Service Worker 注册失败:', error);
         // 在非 HTTPS 环境下，Service Worker 无法注册
-        if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
-          console.warn('⚠️ Service Worker 需要 HTTPS 环境（Netlify 会自动提供 HTTPS）');
+        if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+          console.warn('⚠️ Service Worker 需要 HTTPS 环境');
+          console.warn('支持的平台：Netlify (自动 HTTPS), GitHub Pages (自动 HTTPS), 本地开发 (localhost)');
         }
       });
-    });
+    };
 
-    // 监听来自 Service Worker 的消息
-    navigator.serviceWorker.addEventListener('message', (event) => {
-      console.log('收到 Service Worker 消息:', event.data);
-      if (event.data && event.data.type === 'OPEN_CHAT') {
-        const chatId = event.data.chatId;
-        if (chatId && typeof openChat === 'function') {
-          showScreen('chat-interface-screen');
-          openChat(chatId);
-        }
-      } else if (event.data && event.data.type === 'OPEN_KK_CHECKIN') {
-        // 处理查岗完成通知
-        const charId = event.data.charId;
-        if (charId && typeof openKkCheckin === 'function' && typeof openKkHouseView === 'function') {
-          // 打开查岗界面并直接进入该角色的房屋视图
-          openKkHouseView(charId);
-        }
-      }
-    });
+    // 在页面加载完成后注册（兼容所有浏览器）
+    if (document.readyState === 'loading') {
+      window.addEventListener('load', registerServiceWorker);
+    } else {
+      // 如果页面已经加载完成，立即注册
+      registerServiceWorker();
+    }
 
-    // 监听 Service Worker 控制器变化
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      console.log('Service Worker 控制器已更新');
-      window.location.reload();
-    });
+    // 监听来自 Service Worker 的消息（兼容性处理）
+    if (navigator.serviceWorker.addEventListener) {
+      navigator.serviceWorker.addEventListener('message', (event) => {
+        console.log('收到 Service Worker 消息:', event.data);
+        if (event.data && event.data.type === 'OPEN_CHAT') {
+          const chatId = event.data.chatId;
+          if (chatId && typeof openChat === 'function') {
+            if (typeof showScreen === 'function') {
+              showScreen('chat-interface-screen');
+            }
+            openChat(chatId);
+          }
+        } else if (event.data && event.data.type === 'OPEN_KK_CHECKIN') {
+          // 处理查岗完成通知
+          const charId = event.data.charId;
+          if (charId && typeof openKkHouseView === 'function') {
+            // 打开查岗界面并直接进入该角色的房屋视图
+            openKkHouseView(charId);
+          }
+        }
+      });
+    }
+
+    // 监听 Service Worker 控制器变化（兼容性处理）
+    if (navigator.serviceWorker.addEventListener) {
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        console.log('Service Worker 控制器已更新');
+        // 延迟刷新，避免立即刷新导致的问题
+        setTimeout(() => {
+          if (typeof window.location !== 'undefined' && typeof window.location.reload === 'function') {
+            window.location.reload();
+          }
+        }, 100);
+      });
+    }
   } else {
     console.warn('⚠️ 此浏览器不支持 Service Worker');
-    console.warn('支持的浏览器：Chrome, Edge, Firefox, Safari (iOS 需要添加到主屏幕)');
+    console.warn('支持的浏览器：Chrome, Edge, Firefox, Safari, Opera, 百度浏览器等');
+    console.warn('注意：Safari iOS 需要将网站添加到主屏幕才能使用 Service Worker');
   }
 
   // ===================================================================

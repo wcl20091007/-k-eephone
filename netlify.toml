@@ -1,5 +1,7 @@
 # Netlify 配置文件
 # 确保 Service Worker 和 PWA 功能正常工作
+# 注意：此项目同时支持 Netlify 和 GitHub Pages 部署
+# GitHub Pages 需要 .nojekyll 文件（已创建）来确保 Service Worker 正常工作
 
 [build]
   # 如果使用构建命令，在这里配置
