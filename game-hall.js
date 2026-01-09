@@ -461,7 +461,18 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         } else {
           // 场景2: 用户不是狼人，AI狼人自行决定
-          const wolfPromises = wolves.map(wolf => triggerWerewolfAiAction(wolf.id, 'wolf_kill'));
+          const wolfPromises = wolves.map(async wolf => {
+            let vote = await triggerWerewolfAiAction(wolf.id, 'wolf_kill');
+            // 记录策略性操作（如自刀、卖队友等高级战术）
+            if (vote) {
+              const targetPlayer = werewolfGameState.players.find(p => p.id === vote);
+              if (targetPlayer && targetPlayer.role === 'wolf') {
+                // AI选择了策略性攻击队友（可能是自刀、卖队友等高级战术）
+                console.log(`[狼人策略决策] ${wolf.name} 选择了攻击队友 ${targetPlayer.name}（可能是自刀/卖队友等高级战术）`);
+              }
+            }
+            return vote;
+          });
           const wolfVotes = (await Promise.all(wolfPromises)).filter(Boolean);
           allWolfVotes.push(...wolfVotes);
         }
@@ -496,9 +507,21 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (targetId) {
-          // 只要有目标（无论是统一意见还是随机决定），就执行击杀
-          werewolfGameState.lastNightKilled = [targetId];
-          logToWerewolfGame(`狼人请闭眼。`);
+          // 记录最终目标（允许策略性操作）
+          const finalTarget = werewolfGameState.players.find(p => p.id === targetId);
+          if (finalTarget && finalTarget.role === 'wolf') {
+            // 狼人选择了策略性攻击队友（可能是自刀、卖队友等高级战术）
+            console.log(`[狼人策略决策] 狼人阵营最终决定攻击队友 ${finalTarget.name}（可能是自刀/卖队友等高级战术）`);
+          }
+          
+          if (targetId) {
+            // 只要有目标（无论是统一意见还是随机决定），就执行击杀
+            werewolfGameState.lastNightKilled = [targetId];
+            logToWerewolfGame(`狼人请闭眼。`);
+          } else {
+            logToWerewolfGame(`狼人放弃了行动，今晚无人被袭击。`);
+            werewolfGameState.lastNightKilled = [];
+          }
         } else {
           // 只有在所有狼人都没投票的情况下，才会是平安夜
           logToWerewolfGame(`狼人放弃了行动，今晚无人被袭击。`);
@@ -1280,6 +1303,69 @@ ${formattedLog}
    * @param {object} context - 附加信息，例如女巫的救人目标
    * @returns {Promise<any>} - AI的决策结果
    */
+  /**
+   * 根据玩家角色过滤游戏日志，只返回该角色应该知道的信息
+   * @param {Object} player - 玩家对象
+   * @returns {string} - 过滤后的游戏日志文本
+   */
+  function getFilteredGameLog(player) {
+    const isWolf = player.role === 'wolf';
+    
+    return werewolfGameState.gameLog
+      .map(log => {
+        if (log.type === 'speech') {
+          // 所有玩家都能看到白天发言
+          return `${log.message.player.name}: ${log.message.speech}`;
+        }
+        
+        const message = log.message.replace(/<strong>/g, '').replace(/<\/strong>/g, '');
+        
+        // 狼人可以看到所有信息
+        if (isWolf) {
+          return message;
+        }
+        
+        // 好人只能看到公开信息，过滤掉夜晚行动的细节
+        // 过滤掉的内容：
+        // - "守卫请睁眼"、"狼人请睁眼"等夜晚行动提示
+        // - "狼人内部经过一番激烈讨论"等夜晚行动细节
+        // - "预言家请睁眼"等夜晚行动提示
+        // - "女巫请睁眼"等夜晚行动提示
+        // - "守卫请闭眼"、"狼人请闭眼"等夜晚行动结束提示
+        
+        // 保留的公开信息：
+        // - 游戏开始、配置信息
+        // - "天亮了"、"第X天"等白天开始信息
+        // - "昨晚XXX被袭击"、"昨晚是平安夜"等死亡公告（这是公开的）
+        // - "XXX是猎人，可以选择一名玩家带走"（这是公开的）
+        // - "现在开始依次发言"、"请投票"等白天行动提示
+        // - "投票结果：XXX被淘汰"等投票结果
+        // - "游戏结束"、"身份公布"等游戏结束信息
+        
+        const hiddenPatterns = [
+          /守卫请睁眼/i,
+          /守卫请闭眼/i,
+          /狼人请睁眼/i,
+          /狼人请闭眼/i,
+          /预言家请睁眼/i,
+          /预言家请闭眼/i,
+          /女巫请睁眼/i,
+          /女巫请闭眼/i,
+          /狼人内部经过一番激烈讨论/i,
+          /天黑请闭眼/i,
+        ];
+        
+        // 如果是夜晚行动的提示，好人看不到
+        if (hiddenPatterns.some(pattern => pattern.test(message))) {
+          return null;
+        }
+        
+        return message;
+      })
+      .filter(msg => msg !== null)
+      .join('\n');
+  }
+
   async function triggerWerewolfAiAction(playerId, action, context = {}) {
     const player = werewolfGameState.players.find(p => p.id === playerId);
     if (!player || !player.isAlive) return null;
@@ -1295,21 +1381,26 @@ ${formattedLog}
       .map(p => `- ${p.name} (id: ${p.id})`)
       .join('\n');
 
-    // 2. 构建完整的游戏日志，这是AI的“记忆核心”
-    const fullGameLog = werewolfGameState.gameLog
-      .map(log => {
-        if (log.type === 'speech') {
-          return `${log.message.player.name}: ${log.message.speech}`;
-        }
-        return log.message.replace(/<strong>/g, '').replace(/<\/strong>/g, ''); // 移除HTML标签
-      })
-      .join('\n');
+    // 2. 根据角色身份获取过滤后的游戏日志（防止上帝视角）
+    const filteredGameLog = getFilteredGameLog(player);
 
     let extraContext = '';
+    
+    // 3. 根据角色身份添加专属信息
+    if (player.role === 'wolf') {
+      // 狼人知道队友是谁
+      const wolfTeammates = werewolfGameState.players
+        .filter(p => p.role === 'wolf' && p.id !== player.id && p.isAlive)
+        .map(w => w.name);
+      if (wolfTeammates.length > 0) {
+        extraContext += `\n# 狼人专属信息 (仅你可见)\n- **你的狼队友**: ${wolfTeammates.join('、')}\n`;
+      }
+    }
+    
     // 如果是预言家发言，提供专属情报
     if (player.role === 'seer' && action === 'speak' && werewolfGameState.seerLastNightResult) {
       const result = werewolfGameState.seerLastNightResult;
-      extraContext = `\n# 预言家专属情报 (此信息仅你可见)\n- **重要信息**: 昨晚你查验了 **${
+      extraContext += `\n# 预言家专属情报 (此信息仅你可见)\n- **重要信息**: 昨晚你查验了 **${
         result.targetName
       }**，Ta的身份是【${
         result.isWolf ? '狼人' : '好人'
@@ -1335,10 +1426,10 @@ ${formattedLog}
         if (context.isUserWolfAlly) {
           actionPrompt = `你是狼人，你的队友是【${wolfTeammates}】和【用户】。请给你的用户队友一个击杀建议。`;
         } else {
-          actionPrompt = `你是狼人，你的队友是【${wolfTeammates || '无'}】。请选择一个非狼人角色进行攻击。`;
+          actionPrompt = `你是狼人，你的队友是【${wolfTeammates || '无'}】。请选择攻击目标。`;
         }
-        extraContext += `\n# 狼人战术指令 (至关重要)\n- **团队合作**: 你的首要目标是和你的狼队友们【集火】同一个目标，以确保击杀成功。\n- **攻击优先级**: 请优先攻击你认为是【预言家】、【女巫】等神职的玩家，或者发言逻辑清晰、对狼人阵营威胁大的好人。`;
-        jsonFormat = '{"action": "vote", "targetId": "你选择攻击的玩家ID"}';
+        extraContext += `\n# 狼人高级战术指令 (高玩必备)\n- **常规策略**: 优先攻击【预言家】、【女巫】等神职，或对狼人威胁大的好人\n- **高级策略** (根据局势合理使用):\n  * **自刀**: 如果局势对狼人不利，可以攻击队友制造"好人内讧"的假象，但需要确保队友配合\n  * **卖队友**: 如果某个队友被严重怀疑且无法挽救，可以投票给队友以获取好人信任\n  * **倒钩**: 假装是好人，积极投票给好人，获取信任后再发力\n- **决策原则**: 所有策略都要服务于最终胜利，不要无脑卖队友或自刀，要评估收益\n- **团队沟通**: 尽量和队友集火同一目标，但如果局势需要，可以采取独立行动`;
+        jsonFormat = '{"action": "vote", "targetId": "你选择攻击的玩家ID（可以是任何人，包括队友，但需要合理）"}';
         break;
       case 'seer_check':
         actionPrompt = '你是预言家，请选择一名玩家查验其身份（好人或狼人）。';
@@ -1359,29 +1450,84 @@ ${formattedLog}
         jsonFormat = '{"action": "vote", "targetId": "你选择带走的玩家ID"}';
         break;
       case 'speak':
-        actionPrompt =
-          '现在轮到你发言。请根据你的角色身份、人设和当前局势，发表你的看法，可以撒谎或引导。你的发言应该围绕游戏本身，而不是只和用户聊天。';
+        if (player.role === 'wolf') {
+          actionPrompt = `现在轮到你发言。你是狼人，你的任务是伪装成好人，误导其他玩家。
+- **你的目标**: 让狼人阵营获胜，通过伪装、误导、策略性操作达成目标
+- **发言策略** (高玩技巧):\n  * **常规伪装**: 假装是好人，分析局势，引导好人互投\n  * **倒钩发言**: 可以假装怀疑队友，甚至投票给队友，以获取好人信任\n  * **卖队友**: 如果队友被严重怀疑且无法挽救，可以主动"发现"并投票给队友，建立好人身份\n  * **自证清白**: 通过积极分析、投票给好人等方式建立信任\n- **高级技巧**: 根据局势灵活运用，不要死板地保护队友，有时候卖队友是必要的策略
+- 请根据你的角色身份、人设和当前局势，发表你的看法。你的发言应该围绕游戏本身，而不是只和用户聊天。`;
+        } else {
+          actionPrompt = `现在轮到你发言。你是好人阵营的一员，你的任务是找出狼人。
+- **你的视角**: 你只能根据公开信息（白天发言、投票结果、出局公告）进行推理
+- **你不知道**: 你不知道其他玩家的真实身份，不知道夜晚的具体行动细节
+- **发言策略**: 分析其他玩家的发言逻辑，寻找可疑之处，但不要随意指控
+- **警惕倒钩**: 注意那些过于积极、总是投票给好人的玩家，可能是倒钩狼
+- 请根据你的角色身份、人设和当前局势，发表你的看法。你的发言应该围绕游戏本身，而不是只和用户聊天。`;
+        }
         jsonFormat = '{"action": "speak", "speech": "你的发言内容..."}';
         break;
       case 'vote':
-        actionPrompt = '现在是白天投票环节，请根据大家的发言和你自己的判断，投票选出你认为是狼人的玩家。';
-        jsonFormat = '{"action": "vote", "targetId": "你投票的玩家ID"}';
+        if (player.role === 'wolf') {
+          actionPrompt = `现在是白天投票环节。你是狼人，请根据大家的发言和你自己的判断，投票选出目标。
+- **常规策略**: 投票给好人，特别是对狼人威胁大的神职玩家
+- **高级策略** (根据局势合理使用):\n  * **卖队友**: 如果队友被严重怀疑且无法挽救，可以投票给队友以获取好人信任（倒钩战术）\n  * **倒钩**: 假装是好人，积极投票给好人，建立信任后再发力\n  * **自保**: 如果自己也被怀疑，可以投票给队友转移视线（但需谨慎评估）\n- **决策原则**: 所有投票都要服务于最终胜利，评估收益后再决定是否卖队友
+- **注意**: 不要无脑卖队友，要判断局势是否真的需要这样做`;
+        } else {
+          actionPrompt = `现在是白天投票环节。你是好人，请根据大家的发言和你自己的判断，投票选出你认为是狼人的玩家。
+- **你的视角**: 你只能根据公开信息（白天发言、投票结果）进行判断
+- **策略**: 分析发言逻辑，寻找可疑行为，投票给最可疑的玩家
+- **警惕倒钩**: 注意那些总是投票给好人的玩家，可能是倒钩狼`;
+        }
+        jsonFormat = '{"action": "vote", "targetId": "你投票的玩家ID（可以是任何人，包括队友，但需要合理）"}';
         break;
     }
 
     // 4. 构建最终发送给AI的、结构清晰的完整Prompt
+    const roleNameMap = {
+      wolf: '狼人',
+      villager: '平民',
+      seer: '预言家',
+      witch: '女巫',
+      hunter: '猎人',
+      guard: '守卫',
+      idiot: '白痴',
+    };
+    
+    const roleRules = player.role === 'wolf' 
+      ? `# 狼人角色规则 (高玩策略指南)
+- **你的阵营**: 狼人阵营，目标是消灭所有好人
+- **你的队友**: 你知道所有狼队友的身份
+- **核心策略**: 伪装成好人，通过策略性操作让狼人获胜
+- **高级战术** (根据局势灵活运用):
+  * **倒钩**: 假装是好人，积极投票给好人，建立信任
+  * **卖队友**: 如果队友被严重怀疑且无法挽救，可以投票给队友获取信任
+  * **自刀**: 在特殊情况下可以攻击队友制造混乱（需谨慎评估）
+  * **自保**: 如果自己也被怀疑，可以采取必要措施保护自己
+- **决策原则**: 所有策略都要服务于最终胜利，不要死板地保护队友，要灵活应变
+- **注意**: 你是高玩，要懂得什么时候该卖队友，什么时候该保护队友`
+      : `# 好人角色规则 (必须严格遵守)
+- **你的阵营**: 好人阵营，目标是找出并淘汰所有狼人
+- **你的视角**: 你只能根据公开信息（白天发言、投票结果、出局公告）进行推理
+- **你不知道**: 
+  * 不知道其他玩家的真实身份
+  * 不知道夜晚的具体行动细节（除非是预言家公布查验结果）
+  * 不知道狼人是谁
+- **策略**: 分析发言逻辑，寻找可疑行为，保护神职，找出狼人
+- **警惕倒钩**: 注意那些过于积极、总是投票给好人的玩家，可能是倒钩狼`;
+    
     const systemPrompt = `
 # 游戏背景: 狼人杀
 # 你的身份和人设
 - **你的名字**: ${player.name}
-- **你的角色**: ${player.role}
+- **你的角色**: ${roleNameMap[player.role] || player.role}
 - **你的性格人设**: ${player.persona}
+
+${roleRules}
 
 # 当前局势
 - **存活玩家列表**:
 ${alivePlayersList}
-- **游戏日志 (这是完整的游戏记录，你必须通读并记住所有信息)**:
-${fullGameLog}
+- **游戏日志 (这是你能看到的信息，请仔细分析)**:
+${filteredGameLog}
 ${extraContext}
 
 # 你的任务: ${actionPrompt}
