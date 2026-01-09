@@ -741,7 +741,30 @@ async function handleResetKkHouse() {
       chat.houseData = generatedData; // 用新数据覆盖旧数据
       await db.chats.put(chat); // 保存到数据库
       renderKkHouseView(chat.houseData); // 重新渲染界面
-      alert('一个全新的家已经生成！');
+      
+      // 检查页面是否在后台或用户已返回
+      const isPageHidden = document.hidden || document.visibilityState === 'hidden';
+      const userReturned = backgroundGenerationTask && backgroundGenerationTask.userReturned;
+      
+      // 如果页面在后台或用户已返回，使用浏览器原生通知
+      if (isPageHidden || userReturned) {
+        // 页面在后台或用户已返回，使用浏览器原生通知（异步，不阻塞）
+        sendBrowserNotification('查岗完成', `一个全新的家已经生成！\n\n${chat.name}的家已经准备好了，快去查看吧！`, {
+          charId: activeKkCharId,
+          type: 'kk-checkin-complete'
+        }).catch(err => {
+          console.error('发送通知失败:', err);
+          // 如果通知发送失败，降级到 alert（虽然后台时可能不显示）
+          try {
+            alert(`一个全新的家已经生成！\n\n${chat.name}的家已经准备好了，快去查看吧！`);
+          } catch (e) {
+            console.error('alert 也失败:', e);
+          }
+        });
+      } else {
+        // 页面在前台，使用仿手机弹窗
+        await showCustomAlert('查岗完成', '一个全新的家已经生成！');
+      }
     }
   }
 }
