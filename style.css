@@ -15409,6 +15409,99 @@ body {
   line-height: 1;
 }
 
+/* 情侣空间-头像编辑弹窗样式 */
+#ls-avatar-edit-modal .modal-content {
+  max-width: 400px;
+}
+
+#ls-avatar-edit-preview {
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid var(--accent-color);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  margin: 0 auto 20px;
+  display: block;
+}
+
+#ls-avatar-edit-modal .form-group {
+  margin-bottom: 15px;
+}
+
+#ls-avatar-edit-modal .form-button {
+  width: 100%;
+  padding: 12px;
+  margin: 0;
+  border-radius: 8px;
+  font-size: 15px;
+  transition: all 0.2s;
+}
+
+#ls-avatar-edit-modal .form-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+#ls-avatar-url-input-group {
+  margin-top: 15px;
+  padding: 15px;
+  background-color: #f7f9fc;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+#phone-screen.dark-mode #ls-avatar-url-input-group {
+  background-color: #2c2c2e;
+}
+
+#ls-avatar-url-input {
+  width: 100%;
+  padding: 10px;
+  box-sizing: border-box;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-size: 14px;
+  margin-bottom: 10px;
+}
+
+#ls-avatar-url-confirm-btn {
+  width: 100%;
+  margin-top: 10px;
+}
+
+/* 情侣空间-用户名编辑弹窗样式 */
+#ls-username-edit-modal .modal-content {
+  max-width: 400px;
+}
+
+#ls-username-input {
+  width: 100%;
+  padding: 12px;
+  box-sizing: border-box;
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 16px;
+  transition: border-color 0.2s;
+}
+
+#ls-username-input:focus {
+  outline: none;
+  border-color: var(--accent-color);
+}
+
+/* 可编辑的用户名样式 */
+.ls-editable-name {
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  transition: color 0.2s;
+}
+
+.ls-editable-name:hover {
+  color: var(--accent-color);
+}
+
 /* 5. 文字区域的样式 */
 .lovers-space-disconnect-card .text-content .title {
   font-weight: 600;
