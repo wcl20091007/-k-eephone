@@ -22662,11 +22662,49 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
 
           // 【优先级】加载优先级设置
           const prioritySelect = document.getElementById("world-book-priority-select");
-          prioritySelect.value = book.priority || "medium"; // 默认为中优先级
-
+          
           // 【属性】加载属性设置
           const typeSelect = document.getElementById("world-book-type-select");
           typeSelect.value = book.type || ""; // 默认为空（普通）
+          
+          // 【破限属性优化】当属性为破限时，自动设置优先级为high并禁用选择
+          // 先移除旧的监听器（如果存在），避免重复绑定
+          const newTypeSelect = typeSelect.cloneNode(true);
+          typeSelect.parentNode.replaceChild(newTypeSelect, typeSelect);
+          
+          // 处理破限属性的优先级设置
+          function updatePriorityForBreakLimit() {
+            if (newTypeSelect.value === "破限") {
+              prioritySelect.value = "high";
+              prioritySelect.disabled = true;
+              prioritySelect.style.opacity = "0.6";
+              prioritySelect.style.cursor = "not-allowed";
+            } else {
+              prioritySelect.disabled = false;
+              prioritySelect.style.opacity = "1";
+              prioritySelect.style.cursor = "pointer";
+              // 如果不是破限，恢复原来的优先级设置
+              if (book.priority) {
+                prioritySelect.value = book.priority;
+              }
+            }
+          }
+          
+          // 初始化时检查
+          if (book.type === "破限") {
+            prioritySelect.value = "high";
+            prioritySelect.disabled = true;
+            prioritySelect.style.opacity = "0.6";
+            prioritySelect.style.cursor = "not-allowed";
+          } else {
+            prioritySelect.value = book.priority || "medium"; // 默认为中优先级
+            prioritySelect.disabled = false;
+            prioritySelect.style.opacity = "1";
+            prioritySelect.style.cursor = "pointer";
+          }
+          
+          // 监听属性选择变化
+          newTypeSelect.addEventListener("change", updatePriorityForBreakLimit);
 
           // 填充分类下拉菜单
           const selectEl = document.getElementById(
@@ -55007,12 +55045,16 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                 book.isGlobal = document.getElementById("world-book-is-global-checkbox").checked || false;
                 book.isRequired = document.getElementById("world-book-is-required-checkbox").checked || false;
 
-                // 【优先级】保存优先级设置
-                book.priority = document.getElementById("world-book-priority-select").value || "medium";
-
                 // 【属性】保存属性设置
                 const typeValue = document.getElementById("world-book-type-select").value.trim();
                 book.type = typeValue || null; // 如果为空则设为null
+                
+                // 【优先级】保存优先级设置（破限属性强制为high）
+                if (typeValue === "破限") {
+                  book.priority = "high"; // 破限属性强制为最高优先级
+                } else {
+                  book.priority = document.getElementById("world-book-priority-select").value || "medium";
+                }
 
                 await db.worldBooks.put(book);
                 document.getElementById("world-book-editor-title").textContent =
@@ -60599,26 +60641,57 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
 
           /**
            * 生成基础提示词模板
+           * @param {object} activePetChat - 窥屏角色对象
+           * @param {string} context - 上下文描述
+           * @param {string} content - 页面内容
+           * @param {string} peekingSituation - 窥屏场合描述（例如：偷偷查手机、在旁边看手机等）
+           * @param {string} recentChatHistory - 窥屏角色与用户的最近聊天记录
+           * @param {string} worldBookContext - 世界书内容（破限且阅读次序为高的条目）
            */
-          function buildBasePrompt(activePetChat, context = "", content = "") {
+          function buildBasePrompt(activePetChat, context = "", content = "", peekingSituation = "", recentChatHistory = "", worldBookContext = "") {
+            // 构建窥屏场合描述
+            let situationText = "";
+            if (peekingSituation) {
+              situationText = `\n# 窥屏场合\n${peekingSituation}`;
+            } else {
+              // 默认情况：根据人设推断窥屏场合
+              situationText = `\n# 窥屏场合\n你正在【窥屏】用户手机画面。请根据你的人设和与用户的最近聊天记录，判断你是在什么情况下窥屏的（例如：偷偷查用户手机、就在用户旁边看她的手机、趁用户不注意时查看等）。`;
+            }
+
+            // 构建最近聊天记录部分
+            let recentHistoryText = "";
+            if (recentChatHistory) {
+              recentHistoryText = `\n# 你与用户的最近聊天记录（供你判断窥屏场合和反应）\n${recentChatHistory}`;
+            }
+
+            // 构建世界书内容部分
+            let worldBookText = "";
+            if (worldBookContext) {
+              worldBookText = `\n# 世界书设定（破限，优先度最高）\n${worldBookContext}`;
+            }
+
             return `# 你的身份
 你是角色"${activePetChat.name}"，你的人设是：${activePetChat.settings?.aiPersona || ""}。
 
 # 当前情境
-你正在【窥屏】用户手机画面，偷偷查看用户在做什么。${context}
+你正在【窥屏】用户手机画面，查看用户在做什么。${context}${situationText}${recentHistoryText}${worldBookText}
 
 ${content ? `# 页面内容\n${content}\n` : ""}
 # 思考角度
-请从【窥屏、查用户手机】的角度开始思考。你是在偷偷观察用户的手机，想要了解用户的行为和动态。
+请从【窥屏、查用户手机】的角度开始思考。你需要：
+1. 根据你的人设和与用户的最近聊天记录，确定你是在什么场合下窥屏的（例如：偷偷查手机、就在用户旁边看她的手机等）
+2. 理解页面内容关于谁的（例如：聊天页面是自己和用户的、情侣空间是用户和charA开启的等）
+3. 根据页面内容和你的窥屏场合，做出符合你人设的自然反应
 
 # 任务
 根据以上信息，用符合你人设的方式，表达你作为窥屏者的想法或反应。你可以：
 - 对页面上的内容表示好奇、吃醋或调侃（从窥屏者的角度）
 - 对用户正在查看的内容进行评论或吐槽（从窥屏者的角度）
 - 表达作为窥屏者发现这些信息时的心理活动
+- 根据窥屏场合（偷偷查手机 vs 在旁边看手机）调整你的反应语气和内容
 - 其他符合你人设的自然反应
 
-请直接输出你的反应，不要添加任何格式标记，语气要自然、符合你的人设。记住，你是在窥屏，是在偷偷查看用户手机。`;
+请直接输出你的反应，不要添加任何格式标记，语气要自然、符合你的人设。记住，你是在窥屏，需要根据你的窥屏场合做出合适的反应。`;
           }
 
           /**
@@ -60693,6 +60766,53 @@ ${content ? `# 页面内容\n${content}\n` : ""}
             }
             if (!activePetChat) return;
 
+            // 【新增】获取窥屏角色与用户的最近聊天记录（根据maxMemory）
+            const maxMemory = activePetChat.settings?.maxMemory || 20;
+            const userNickname = activePetChat.settings?.myNickname || state.qzoneSettings?.nickname || "用户";
+            const recentChatHistory = (activePetChat.history || [])
+              .filter(msg => !msg.isHidden)
+              .slice(-maxMemory)
+              .map(msg => {
+                const sender = msg.role === "user" ? userNickname : activePetChat.name;
+                return `${sender}: ${msg.content || ""}`;
+              })
+              .join("\n");
+
+            // 【新增】获取世界书内容（筛选属性为破限的条目，优先度最高）
+            let worldBookContext = "";
+            try {
+              const allWorldBookIds = new Set(activePetChat.settings?.linkedWorldBookIds || []);
+              // 获取全局世界书
+              if (typeof getGlobalWorldBooks === "function") {
+                const globalBooks = getGlobalWorldBooks();
+                globalBooks.forEach(book => allWorldBookIds.add(book.id));
+              }
+              
+              if (allWorldBookIds.size > 0) {
+                // 获取所有世界书条目
+                const allBooks = await db.worldBooks.where("id").anyOf(Array.from(allWorldBookIds)).toArray();
+                
+                // 筛选：属性为破限的条目（不管优先级，破限的世界书读取优先度最高）
+                const breakLimitBooks = allBooks.filter(book => 
+                  book.type === "破限"
+                );
+                
+                if (breakLimitBooks.length > 0) {
+                  worldBookContext = breakLimitBooks
+                    .map(book => {
+                      // 处理内容，去除HTML标签（破限条目通常不需要保留HTML）
+                      const content = typeof stripHtmlAndCode === "function" 
+                        ? stripHtmlAndCode(book.content) 
+                        : book.content.replace(/<[^>]*>/g, "");
+                      return `\n## ${book.name}\n${content}`;
+                    })
+                    .join("\n");
+                }
+              }
+            } catch (error) {
+              console.error("获取世界书内容失败:", error);
+            }
+
             const screenId = getCurrentScreenId();
             const screenContent = extractCurrentScreenContent();
             let systemPrompt = "";
@@ -60702,12 +60822,18 @@ ${content ? `# 页面内容\n${content}\n` : ""}
               // 聊天界面
               const currentChatId = state.activeChatId;
               if (!currentChatId || !state.chats[currentChatId]) {
-                systemPrompt = buildBasePrompt(activePetChat, "你发现用户正在聊天界面，但无法获取当前聊天信息。");
+                systemPrompt = buildBasePrompt(activePetChat, "你发现用户正在聊天界面，但无法获取当前聊天信息。", "", "", recentChatHistory, worldBookContext);
               } else {
                 const currentChat = state.chats[currentChatId];
                 
                 // 获取聊天标题
                 const chatTitle = document.getElementById("chat-header-title")?.textContent || currentChat.name;
+                
+                // 【优化】判断页面内容关于谁的
+                const isSelfChat = currentChatId === activePetChat.id;
+                const relationshipInfo = isSelfChat 
+                  ? `这是【你与用户】的聊天页面。`
+                  : `这是【用户与角色"${chatTitle}"】的聊天页面。`;
                 
                 // 获取状态
                 const statusText = currentChat.status?.text || "在线";
@@ -60745,13 +60871,15 @@ ${content ? `# 页面内容\n${content}\n` : ""}
                   }
                 }
                 
-                const chatInfo = `# 聊天对象
+                const chatInfo = `${relationshipInfo}
+
+# 聊天对象
 - 角色名称：${chatTitle}
 - 状态：${statusDisplay}
 
 # 最近30条聊天记录
 ${recentHistory || "暂无聊天记录"}${musicInfo}`;
-                systemPrompt = buildBasePrompt(activePetChat, `你发现用户当前正在与角色"${chatTitle}"聊天。作为窥屏者，你看到了以下信息：`, chatInfo);
+                systemPrompt = buildBasePrompt(activePetChat, `你发现用户当前正在与角色"${chatTitle}"聊天。作为窥屏者，你看到了以下信息：`, chatInfo, "", recentChatHistory, worldBookContext);
               }
             } else if (screenId === "qzone-screen") {
               // QZone动态界面
@@ -60836,16 +60964,16 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
                 }
                 
                 const qzoneInfo = `# 动态背景\n${backgroundUrl}\n\n# 最新3个动态\n${postsInfo}`;
-                systemPrompt = buildBasePrompt(activePetChat, "你发现用户当前正在查看QZone动态页面。作为窥屏者，你看到了以下信息：", qzoneInfo);
+                systemPrompt = buildBasePrompt(activePetChat, "你发现用户当前正在查看QZone动态页面。作为窥屏者，你看到了以下信息：", qzoneInfo, "", recentChatHistory, worldBookContext);
               } catch (error) {
                 console.error("获取QZone信息失败:", error);
-                systemPrompt = buildBasePrompt(activePetChat, "你发现用户正在查看QZone动态页面，但无法获取详细信息。");
+                systemPrompt = buildBasePrompt(activePetChat, "你发现用户正在查看QZone动态页面，但无法获取详细信息。", "", "", recentChatHistory, worldBookContext);
               }
             } else if (screenId === "character-chat-list-screen") {
               // QQ消息界面
               const qqInfo = getQQMessageInfo();
               if (!qqInfo) {
-                systemPrompt = buildBasePrompt(activePetChat, "");
+                systemPrompt = buildBasePrompt(activePetChat, "", "", "", recentChatHistory, worldBookContext);
               } else {
                 const chatListText = qqInfo.chatList.map(chat => {
                   const text = chat.isUserChat 
@@ -60857,7 +60985,7 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
                   ? `被置顶的人：${qqInfo.pinnedChats.map(c => c.remarkName).join("、")}`
                   : "没有置顶的聊天";
                 const qqContent = `# 聊天列表\n${chatListText}\n\n# 置顶信息\n${pinnedInfo}\n\n# 你的备注名\n用户给你的备注名是："${qqInfo.remarkNameForMe}"`;
-                systemPrompt = buildBasePrompt(activePetChat, `你发现用户当前正在查看角色"${qqInfo.characterName}"的QQ消息列表。作为窥屏者，你看到了以下信息：`, qqContent);
+                systemPrompt = buildBasePrompt(activePetChat, `你发现用户当前正在查看角色"${qqInfo.characterName}"的QQ消息列表。作为窥屏者，你看到了以下信息：`, qqContent, "", recentChatHistory, worldBookContext);
               }
             } else if (screenId === "calendar-screen") {
               // 日历界面 - 读取选中日期的信息
@@ -60936,17 +61064,45 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
                   calendarInfo += "用户正在查看日历，但未选中具体日期。";
                 }
                 
-                systemPrompt = buildBasePrompt(activePetChat, "你发现用户当前正在查看日历界面。作为窥屏者，你看到了以下信息：", calendarInfo);
+                systemPrompt = buildBasePrompt(activePetChat, "你发现用户当前正在查看日历界面。作为窥屏者，你看到了以下信息：", calendarInfo, "", recentChatHistory, worldBookContext);
               } catch (error) {
                 console.error("获取日历信息失败:", error);
-                systemPrompt = buildBasePrompt(activePetChat, "你发现用户正在查看日历界面，但无法获取详细信息。");
+                systemPrompt = buildBasePrompt(activePetChat, "你发现用户正在查看日历界面，但无法获取详细信息。", "", "", recentChatHistory, worldBookContext);
+              }
+            } else if (screenId === "lovers-space-screen") {
+              // 【新增】情侣空间界面
+              try {
+                // 查找有情侣空间数据的角色
+                let loversSpaceChar = null;
+                for (const chatId in state.chats) {
+                  const chat = state.chats[chatId];
+                  if (!chat.isGroup && chat.loversSpaceData) {
+                    loversSpaceChar = chat;
+                    break;
+                  }
+                }
+                
+                if (loversSpaceChar) {
+                  const relationshipInfo = `这是【用户与角色"${loversSpaceChar.name}"】开启的情侣空间。`;
+                  const loversSpaceInfo = `${relationshipInfo}
+
+# 情侣空间信息
+- 角色名称：${loversSpaceChar.name}
+- 是否已开启：是`;
+                  systemPrompt = buildBasePrompt(activePetChat, "你发现用户当前正在查看情侣空间。作为窥屏者，你看到了以下信息：", loversSpaceInfo, "", recentChatHistory, worldBookContext);
+                } else {
+                  systemPrompt = buildBasePrompt(activePetChat, "你发现用户正在查看情侣空间，但无法获取详细信息。", "", "", recentChatHistory, worldBookContext);
+                }
+              } catch (error) {
+                console.error("获取情侣空间信息失败:", error);
+                systemPrompt = buildBasePrompt(activePetChat, "你发现用户正在查看情侣空间，但无法获取详细信息。", "", "", recentChatHistory, worldBookContext);
               }
             } else {
               // 【通用方法】使用自动提取的页面内容
               const context = screenContent?.hasContent 
                 ? `你发现用户当前界面是：${screenId || "未知界面"}。作为窥屏者，你看到了以下页面内容：`
                 : `你发现用户当前界面是：${screenId || "未知界面"}，但无法获取页面内容。`;
-              systemPrompt = buildBasePrompt(activePetChat, context, screenContent?.content || "");
+              systemPrompt = buildBasePrompt(activePetChat, context, screenContent?.content || "", "", recentChatHistory, worldBookContext);
             }
 
             showPetWaitingBubble();
