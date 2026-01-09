@@ -20775,6 +20775,9 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           }
         }
 
+        // 暴露到全局作用域，供其他脚本使用（如 kk-checkin.js）
+        window.showBrowserNotification = showBrowserNotification;
+
         /**
          * 订阅 Push Notification（需要服务器端支持）
          * @returns {Promise<PushSubscription|null>} 推送订阅对象

@@ -36,34 +36,37 @@ async function openKkHouseView(charId) {
 
   // 【重要】检查是否正在生成中
   if (backgroundGenerationTask && backgroundGenerationTask.charId === charId) {
-    // 如果正在生成中，显示覆盖层并等待
-    showGenerationOverlay('正在努力寻找中...', true);
-    // 设置返回按钮事件（如果还没有设置）
-    const backBtn = document.getElementById('generation-back-btn');
-    if (backBtn) {
-      const newBackBtn = backBtn.cloneNode(true);
-      backBtn.parentNode.replaceChild(newBackBtn, backBtn);
-      newBackBtn.addEventListener('click', () => {
-        const overlay = document.getElementById('generation-overlay');
-        if (overlay) {
-          overlay.classList.remove('visible');
-        }
-        if (backgroundGenerationTask && backgroundGenerationTask.charId === charId) {
-          backgroundGenerationTask.userReturned = true;
-        }
-        if (typeof showScreen === 'function') {
-          showScreen('home-screen');
-        }
-      });
-    }
-    
     // 检查数据是否已经生成完成（但图片可能还在生成）
     if (backgroundGenerationTask.dataComplete && chat.houseData) {
-      // 数据已生成，可以显示房屋视图，但覆盖层保持显示直到图片生成完成
+      // 数据已生成，直接显示房屋视图，不需要覆盖层
       renderKkHouseView(chat.houseData);
       showScreen('kk-house-view-screen');
-      // 覆盖层会继续显示，直到图片生成完成
+      // 不显示覆盖层，让用户可以看到房屋视图，图片会在后台继续生成
+      return;
     } else {
+      // 数据还未生成完成，显示覆盖层并等待
+      showGenerationOverlay('正在努力寻找中...', true);
+      // 设置返回按钮事件（如果还没有设置）
+      const backBtn = document.getElementById('generation-back-btn');
+      if (backBtn) {
+        const newBackBtn = backBtn.cloneNode(true);
+        backBtn.parentNode.replaceChild(newBackBtn, backBtn);
+        newBackBtn.addEventListener('click', () => {
+          const overlay = document.getElementById('generation-overlay');
+          if (overlay) {
+            overlay.classList.remove('visible');
+          }
+          if (backgroundGenerationTask && backgroundGenerationTask.charId === charId) {
+            backgroundGenerationTask.userReturned = true;
+          }
+          // 返回选择角色的页面
+          if (typeof openKkCheckin === 'function') {
+            openKkCheckin();
+          } else if (typeof showScreen === 'function') {
+            showScreen('kk-char-selection-screen');
+          }
+        });
+      }
       // 数据还未生成完成，不继续执行，等待生成完成
       return;
     }
@@ -411,7 +414,24 @@ async function generateHouseData(charId, includeComputer = true) {
     if (backgroundGenerationTask && backgroundGenerationTask.charId === charId) {
       // 标记数据已生成，但图片还在生成中
       backgroundGenerationTask.dataComplete = true;
-      // 不立即通知，等图片生成完成后再统一通知
+      
+      // 如果用户已经返回或页面在后台，发送数据生成完成的通知（不阻塞）
+      const isPageHidden = document.hidden || document.visibilityState === 'hidden';
+      if (backgroundGenerationTask.userReturned || isPageHidden) {
+        // 异步发送通知，不阻塞生成流程
+        sendBrowserNotification('查岗数据生成完成', `新家准备好了！\n\n${chat.name}的家已经准备好了，图片正在生成中...`, {
+          charId: charId,
+          type: 'kk-checkin-data-complete'
+        }).catch(err => {
+          console.error('发送数据完成通知失败:', err);
+          // 如果通知发送失败，尝试使用 alert（虽然后台时可能不显示）
+          try {
+            alert(`新家准备好了！\n\n${chat.name}的家已经准备好了，图片正在生成中...`);
+          } catch (e) {
+            console.error('alert 也失败:', e);
+          }
+        });
+      }
       
       // 如果用户已经返回，确保数据已保存
       if (backgroundGenerationTask.userReturned) {
@@ -449,100 +469,59 @@ async function generateHouseData(charId, includeComputer = true) {
 }
 
 /**
- * 通过 Service Worker 发送浏览器原生通知（支持后台）
+ * 发送浏览器原生通知（使用全局的 showBrowserNotification 函数）
  * @param {string} title - 通知标题
  * @param {string} body - 通知内容
  * @param {object} data - 附加数据
  */
 async function sendBrowserNotification(title, body, data = {}) {
-  // 检查是否支持通知
-  if (!('Notification' in window)) {
-    console.warn('此浏览器不支持通知功能');
-    return false;
-  }
-
-  // 检查权限，如果未授予则尝试请求
-  if (Notification.permission === 'default') {
-    // 权限还未询问，尝试请求
+  // 检查全局函数是否存在（如果不存在，等待一下再试，因为可能还没加载完成）
+  if (typeof window.showBrowserNotification === 'function') {
+    // 使用全局的 showBrowserNotification 函数（与 API 设置中的实现一致）
     try {
-      const permission = await Notification.requestPermission();
-      if (permission !== 'granted') {
-        console.warn('用户拒绝了通知权限');
-        return false;
-      }
-    } catch (error) {
-      console.error('请求通知权限失败:', error);
-      return false;
-    }
-  } else if (Notification.permission !== 'granted') {
-    console.warn('通知权限未授予或被拒绝');
-    return false;
-  }
-
-  // 优先使用 Service Worker 发送通知（这样即使页面关闭或后台也能收到）
-  if ('serviceWorker' in navigator) {
-    try {
-      const registration = await navigator.serviceWorker.ready;
-      
-      // 准备通知选项
-      const notificationOptions = {
+      await window.showBrowserNotification(title, {
         body: body,
         icon: 'https://i.postimg.cc/Kj8JnRcp/267611-CC01-F8-A3-B4910-A2-C2-FFDE479-DC.jpg',
         badge: 'https://i.postimg.cc/Kj8JnRcp/267611-CC01-F8-A3-B4910-A2-C2-FFDE479-DC.jpg',
-        tag: 'kk-checkin-notification',
+        tag: `kk-checkin-${data.charId || 'notification'}-${Date.now()}`, // 使用时间戳确保每次都显示
+        data: data,
         requireInteraction: false,
         silent: false,
-        vibrate: [200, 100, 200],
-        data: data
-      };
-
-      // 方法1: 直接使用 registration.showNotification（推荐，支持后台）
-      await registration.showNotification(title, notificationOptions);
-      console.log('✅ 通过 Service Worker 发送通知成功');
+        vibrate: [200, 100, 200]
+      });
+      console.log('✅ 通过全局 showBrowserNotification 发送通知成功');
       return true;
     } catch (error) {
-      console.error('❌ Service Worker 通知失败，尝试备用方法:', error);
-      // 备用方法：通过 postMessage 发送
-      try {
-        const registration = await navigator.serviceWorker.ready;
-        if (registration.active) {
-          registration.active.postMessage({
-            type: 'SHOW_NOTIFICATION',
-            title: title,
-            options: {
-              body: body,
-              icon: 'https://i.postimg.cc/Kj8JnRcp/267611-CC01-F8-A3-B4910-A2-C2-FFDE479-DC.jpg',
-              badge: 'https://i.postimg.cc/Kj8JnRcp/267611-CC01-F8-A3-B4910-A2-C2-FFDE479-DC.jpg',
-              tag: 'kk-checkin-notification',
-              requireInteraction: false,
-              silent: false,
-              vibrate: [200, 100, 200],
-              data: data
-            }
-          });
-          console.log('✅ 通过 postMessage 发送通知请求');
-          return true;
-        }
-      } catch (error2) {
-        console.error('❌ Service Worker postMessage 失败:', error2);
-      }
+      console.error('❌ 发送通知失败:', error);
+      return false;
     }
-  }
-
-  // 降级到普通通知（仅当页面在前台时有效）
-  try {
-    const notification = new Notification(title, {
-      body: body,
-      icon: 'https://i.postimg.cc/Kj8JnRcp/267611-CC01-F8-A3-B4910-A2-C2-FFDE479-DC.jpg',
-      badge: 'https://i.postimg.cc/Kj8JnRcp/267611-CC01-F8-A3-B4910-A2-C2-FFDE479-DC.jpg',
-      tag: 'kk-checkin-notification',
-      data: data
-    });
-    console.log('✅ 使用普通 Notification API 发送通知');
-    return true;
-  } catch (error) {
-    console.error('❌ 普通通知也失败:', error);
-    return false;
+  } else {
+    // 如果函数不存在，等待一下再试（可能还没加载完成）
+    console.warn('全局 showBrowserNotification 函数不存在，等待后重试...');
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    if (typeof window.showBrowserNotification === 'function') {
+      try {
+        await window.showBrowserNotification(title, {
+          body: body,
+          icon: 'https://i.postimg.cc/Kj8JnRcp/267611-CC01-F8-A3-B4910-A2-C2-FFDE479-DC.jpg',
+          badge: 'https://i.postimg.cc/Kj8JnRcp/267611-CC01-F8-A3-B4910-A2-C2-FFDE479-DC.jpg',
+          tag: `kk-checkin-${data.charId || 'notification'}-${Date.now()}`,
+          data: data,
+          requireInteraction: false,
+          silent: false,
+          vibrate: [200, 100, 200]
+        });
+        console.log('✅ 通过全局 showBrowserNotification 发送通知成功（重试后）');
+        return true;
+      } catch (error) {
+        console.error('❌ 发送通知失败（重试后）:', error);
+        return false;
+      }
+    } else {
+      console.error('❌ 全局 showBrowserNotification 函数不存在，无法发送通知');
+      return false;
+    }
   }
 }
 
@@ -566,16 +545,19 @@ async function notifyGenerationComplete(charId, chatName, success, extraInfo = '
     const body = `查岗内容生成完成！${extraInfo}\n\n${chatName}的家已经准备好了，快去查看吧！`;
     
     if (shouldUseBrowserNotification) {
-      // 页面在后台或用户已返回，使用浏览器原生通知
-      const notificationSent = await sendBrowserNotification(title, body, { 
+      // 页面在后台或用户已返回，使用浏览器原生通知（异步，不阻塞）
+      sendBrowserNotification(title, body, { 
         charId: charId,
         type: 'kk-checkin-complete'
+      }).catch(err => {
+        console.error('发送查岗完成通知失败:', err);
+        // 如果通知发送失败，尝试使用 alert（虽然后台时可能不显示）
+        try {
+          alert(body);
+        } catch (e) {
+          console.error('alert 也失败:', e);
+        }
       });
-      
-      // 如果通知发送失败，降级到 alert（虽然后台时可能不显示）
-      if (!notificationSent) {
-        alert(body);
-      }
     } else {
       // 页面在前台且用户未返回，使用AI char回复时的仿手机弹窗
       await showCustomAlert(title, body);
@@ -585,16 +567,19 @@ async function notifyGenerationComplete(charId, chatName, success, extraInfo = '
     const body = `查岗内容生成失败\n\n${errorMessage || '未知错误'}`;
     
     if (shouldUseBrowserNotification) {
-      // 页面在后台或用户已返回，使用浏览器原生通知
-      const notificationSent = await sendBrowserNotification(title, body, { 
+      // 页面在后台或用户已返回，使用浏览器原生通知（异步，不阻塞）
+      sendBrowserNotification(title, body, { 
         charId: charId,
         type: 'kk-checkin-error'
+      }).catch(err => {
+        console.error('发送生成失败通知失败:', err);
+        // 如果通知发送失败，尝试使用 alert（虽然后台时可能不显示）
+        try {
+          alert(body);
+        } catch (e) {
+          console.error('alert 也失败:', e);
+        }
       });
-      
-      // 如果通知发送失败，降级到 alert（虽然后台时可能不显示）
-      if (!notificationSent) {
-        alert(body);
-      }
     } else {
       // 页面在前台且用户未返回，使用AI char回复时的仿手机弹窗
       await showCustomAlert(title, body);
