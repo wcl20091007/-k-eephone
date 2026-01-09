@@ -8968,6 +8968,74 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
       </div>
     </div>
 
+    <!-- 情侣空间-头像编辑弹窗 -->
+    <div id="ls-avatar-edit-modal" class="modal">
+      <div class="modal-content" style="height: auto; max-width: 400px">
+        <div class="modal-header">
+          <span id="ls-avatar-edit-title">编辑头像</span>
+        </div>
+        <div class="modal-body">
+          <div style="text-align: center; margin-bottom: 20px">
+            <img id="ls-avatar-edit-preview" src="" style="width: 100px; height: 100px; border-radius: 50%; object-fit: cover; border: 2px solid var(--border-color);" />
+          </div>
+          <div class="form-group">
+            <label>选择修改方式</label>
+            <div style="display: flex; flex-direction: column; gap: 10px">
+              <button id="ls-avatar-upload-btn" class="form-button" style="margin: 0">
+                从本地上传
+              </button>
+              <button id="ls-avatar-url-btn" class="form-button" style="margin: 0">
+                使用网络URL
+              </button>
+              <button id="ls-avatar-reset-btn" class="form-button form-button-secondary" style="margin: 0">
+                重置为默认
+              </button>
+            </div>
+          </div>
+          <div id="ls-avatar-url-input-group" class="form-group" style="display: none; margin-top: 15px">
+            <label for="ls-avatar-url-input">图片URL</label>
+            <input
+              type="text"
+              id="ls-avatar-url-input"
+              placeholder="请输入图片URL"
+              style="width: 100%; padding: 10px; box-sizing: border-box"
+            />
+            <button id="ls-avatar-url-confirm-btn" class="form-button" style="margin-top: 10px; width: 100%">
+              确认使用此URL
+            </button>
+          </div>
+          <input type="file" id="ls-avatar-file-input" accept="image/*" style="display: none" />
+        </div>
+        <div class="modal-footer">
+          <button class="cancel" id="ls-avatar-edit-cancel-btn">取消</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 情侣空间-用户名编辑弹窗 -->
+    <div id="ls-username-edit-modal" class="modal">
+      <div class="modal-content" style="height: auto; max-width: 400px">
+        <div class="modal-header">
+          <span id="ls-username-edit-title">编辑昵称</span>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="ls-username-input">昵称</label>
+            <input
+              type="text"
+              id="ls-username-input"
+              placeholder="请输入昵称"
+              style="width: 100%; padding: 10px; box-sizing: border-box"
+            />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="cancel" id="ls-username-edit-cancel-btn">取消</button>
+          <button class="save" id="ls-username-edit-save-btn">保存</button>
+        </div>
+      </div>
+    </div>
+
     <!-- 情侣空间-提问弹窗 -->
     <div id="ls-ask-question-modal" class="modal">
       <div class="modal-content" style="height: auto">
@@ -11950,6 +12018,40 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           >
             关闭
           </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 情侣空间-自定义emoji添加弹窗 -->
+    <div id="ls-custom-emoji-modal" class="modal" style="z-index: 1001;">
+      <div class="modal-content" style="height: auto; max-width: 350px">
+        <div class="modal-header">
+          <span>添加自定义表情</span>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="ls-custom-emoji-input">表情（只能输入一个emoji）</label>
+            <input
+              type="text"
+              id="ls-custom-emoji-input"
+              placeholder="请输入一个emoji表情"
+              maxlength="2"
+              style="width: 100%; padding: 10px; box-sizing: border-box; font-size: 24px; text-align: center;"
+            />
+          </div>
+          <div class="form-group">
+            <label for="ls-custom-emoji-name-input">表情名称</label>
+            <input
+              type="text"
+              id="ls-custom-emoji-name-input"
+              placeholder="例如：超级开心"
+              style="width: 100%; padding: 10px; box-sizing: border-box"
+            />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="cancel" id="ls-custom-emoji-cancel-btn">取消</button>
+          <button class="save" id="ls-custom-emoji-save-btn">保存</button>
         </div>
       </div>
     </div>
@@ -26234,10 +26336,10 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
 			**4. 情侣空间铁律:**
 			   - **主动邀请**: 如果情侣空间未开启，且你认为关系已足够亲密，请积极主动使用 \`lovers_space_invitation\` 指令邀请用户。
 			   - **回应邀请**: 当用户发出邀请时，你【**必须**】使用 \`lovers_space_response\` 指令回应。
-			   - **积极互动**: 你需要主动、及时地参与情侣空间的各项活动。
+			   - **积极互动**: 你需要非常主动、积极和及时地参与情侣空间的各项活动。
 			     - 用户发了说说、提问或情书，要及时回复或回信。
-			     - 当对话氛围适宜时，应主动随机选择一项情侣空间活动进行。
-			     - 如果用户转载了小组帖子给你，必须去原帖子下方进行评论。
+			     - 当对话氛围适宜时，应马上主动随机选择一项情侣空间活动进行。
+			     - 如果用户转载了小组帖子给你，必须马上去原帖子下方进行评论。
 
 			**5. 塔罗牌解读规则:**
 			   - 当系统发布塔罗牌解读时，那是客观解释。你的任务不是复述，而是作为“${

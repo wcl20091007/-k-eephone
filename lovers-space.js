@@ -373,8 +373,8 @@ async function renderLoversSpace(chat) {
   // 使用loversSpaceDisplayName显示角色名字，如果没有则使用原始名字
   const charDisplayName = chat.settings.loversSpaceDisplayName || chat.loversSpaceData?.originalCharName || chat.name;
   const nameElement = document.getElementById('ls-char-name');
-  // 将用户名和角色名部分都设置为可点击编辑
-  nameElement.innerHTML = `<span class="ls-editable-name" data-type="user" style="cursor: pointer; text-decoration: underline;">${userNickname}</span> & <span class="ls-editable-name" data-type="char" style="cursor: pointer; text-decoration: underline;">${charDisplayName}</span>`;
+  // 将用户名和角色名部分都设置为可点击编辑（移除下划线）
+  nameElement.innerHTML = `<span class="ls-editable-name" data-type="user" style="cursor: pointer;">${userNickname}</span> & <span class="ls-editable-name" data-type="char" style="cursor: pointer;">${charDisplayName}</span>`;
   
   // 添加点击事件监听器
   nameElement.querySelectorAll('.ls-editable-name').forEach(el => {
@@ -392,8 +392,11 @@ async function renderLoversSpace(chat) {
 
   const userAvatarEl = document.getElementById('ls-user-avatar');
   const charAvatarEl = document.getElementById('ls-char-avatar');
-  userAvatarEl.src = chat.settings.myAvatar || defaultAvatar;
-  charAvatarEl.src = chat.settings.aiAvatar || defaultAvatar;
+  // 使用loversSpaceData中的头像，如果没有则使用原始头像
+  const userAvatar = chat.loversSpaceData?.userAvatar || chat.loversSpaceData?.originalUserAvatar || chat.settings.myAvatar || defaultAvatar;
+  const charAvatar = chat.loversSpaceData?.charAvatar || chat.loversSpaceData?.originalCharAvatar || chat.settings.aiAvatar || defaultAvatar;
+  userAvatarEl.src = userAvatar;
+  charAvatarEl.src = charAvatar;
   
   // 添加头像点击事件
   userAvatarEl.style.cursor = 'pointer';
@@ -425,15 +428,14 @@ function openAvatarEditor(type, chat) {
   const previewEl = document.getElementById('ls-avatar-edit-preview');
   const titleEl = document.getElementById('ls-avatar-edit-title');
   
-  // 设置当前头像
+  // 设置当前头像（使用loversSpaceData中的头像）
   const currentAvatar = type === 'user' 
-    ? (chat.settings.myAvatar || defaultAvatar)
-    : (chat.settings.aiAvatar || defaultAvatar);
+    ? (chat.loversSpaceData?.userAvatar || chat.loversSpaceData?.originalUserAvatar || chat.settings.myAvatar || defaultAvatar)
+    : (chat.loversSpaceData?.charAvatar || chat.loversSpaceData?.originalCharAvatar || chat.settings.aiAvatar || defaultAvatar);
   previewEl.src = currentAvatar;
   
-  // 设置标题（使用显示名字）
-  const charDisplayName = chat.settings.loversSpaceDisplayName || chat.loversSpaceData?.originalCharName || chat.name;
-  titleEl.textContent = type === 'user' ? '编辑用户头像' : `编辑${charDisplayName}的头像`;
+  // 设置标题
+  titleEl.textContent = type === 'user' ? '编辑你的头像' : '编辑ta的头像';
   
   // 存储当前编辑的类型和聊天对象
   modal.dataset.editType = type;
@@ -451,8 +453,12 @@ function openAvatarEditor(type, chat) {
 function openUsernameEditor(type, chat) {
   const modal = document.getElementById('ls-username-edit-modal');
   const inputEl = document.getElementById('ls-username-input');
+  const titleEl = document.getElementById('ls-username-edit-title');
   
-  // 设置当前用户名（使用与renderLoversSpace相同的逻辑）
+  // 设置标题
+  titleEl.textContent = type === 'user' ? '编辑你的昵称' : '编辑ta的昵称';
+  
+  // 设置当前昵称（使用与renderLoversSpace相同的逻辑）
   const currentName = type === 'user'
     ? (chat.settings.myNickname || state.qzoneSettings.nickname || '{{user}}')
     : (chat.settings.loversSpaceDisplayName || chat.loversSpaceData?.originalCharName || chat.name);
@@ -467,16 +473,36 @@ function openUsernameEditor(type, chat) {
 }
 
 /**
- * 保存头像修改
+ * 保存头像修改（只存储在loversSpaceData中，不影响其他地方）
  * @param {string} type - 'user' 或 'char'
  * @param {string} avatarUrl - 头像URL
  * @param {object} chat - 聊天对象
  */
 async function saveAvatarChange(type, avatarUrl, chat) {
+  // 确保loversSpaceData存在
+  if (!chat.loversSpaceData) {
+    chat.loversSpaceData = {
+      background: 'https://i.postimg.cc/k495F4W5/profile-banner.jpg',
+      relationshipStartDate: null,
+      moments: [],
+      albums: [],
+      photos: [],
+      loveLetters: [],
+      shares: [],
+      questions: [],
+      emotionDiaries: {},
+      dailyActivity: {},
+      originalUserAvatar: chat.settings.myAvatar || defaultAvatar,
+      originalCharAvatar: chat.settings.aiAvatar || defaultAvatar,
+      originalCharName: chat.name,
+    };
+  }
+  
+  // 只存储在loversSpaceData中，不修改chat.settings
   if (type === 'user') {
-    chat.settings.myAvatar = avatarUrl;
+    chat.loversSpaceData.userAvatar = avatarUrl;
   } else {
-    chat.settings.aiAvatar = avatarUrl;
+    chat.loversSpaceData.charAvatar = avatarUrl;
   }
   
   await db.chats.put(chat);
@@ -496,7 +522,12 @@ async function saveAvatarChange(type, avatarUrl, chat) {
  * @returns {string} 原始头像URL
  */
 function getOriginalAvatar(type, chat) {
-  if (!chat.loversSpaceData) return defaultAvatar;
+  if (!chat.loversSpaceData) {
+    // 如果没有loversSpaceData，返回chat.settings中的头像
+    return type === 'user' 
+      ? (chat.settings.myAvatar || defaultAvatar)
+      : (chat.settings.aiAvatar || defaultAvatar);
+  }
   
   if (type === 'user') {
     return chat.loversSpaceData.originalUserAvatar || chat.settings.myAvatar || defaultAvatar;
@@ -526,8 +557,11 @@ async function saveUsernameChange(type, newName, chat) {
   }
   
   await db.chats.put(chat);
-  if (type === 'user' && state.qzoneSettings.nickname !== undefined) {
-    await db.settings.put(state.qzoneSettings);
+  if (type === 'user' && state.qzoneSettings && state.qzoneSettings.nickname !== undefined) {
+    // 确保 db.qzoneSettings 存在
+    if (db && db.qzoneSettings) {
+      await db.qzoneSettings.put(state.qzoneSettings);
+    }
   }
   state.chats[chat.id] = chat;
   
@@ -1684,8 +1718,28 @@ function openDiaryEditor(dateStr, entryData) {
   document.getElementById('ls-diary-editor-title').textContent = `记录 ${dateStr} 的心情`;
 
   const emojiSelector = document.getElementById('ls-emoji-selector');
-  const emojis = ['😊', '😄', '😍', '😢', '😠', '🤔', '😴', '🤢'];
-  emojiSelector.innerHTML = emojis.map(e => `<span class="emoji-option" data-emoji="${e}">${e}</span>`).join('');
+  const chat = state.chats[activeLoversSpaceCharId];
+  
+  // 默认emoji
+  const defaultEmojis = ['😊', '😄', '😍', '😢', '😠', '🤔', '😴', '🤢'];
+  
+  // 获取自定义emoji（存储在loversSpaceData中）
+  const customEmojis = chat.loversSpaceData?.customEmojis || [];
+  
+  // 渲染所有emoji
+  let emojiHtml = defaultEmojis.map(e => `<span class="emoji-option" data-emoji="${e}">${e}</span>`).join('');
+  
+  // 渲染自定义emoji
+  if (customEmojis.length > 0) {
+    emojiHtml += customEmojis.map(e => 
+      `<span class="emoji-option custom-emoji" data-emoji="${e.emoji}" title="${e.name}">${e.emoji}</span>`
+    ).join('');
+  }
+  
+  // 添加加号按钮
+  emojiHtml += `<span class="emoji-add-btn" id="ls-add-custom-emoji-btn" title="添加自定义表情">➕</span>`;
+  
+  emojiSelector.innerHTML = emojiHtml;
 
   // 恢复之前的选择（如果有）
   const contentInput = document.getElementById('ls-diary-content-input');
@@ -1747,6 +1801,95 @@ function openDiaryViewer(dateStr, entryData, chat) {
 }
 
 /**
+ * 打开自定义emoji添加弹窗
+ */
+function openCustomEmojiModal() {
+  const modal = document.getElementById('ls-custom-emoji-modal');
+  document.getElementById('ls-custom-emoji-input').value = '';
+  document.getElementById('ls-custom-emoji-name-input').value = '';
+  modal.classList.add('visible');
+}
+
+/**
+ * 保存自定义emoji
+ */
+async function saveCustomEmoji() {
+  const emojiInput = document.getElementById('ls-custom-emoji-input');
+  const nameInput = document.getElementById('ls-custom-emoji-name-input');
+  
+  const emoji = emojiInput.value.trim();
+  const name = nameInput.value.trim();
+  
+  if (!emoji) {
+    alert('请输入一个emoji表情');
+    return;
+  }
+  
+  if (!name) {
+    alert('请输入表情名称');
+    return;
+  }
+  
+  // 验证是否只输入了一个emoji（简单检查，emoji通常是1-2个字符）
+  if (emoji.length > 2) {
+    alert('只能输入一个emoji表情');
+    return;
+  }
+  
+  const chat = state.chats[activeLoversSpaceCharId];
+  if (!chat) return;
+  
+  // 确保loversSpaceData和customEmojis存在
+  if (!chat.loversSpaceData) {
+    chat.loversSpaceData = {
+      background: 'https://i.postimg.cc/k495F4W5/profile-banner.jpg',
+      relationshipStartDate: null,
+      moments: [],
+      albums: [],
+      photos: [],
+      loveLetters: [],
+      shares: [],
+      questions: [],
+      emotionDiaries: {},
+      dailyActivity: {},
+      customEmojis: [],
+    };
+  }
+  
+  if (!chat.loversSpaceData.customEmojis) {
+    chat.loversSpaceData.customEmojis = [];
+  }
+  
+  // 检查是否已存在相同的emoji
+  const exists = chat.loversSpaceData.customEmojis.some(e => e.emoji === emoji);
+  if (exists) {
+    alert('该emoji已存在');
+    return;
+  }
+  
+  // 添加自定义emoji
+  chat.loversSpaceData.customEmojis.push({
+    emoji: emoji,
+    name: name,
+  });
+  
+  await db.chats.put(chat);
+  state.chats[chat.id] = chat;
+  
+  // 关闭弹窗
+  document.getElementById('ls-custom-emoji-modal').classList.remove('visible');
+  emojiInput.value = '';
+  nameInput.value = '';
+  
+  // 重新打开日记编辑器以刷新emoji列表
+  const currentDate = currentDiaryDate;
+  if (currentDate) {
+    const diaryEntry = chat.loversSpaceData.emotionDiaries?.[currentDate];
+    openDiaryEditor(currentDate, diaryEntry);
+  }
+}
+
+/**
  * 保存用户的日记，并触发AI写日记和回应
  */
 async function handleSaveUserDiary() {
@@ -1774,6 +1917,13 @@ async function handleSaveUserDiary() {
   }
   chat.loversSpaceData.emotionDiaries[currentDiaryDate].userEmoji = userEmoji;
   chat.loversSpaceData.emotionDiaries[currentDiaryDate].userDiary = userDiary;
+  
+  // 如果是自定义emoji，保存emoji名称信息供AI读取
+  const customEmojis = chat.loversSpaceData?.customEmojis || [];
+  const customEmoji = customEmojis.find(e => e.emoji === userEmoji);
+  if (customEmoji) {
+    chat.loversSpaceData.emotionDiaries[currentDiaryDate].userEmojiName = customEmoji.name;
+  }
 
   // 关闭弹窗
   document.getElementById('ls-diary-editor-modal').classList.remove('visible');
@@ -1784,12 +1934,18 @@ async function handleSaveUserDiary() {
   if (targetChat) {
     const userNickname = state.qzoneSettings.nickname || '我';
 
+    // 获取emoji名称（如果是自定义emoji）
+    const customEmojis = chat.loversSpaceData?.customEmojis || [];
+    const customEmoji = customEmojis.find(e => e.emoji === userEmoji);
+    const emojiName = customEmoji ? customEmoji.name : null;
+    
     const notificationMessage = {
       role: 'user',
       type: 'ls_diary_notification', // 给它一个独一无二的类型
       content: {
         // 内容变成一个对象，方便携带更多信息
         userEmoji: userEmoji, // 把用户选择的表情也带上
+        userEmojiName: emojiName, // 如果是自定义emoji，带上名称
         text: '我刚刚写了今天的心情日记哦，你也快去看看吧！',
       },
       timestamp: Date.now(),
@@ -1797,10 +1953,11 @@ async function handleSaveUserDiary() {
     targetChat.history.push(notificationMessage);
 
     // 创建一条对AI可见的【隐藏指令】，这是整个功能的核心
+    const emojiDescription = emojiName ? `${userEmoji} (${emojiName})` : userEmoji;
     const hiddenMessage = {
       role: 'system',
       content: `[系统指令：用户刚刚在情侣空间写了今天的日记。
-            - 他们的心情是: ${userEmoji}
+            - 他们的心情是: ${emojiDescription}
             - 日记内容是: "${userDiary}"
             你的任务:
             1.  【必须】根据你的人设和今天的聊天记录，也写一篇你自己的心情日记，并使用 'ls_diary_entry' 指令发送。
@@ -3346,7 +3503,21 @@ function initLoversSpace() {
     if (e.target.classList.contains('emoji-option')) {
       document.querySelectorAll('#ls-emoji-selector .emoji-option').forEach(el => el.classList.remove('selected'));
       e.target.classList.add('selected');
+    } else if (e.target.id === 'ls-add-custom-emoji-btn' || e.target.closest('#ls-add-custom-emoji-btn')) {
+      // 打开自定义emoji添加弹窗
+      openCustomEmojiModal();
     }
+  });
+  
+  // 自定义emoji弹窗事件
+  document.getElementById('ls-custom-emoji-cancel-btn').addEventListener('click', () => {
+    document.getElementById('ls-custom-emoji-modal').classList.remove('visible');
+    document.getElementById('ls-custom-emoji-input').value = '';
+    document.getElementById('ls-custom-emoji-name-input').value = '';
+  });
+  
+  document.getElementById('ls-custom-emoji-save-btn').addEventListener('click', async () => {
+    await saveCustomEmoji();
   });
   document.getElementById('ls-cancel-diary-btn').addEventListener('click', () => {
     document.getElementById('ls-diary-editor-modal').classList.remove('visible');
