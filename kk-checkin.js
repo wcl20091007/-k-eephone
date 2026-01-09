@@ -381,6 +381,92 @@ async function generateHouseData(charId, includeComputer = true) {
 }
 
 /**
+ * 通过 Service Worker 发送浏览器原生通知（支持后台）
+ * @param {string} title - 通知标题
+ * @param {string} body - 通知内容
+ * @param {object} data - 附加数据
+ */
+async function sendBrowserNotification(title, body, data = {}) {
+  // 检查是否支持通知
+  if (!('Notification' in window)) {
+    console.warn('此浏览器不支持通知功能');
+    return false;
+  }
+
+  // 检查权限
+  if (Notification.permission !== 'granted') {
+    console.warn('通知权限未授予');
+    return false;
+  }
+
+  // 优先使用 Service Worker 发送通知（这样即使页面关闭或后台也能收到）
+  if ('serviceWorker' in navigator) {
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      
+      // 准备通知选项
+      const notificationOptions = {
+        body: body,
+        icon: 'https://i.postimg.cc/Kj8JnRcp/267611-CC01-F8-A3-B4910-A2-C2-FFDE479-DC.jpg',
+        badge: 'https://i.postimg.cc/Kj8JnRcp/267611-CC01-F8-A3-B4910-A2-C2-FFDE479-DC.jpg',
+        tag: 'kk-checkin-notification',
+        requireInteraction: false,
+        silent: false,
+        vibrate: [200, 100, 200],
+        data: data
+      };
+
+      // 方法1: 直接使用 registration.showNotification（推荐，支持后台）
+      await registration.showNotification(title, notificationOptions);
+      console.log('✅ 通过 Service Worker 发送通知成功');
+      return true;
+    } catch (error) {
+      console.error('❌ Service Worker 通知失败，尝试备用方法:', error);
+      // 备用方法：通过 postMessage 发送
+      try {
+        const registration = await navigator.serviceWorker.ready;
+        if (registration.active) {
+          registration.active.postMessage({
+            type: 'SHOW_NOTIFICATION',
+            title: title,
+            options: {
+              body: body,
+              icon: 'https://i.postimg.cc/Kj8JnRcp/267611-CC01-F8-A3-B4910-A2-C2-FFDE479-DC.jpg',
+              badge: 'https://i.postimg.cc/Kj8JnRcp/267611-CC01-F8-A3-B4910-A2-C2-FFDE479-DC.jpg',
+              tag: 'kk-checkin-notification',
+              requireInteraction: false,
+              silent: false,
+              vibrate: [200, 100, 200],
+              data: data
+            }
+          });
+          console.log('✅ 通过 postMessage 发送通知请求');
+          return true;
+        }
+      } catch (error2) {
+        console.error('❌ Service Worker postMessage 失败:', error2);
+      }
+    }
+  }
+
+  // 降级到普通通知（仅当页面在前台时有效）
+  try {
+    const notification = new Notification(title, {
+      body: body,
+      icon: 'https://i.postimg.cc/Kj8JnRcp/267611-CC01-F8-A3-B4910-A2-C2-FFDE479-DC.jpg',
+      badge: 'https://i.postimg.cc/Kj8JnRcp/267611-CC01-F8-A3-B4910-A2-C2-FFDE479-DC.jpg',
+      tag: 'kk-checkin-notification',
+      data: data
+    });
+    console.log('✅ 使用普通 Notification API 发送通知');
+    return true;
+  } catch (error) {
+    console.error('❌ 普通通知也失败:', error);
+    return false;
+  }
+}
+
+/**
  * 通知用户生成完成
  * @param {string} charId - 角色ID
  * @param {string} chatName - 角色名称
@@ -392,28 +478,46 @@ async function notifyGenerationComplete(charId, chatName, success, extraInfo = '
   // 检测页面是否在后台
   const isPageHidden = document.hidden || document.visibilityState === 'hidden';
   
-  // 如果用户点击了返回按钮，或者页面在后台，使用真实浏览器弹窗
-  const shouldUseBrowserAlert = isPageHidden || (backgroundGenerationTask && backgroundGenerationTask.userReturned);
+  // 如果用户点击了返回按钮，或者页面在后台，使用浏览器通知
+  const shouldUseBrowserNotification = isPageHidden || (backgroundGenerationTask && backgroundGenerationTask.userReturned);
   
   if (success) {
-    const message = `查岗内容生成完成！${extraInfo}\n\n${chatName}的家已经准备好了，快去查看吧！`;
+    const title = '查岗完成';
+    const body = `查岗内容生成完成！${extraInfo}\n\n${chatName}的家已经准备好了，快去查看吧！`;
     
-    if (shouldUseBrowserAlert) {
-      // 页面在后台或用户已返回，使用真实浏览器弹窗（alert）
-      alert(message);
+    if (shouldUseBrowserNotification) {
+      // 页面在后台或用户已返回，使用浏览器原生通知
+      const notificationSent = await sendBrowserNotification(title, body, { 
+        charId: charId,
+        type: 'kk-checkin-complete'
+      });
+      
+      // 如果通知发送失败，降级到 alert（虽然后台时可能不显示）
+      if (!notificationSent) {
+        alert(body);
+      }
     } else {
       // 页面在前台且用户未返回，使用AI char回复时的仿手机弹窗
-      await showCustomAlert('查岗完成', message);
+      await showCustomAlert(title, body);
     }
   } else {
-    const message = `查岗内容生成失败\n\n${errorMessage || '未知错误'}`;
+    const title = '生成失败';
+    const body = `查岗内容生成失败\n\n${errorMessage || '未知错误'}`;
     
-    if (shouldUseBrowserAlert) {
-      // 页面在后台或用户已返回，使用真实浏览器弹窗（alert）
-      alert(message);
+    if (shouldUseBrowserNotification) {
+      // 页面在后台或用户已返回，使用浏览器原生通知
+      const notificationSent = await sendBrowserNotification(title, body, { 
+        charId: charId,
+        type: 'kk-checkin-error'
+      });
+      
+      // 如果通知发送失败，降级到 alert（虽然后台时可能不显示）
+      if (!notificationSent) {
+        alert(body);
+      }
     } else {
       // 页面在前台且用户未返回，使用AI char回复时的仿手机弹窗
-      await showCustomAlert('生成失败', message);
+      await showCustomAlert(title, body);
     }
   }
 }
@@ -2357,5 +2461,6 @@ function showHistoryDetail(entry) {
   modal.classList.add('visible');
 }
 
-// 暴露openKkCheckin到全局作用域
+// 暴露函数到全局作用域
 window.openKkCheckin = openKkCheckin;
+window.openKkHouseView = openKkHouseView;

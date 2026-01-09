@@ -16131,6 +16131,13 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                 showScreen('chat-interface-screen');
                 openChat(chatId);
               }
+            } else if (event.data && event.data.type === 'OPEN_KK_CHECKIN') {
+              // 处理查岗完成通知
+              const charId = event.data.charId;
+              if (charId && typeof openKkCheckin === 'function' && typeof openKkHouseView === 'function') {
+                // 打开查岗界面并直接进入该角色的房屋视图
+                openKkHouseView(charId);
+              }
             }
           });
 

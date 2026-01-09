@@ -126,15 +126,23 @@ self.addEventListener('notificationclick', (event) => {
 
   const notificationData = event.notification.data || {};
   const chatId = notificationData.chatId;
+  const notificationType = notificationData.type;
 
   // 打开或聚焦到应用
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      // 如果已经有打开的窗口，聚焦它并发送消息打开对应聊天
+      // 如果已经有打开的窗口，聚焦它并发送消息
       for (let client of clientList) {
         if (client.url.includes(self.location.origin) && 'focus' in client) {
-          // 发送消息给主线程，让它打开对应的聊天
-          if (chatId) {
+          // 根据通知类型发送不同的消息
+          if (notificationType === 'kk-checkin-complete' && chatId) {
+            // 查岗完成通知：打开查岗界面
+            client.postMessage({
+              type: 'OPEN_KK_CHECKIN',
+              charId: chatId
+            });
+          } else if (chatId) {
+            // 普通聊天通知：打开对应聊天
             client.postMessage({
               type: 'OPEN_CHAT',
               chatId: chatId
@@ -145,7 +153,12 @@ self.addEventListener('notificationclick', (event) => {
       }
       // 如果没有打开的窗口，打开一个新窗口
       if (clients.openWindow) {
-        const url = chatId ? `/?openChat=${chatId}` : '/';
+        let url = '/';
+        if (notificationType === 'kk-checkin-complete' && chatId) {
+          url = `/?openKkCheckin=${chatId}`;
+        } else if (chatId) {
+          url = `/?openChat=${chatId}`;
+        }
         return clients.openWindow(url);
       }
     })
