@@ -79,7 +79,14 @@ async function generateHouseData(charId, includeComputer = true) {
     
     newBackBtn.addEventListener('click', () => {
       // 隐藏覆盖层，但保持生成过程继续
-      document.getElementById('generation-overlay').classList.remove('visible');
+      const overlay = document.getElementById('generation-overlay');
+      if (overlay) {
+        overlay.classList.remove('visible');
+      }
+      // 标记用户已返回，后续通知将根据页面状态选择弹窗方式
+      if (backgroundGenerationTask && backgroundGenerationTask.charId === charId) {
+        backgroundGenerationTask.userReturned = true;
+      }
       // 返回主界面
       if (typeof showScreen === 'function') {
         showScreen('home-screen');
@@ -91,7 +98,8 @@ async function generateHouseData(charId, includeComputer = true) {
   backgroundGenerationTask = {
     charId: charId,
     chatName: chat.name,
-    startTime: Date.now()
+    startTime: Date.now(),
+    userReturned: false // 标记用户是否已返回
   };
 
   try {
@@ -384,24 +392,27 @@ async function notifyGenerationComplete(charId, chatName, success, extraInfo = '
   // 检测页面是否在后台
   const isPageHidden = document.hidden || document.visibilityState === 'hidden';
   
+  // 如果用户点击了返回按钮，或者页面在后台，使用真实浏览器弹窗
+  const shouldUseBrowserAlert = isPageHidden || (backgroundGenerationTask && backgroundGenerationTask.userReturned);
+  
   if (success) {
     const message = `查岗内容生成完成！${extraInfo}\n\n${chatName}的家已经准备好了，快去查看吧！`;
     
-    if (isPageHidden) {
-      // 页面在后台，使用真实浏览器弹窗（alert）
+    if (shouldUseBrowserAlert) {
+      // 页面在后台或用户已返回，使用真实浏览器弹窗（alert）
       alert(message);
     } else {
-      // 页面在前台，使用AI char回复时的仿手机弹窗
+      // 页面在前台且用户未返回，使用AI char回复时的仿手机弹窗
       await showCustomAlert('查岗完成', message);
     }
   } else {
     const message = `查岗内容生成失败\n\n${errorMessage || '未知错误'}`;
     
-    if (isPageHidden) {
-      // 页面在后台，使用真实浏览器弹窗（alert）
+    if (shouldUseBrowserAlert) {
+      // 页面在后台或用户已返回，使用真实浏览器弹窗（alert）
       alert(message);
     } else {
-      // 页面在前台，使用AI char回复时的仿手机弹窗
+      // 页面在前台且用户未返回，使用AI char回复时的仿手机弹窗
       await showCustomAlert('生成失败', message);
     }
   }
