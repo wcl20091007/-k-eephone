@@ -531,12 +531,17 @@ function createChatListItem(chat) {
     }
   }
 
+  // 使用备注名（仅显示用，AI不知道）
+  const displayName = !chat.isGroup && chat.settings.remarkName
+    ? chat.settings.remarkName
+    : chat.name;
+
   content.innerHTML = `
         <div class="chat-list-item" data-chat-id="${chat.id}">
             <img src="${avatar || defaultAvatar}" class="avatar">
             <div class="info">
                 <div class="name-line">
-                    <span class="name">${chat.name}</span>
+                    <span class="name">${displayName}</span>
                     ${chat.isGroup ? '<span class="group-tag">群聊</span>' : ''}
                     ${streakHtml}
                 </div>

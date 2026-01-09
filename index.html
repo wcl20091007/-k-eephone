@@ -18802,7 +18802,11 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               const chat = state.chats[item.chatId];
               if (!chat) continue;
 
-              sourceText = `来自与 ${chat.name} 的聊天`;
+              // 使用备注名（仅显示用，AI不知道）
+              const chatDisplayName = !chat.isGroup && chat.settings.remarkName
+                ? chat.settings.remarkName
+                : chat.name;
+              sourceText = `来自与 ${chatDisplayName} 的聊天`;
               const isUser = msg.role === "user";
               let senderName, senderAvatar;
 
@@ -18822,7 +18826,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                     (m) => m.originalName === msg.senderName
                   );
 
-                  // 如果找到了成员信息，就用他的“群昵称”；如果没找到（比如成员被踢了），就还是用消息里的名字作为备用。
+                  // 如果找到了成员信息，就用他的"群昵称"；如果没找到（比如成员被踢了），就还是用消息里的名字作为备用。
                   senderDisplayName = member
                     ? member.groupNickname
                     : msg.senderName || "未知成员";
@@ -18831,8 +18835,8 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                     ? member.avatar
                     : defaultGroupMemberAvatar;
                 } else {
-                  // 单聊的逻辑保持不变
-                  senderName = chat.name;
+                  // 单聊：使用备注名（仅显示用，AI不知道）
+                  senderName = chatDisplayName;
                   senderAvatar = chat.settings.aiAvatar || defaultAvatar;
                 }
               }
@@ -23789,8 +23793,10 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               );
               displayName = member ? member.groupNickname : msg.senderName;
             } else {
-              // 否则（是单聊），直接使用聊天对象的名称
-              displayName = chat.name;
+              // 否则（是单聊），使用备注名（仅显示用，AI不知道）
+              displayName = !chat.isGroup && chat.settings.remarkName
+                ? chat.settings.remarkName
+                : chat.name;
             }
 
             const requestTitle = `来自 ${displayName} 的代付请求`;
@@ -24922,7 +24928,11 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                       if (isViewingThisChat) appendMessage(errBubble, chat);
                     } finally {
                       if (chatHeaderTitle) {
-                        chatHeaderTitle.textContent = chat.name;
+                        // 使用备注名（仅显示用，AI不知道）
+                        const displayName = !chat.isGroup && chat.settings.remarkName
+                          ? chat.settings.remarkName
+                          : chat.name;
+                        chatHeaderTitle.textContent = displayName;
                         chatHeaderTitle.classList.remove("typing-status");
                       }
                     }
@@ -24960,9 +24970,14 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               appendMessage(errorMessage, chat);
             } finally {
               if (chatHeaderTitle && state.chats[chatId]) {
+                const chat = state.chats[chatId];
+                // 使用备注名（仅显示用，AI不知道）
+                const displayName = !chat.isGroup && chat.settings.remarkName
+                  ? chat.settings.remarkName
+                  : chat.name;
                 chatHeaderTitle.style.opacity = 0;
                 setTimeout(() => {
-                  chatHeaderTitle.textContent = state.chats[chatId].name;
+                  chatHeaderTitle.textContent = displayName;
                   chatHeaderTitle.classList.remove("typing-status");
                   chatHeaderTitle.style.opacity = 1;
                 }, 200);
@@ -25238,7 +25253,12 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
                 if (typingIndicator) typingIndicator.style.display = "none";
               } else {
                 if (chatHeaderTitle && state.chats[chatId]) {
-                  chatHeaderTitle.textContent = state.chats[chatId].name;
+                  const chat = state.chats[chatId];
+                  // 使用备注名（仅显示用，AI不知道）
+                  const displayName = !chat.isGroup && chat.settings.remarkName
+                    ? chat.settings.remarkName
+                    : chat.name;
+                  chatHeaderTitle.textContent = displayName;
                   chatHeaderTitle.classList.remove("typing-status");
                 }
               }
@@ -30611,9 +30631,14 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               }
             } else {
               if (chatHeaderTitle && state.chats[chatId]) {
+                const chat = state.chats[chatId];
+                // 使用备注名（仅显示用，AI不知道）
+                const displayName = !chat.isGroup && chat.settings.remarkName
+                  ? chat.settings.remarkName
+                  : chat.name;
                 chatHeaderTitle.style.opacity = 0;
                 setTimeout(() => {
-                  chatHeaderTitle.textContent = state.chats[chatId].name;
+                  chatHeaderTitle.textContent = displayName;
                   chatHeaderTitle.classList.remove("typing-status");
                   chatHeaderTitle.style.opacity = 1;
                 }, 200);
@@ -35548,10 +35573,13 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
               ".incoming-call-content .caller-text"
             ).textContent = `${requesterName} 邀请你加入群视频`; // 显示具体发起人
           } else {
-            // 单聊逻辑保持不变
+            // 单聊：使用备注名（仅显示用，AI不知道）
+            const displayName = !chat.isGroup && chat.settings.remarkName
+              ? chat.settings.remarkName
+              : chat.name;
             document.getElementById("caller-avatar").src =
               chat.settings.aiAvatar || defaultAvatar;
-            document.getElementById("caller-name").textContent = chat.name;
+            document.getElementById("caller-name").textContent = displayName;
             document.querySelector(
               ".incoming-call-content .caller-text"
             ).textContent = "邀请你视频通话";
@@ -43753,8 +43781,11 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             });
           } else {
             const aiOption = document.createElement("option");
-            aiOption.value = chat.name;
-            aiOption.textContent = chat.name;
+            aiOption.value = chat.name; // value使用真实名字用于匹配
+            // 显示备注名（仅显示用，AI不知道）
+            aiOption.textContent = !chat.isGroup && chat.settings.remarkName
+              ? chat.settings.remarkName
+              : chat.name;
             senderSelect.appendChild(aiOption);
           }
 
