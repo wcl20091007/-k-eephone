@@ -61099,9 +61099,16 @@ ${content ? `# 页面内容\n${content}\n` : ""}
             const data = await response.json();
             if (data.error) throw new Error(`API返回错误: ${data.error.message || JSON.stringify(data.error)}`);
             
-            return isGemini 
+            const replyContent = isGemini 
               ? data.candidates?.[0]?.content?.parts?.[0]?.text?.trim()
               : data.choices?.[0]?.message?.content?.trim();
+            
+            // 检查返回内容是否为空
+            if (!replyContent || replyContent === '') {
+              throw new Error(`API返回空内容。响应数据: ${JSON.stringify(data)}`);
+            }
+            
+            return replyContent;
           }
 
           /**
@@ -61462,11 +61469,19 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
             try {
               const reply = await callPetAI(systemPrompt);
               hidePetWaitingBubble();
+              
+              // 二次检查：如果回复为空，显示错误信息
+              if (!reply || reply.trim() === '') {
+                throw new Error('API返回空内容');
+              }
+              
               showPetReplyBubble(reply);
             } catch (error) {
               console.error("桌宠AI回复失败:", error);
               hidePetWaitingBubble();
-              showPetReplyBubble(`抱歉，我现在无法回应... (${error.message})`);
+              // 显示详细的错误信息，包括API空回等报错信息
+              const errorMessage = error.message || '未知错误';
+              showPetReplyBubble(`抱歉，我现在无法回应...\n\n错误信息: ${errorMessage}`);
             }
           }
 
