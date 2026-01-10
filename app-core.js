@@ -45359,7 +45359,8 @@ ${content ? `# 页面内容\n${content}\n` : ""}
 
 **第二步：思考角度**
 1. 根据你的人设和与用户的最近聊天记录，确定你是在什么场合下窥屏的（例如：偷偷查手机、就在用户旁边看她的手机等）
-2. 理解页面内容关于谁的（例如：聊天页面是自己和用户的、情侣空间是用户和charA开启的等）
+2. 理解页面内容关于谁的（例如：聊天页面是自己和用户的、群聊页面是群组名称不是角色名字、情侣空间是用户和charA开启的等）
+   - **重要提示**：如果是群聊页面，页面顶部显示的是**群组名称**，不是某个角色的名字。群聊中有多个成员，每个成员都有自己的名字（可能显示群昵称或本名），你需要根据聊天记录中的发言者名字来识别是谁在说话。
 3. 根据页面内容和你的窥屏场合，做出符合你人设的自然反应
 
 **第三步：生成回复**
@@ -45524,49 +45525,95 @@ ${content ? `# 页面内容\n${content}\n` : ""}
           // 获取聊天标题
           const chatTitle = document.getElementById("chat-header-title")?.textContent || currentChat.name;
           
-          // 【优化】判断页面内容关于谁的
+          // 【优化】区分群聊和单聊
           const isSelfChat = currentChatId === activePetChat.id;
-          const relationshipInfo = isSelfChat 
-            ? `这是【你与用户】的聊天页面。`
-            : `这是【用户与角色"${chatTitle}"】的聊天页面。`;
+          let relationshipInfo = "";
+          let chatInfo = "";
           
-          // 获取状态
-          const statusText = currentChat.status?.text || "在线";
-          const isBusy = currentChat.status?.isBusy || false;
-          const statusDisplay = isBusy ? `${statusText} (忙碌中)` : statusText;
-          
-          // 获取最近30条聊天记录
-          const recentHistory = (currentChat.history || [])
-            .filter(msg => !msg.isHidden)
-            .slice(-30)
-            .map(msg => {
-              const role = msg.role === "user" ? "用户" : currentChat.name;
-              const content = msg.content || "";
-              return `${role}: ${content}`;
-            })
-            .join("\n");
-          
-          // 获取一起听的歌信息
-          let musicInfo = "";
-          if (state.musicState?.isActive && state.musicState?.activeChatId === currentChatId) {
-            const currentIndex = state.musicState.currentIndex;
-            if (currentIndex >= 0 && state.musicState.playlist && state.musicState.playlist[currentIndex]) {
-              const currentSong = state.musicState.playlist[currentIndex];
-              const songName = currentSong.name || "未知歌曲";
-              const artist = currentSong.artist || "未知艺术家";
-              const isPlaying = state.musicState.isPlaying ? "正在播放" : "已暂停";
-              musicInfo = `\n# 一起听的歌
+          if (currentChat.isGroup) {
+            // 群聊处理
+            relationshipInfo = `这是【一个群聊页面】，群组名称是"${chatTitle}"（注意：这是群组名称，不是某个角色的名字）。`;
+            
+            // 获取群成员信息
+            const membersList = currentChat.members || [];
+            const membersInfo = membersList.map(m => {
+              const memberName = m.groupNickname || m.originalName || m.name || "未知成员";
+              return `- ${memberName}（本名：${m.originalName || m.name || "未知"}）`;
+            }).join("\n");
+            
+            // 获取最近30条聊天记录，显示每个发言者的名字
+            const userNickname = currentChat.settings?.myNickname || "我";
+            const recentHistory = (currentChat.history || [])
+              .filter(msg => !msg.isHidden)
+              .slice(-30)
+              .map(msg => {
+                let senderName = "";
+                if (msg.role === "user") {
+                  senderName = userNickname;
+                } else {
+                  // 群聊中的AI消息，需要找到对应的成员信息
+                  const member = membersList.find(m => m.originalName === msg.senderName);
+                  senderName = member ? (member.groupNickname || member.originalName) : (msg.senderName || "未知成员");
+                }
+                const content = msg.content || "";
+                return `${senderName}: ${content}`;
+              })
+              .join("\n");
+            
+            chatInfo = `${relationshipInfo}
+
+# 群组信息
+- 群组名称：${chatTitle}（这是群组名称，不是角色名字）
+- 群成员列表：
+${membersInfo || "暂无成员信息"}
+
+# 最近30条聊天记录
+${recentHistory || "暂无聊天记录"}`;
+            
+            systemPrompt = buildBasePrompt(activePetChat, `你发现用户当前正在查看群聊"${chatTitle}"的聊天页面。作为窥屏者，你看到了以下信息：`, chatInfo, "", recentChatHistory, worldBookContext);
+          } else {
+            // 单聊处理
+            relationshipInfo = isSelfChat 
+              ? `这是【你与用户】的聊天页面。`
+              : `这是【用户与角色"${chatTitle}"】的聊天页面。`;
+            
+            // 获取状态
+            const statusText = currentChat.status?.text || "在线";
+            const isBusy = currentChat.status?.isBusy || false;
+            const statusDisplay = isBusy ? `${statusText} (忙碌中)` : statusText;
+            
+            // 获取最近30条聊天记录
+            const recentHistory = (currentChat.history || [])
+              .filter(msg => !msg.isHidden)
+              .slice(-30)
+              .map(msg => {
+                const role = msg.role === "user" ? "用户" : currentChat.name;
+                const content = msg.content || "";
+                return `${role}: ${content}`;
+              })
+              .join("\n");
+            
+            // 获取一起听的歌信息
+            let musicInfo = "";
+            if (state.musicState?.isActive && state.musicState?.activeChatId === currentChatId) {
+              const currentIndex = state.musicState.currentIndex;
+              if (currentIndex >= 0 && state.musicState.playlist && state.musicState.playlist[currentIndex]) {
+                const currentSong = state.musicState.playlist[currentIndex];
+                const songName = currentSong.name || "未知歌曲";
+                const artist = currentSong.artist || "未知艺术家";
+                const isPlaying = state.musicState.isPlaying ? "正在播放" : "已暂停";
+                musicInfo = `\n# 一起听的歌
 用户正在与"${chatTitle}"一起听歌：
 - 歌曲：${songName}
 - 艺术家：${artist}
 - 状态：${isPlaying}`;
-            } else {
-              musicInfo = `\n# 一起听的歌
+              } else {
+                musicInfo = `\n# 一起听的歌
 用户正在与"${chatTitle}"一起听歌，但当前没有播放歌曲。`;
+              }
             }
-          }
-          
-          const chatInfo = `${relationshipInfo}
+            
+            chatInfo = `${relationshipInfo}
 
 # 聊天对象
 - 角色名称：${chatTitle}
@@ -45574,7 +45621,9 @@ ${content ? `# 页面内容\n${content}\n` : ""}
 
 # 最近30条聊天记录
 ${recentHistory || "暂无聊天记录"}${musicInfo}`;
-          systemPrompt = buildBasePrompt(activePetChat, `你发现用户当前正在与角色"${chatTitle}"聊天。作为窥屏者，你看到了以下信息：`, chatInfo, "", recentChatHistory, worldBookContext);
+            
+            systemPrompt = buildBasePrompt(activePetChat, `你发现用户当前正在与角色"${chatTitle}"聊天。作为窥屏者，你看到了以下信息：`, chatInfo, "", recentChatHistory, worldBookContext);
+          }
         }
       } else if (screenId === "qzone-screen") {
         // QZone动态界面
