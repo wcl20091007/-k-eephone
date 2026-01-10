@@ -20772,17 +20772,20 @@ body {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%) scale(0.9);
-  width: 80%;
-  max-width: 500px;
-  max-height: 70vh;
-  min-height: 100px;
-  background-color: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border-radius: 16px;
-  padding: 20px;
-  padding-top: 20px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  width: 85%;
+  max-width: 520px;
+  max-height: 75vh;
+  min-height: 120px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(255, 255, 255, 0.95));
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-radius: 20px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.12),
+    0 2px 8px rgba(0, 0, 0, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
   z-index: 100000;
   display: flex;
   flex-direction: column;
@@ -20806,9 +20809,11 @@ body {
   white-space: pre-wrap;
   overflow-y: auto;
   overflow-x: hidden;
-  max-height: calc(70vh - 65px);
-  padding-right: 5px;
-  padding-top: 0;
+  padding: 20px;
+  padding-top: 50px; /* 为顶部按钮留出空间 */
+  padding-bottom: 20px;
+  max-height: calc(70vh - 20px);
+  box-sizing: border-box;
 }
 
 /* 自定义滚动条样式 */
@@ -20842,56 +20847,122 @@ body {
   background: rgba(255, 255, 255, 0.3);
 }
 
-.desktop-pet-reply-delete {
+/* 按钮容器 */
+.desktop-pet-reply-actions {
   position: absolute;
-  top: 8px;
-  right: 8px;
-  background-color: rgba(255, 59, 48, 0.15);
-  color: #ff3b30;
-  border: 1px solid rgba(255, 59, 48, 0.3);
-  border-radius: 50%;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  font-size: 16px;
-  line-height: 1;
-  cursor: pointer;
-  transition: all 0.2s;
-  font-weight: 600;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
   z-index: 100001;
-  flex-shrink: 0;
+}
+
+.desktop-pet-reply-reroll,
+.desktop-pet-reply-delete {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 18px;
+  line-height: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.desktop-pet-reply-reroll {
+  background: linear-gradient(135deg, rgba(0, 122, 255, 0.2), rgba(0, 122, 255, 0.15));
+  color: #007aff;
+  border: 1px solid rgba(0, 122, 255, 0.3);
+}
+
+.desktop-pet-reply-reroll:hover {
+  background: linear-gradient(135deg, rgba(0, 122, 255, 0.3), rgba(0, 122, 255, 0.2));
+  border-color: rgba(0, 122, 255, 0.5);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 122, 255, 0.2);
+}
+
+.desktop-pet-reply-reroll:active {
+  transform: translateY(0) scale(0.95) rotate(180deg);
+  box-shadow: 0 2px 4px rgba(0, 122, 255, 0.2);
+}
+
+.desktop-pet-reply-reroll:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none !important;
+  pointer-events: none;
+}
+
+.desktop-pet-reply-reroll:disabled:hover {
+  background: linear-gradient(135deg, rgba(0, 122, 255, 0.2), rgba(0, 122, 255, 0.15));
+  border-color: rgba(0, 122, 255, 0.3);
+  transform: none !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.desktop-pet-reply-delete {
+  background: linear-gradient(135deg, rgba(255, 59, 48, 0.2), rgba(255, 59, 48, 0.15));
+  color: #ff3b30;
+  border: 1px solid rgba(255, 59, 48, 0.3);
 }
 
 .desktop-pet-reply-delete:hover {
-  background-color: rgba(255, 59, 48, 0.2);
+  background: linear-gradient(135deg, rgba(255, 59, 48, 0.3), rgba(255, 59, 48, 0.2));
   border-color: rgba(255, 59, 48, 0.5);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(255, 59, 48, 0.2);
 }
 
 .desktop-pet-reply-delete:active {
-  transform: scale(0.95);
+  transform: translateY(0) scale(0.95);
+  box-shadow: 0 2px 4px rgba(255, 59, 48, 0.2);
 }
 
 #phone-screen.dark-mode #desktop-pet-reply-bubble {
-  background-color: rgba(28, 28, 30, 0.95);
+  background: linear-gradient(135deg, rgba(28, 28, 30, 0.98), rgba(28, 28, 30, 0.95));
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    0 2px 8px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 #phone-screen.dark-mode .desktop-pet-reply-content {
   color: #ffffff;
 }
 
+#phone-screen.dark-mode .desktop-pet-reply-reroll {
+  background: linear-gradient(135deg, rgba(0, 122, 255, 0.25), rgba(0, 122, 255, 0.2));
+  color: #5ac8fa;
+  border-color: rgba(0, 122, 255, 0.4);
+}
+
+#phone-screen.dark-mode .desktop-pet-reply-reroll:hover {
+  background: linear-gradient(135deg, rgba(0, 122, 255, 0.35), rgba(0, 122, 255, 0.3));
+  border-color: rgba(0, 122, 255, 0.6);
+  box-shadow: 0 4px 12px rgba(0, 122, 255, 0.3);
+}
+
 #phone-screen.dark-mode .desktop-pet-reply-delete {
-  background-color: rgba(255, 59, 48, 0.2);
+  background: linear-gradient(135deg, rgba(255, 59, 48, 0.25), rgba(255, 59, 48, 0.2));
   color: #ff6b6b;
   border-color: rgba(255, 59, 48, 0.4);
 }
 
 #phone-screen.dark-mode .desktop-pet-reply-delete:hover {
-  background-color: rgba(255, 59, 48, 0.3);
+  background: linear-gradient(135deg, rgba(255, 59, 48, 0.35), rgba(255, 59, 48, 0.3));
   border-color: rgba(255, 59, 48, 0.6);
+  box-shadow: 0 4px 12px rgba(255, 59, 48, 0.3);
 }
 /* ▲▲▲ 桌宠回复气泡样式结束 ▲▲▲ */
 /* ▲▲▲ 桌宠样式结束 ▲▲▲ */

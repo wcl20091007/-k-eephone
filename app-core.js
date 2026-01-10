@@ -44945,6 +44945,9 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
+    // 保存最后一次使用的 systemPrompt，用于重roll
+    let lastPetSystemPrompt = null;
+
     /**
      * 显示桌宠回复的大气泡
      */
@@ -44959,17 +44962,77 @@ document.addEventListener("DOMContentLoaded", () => {
       bubble.id = "desktop-pet-reply-bubble";
       bubble.className = "desktop-pet-reply-bubble";
       
+      // 如果有保存的 systemPrompt，显示重roll按钮
+      const rerollButton = lastPetSystemPrompt 
+        ? `<button class="desktop-pet-reply-reroll" id="desktop-pet-reroll-btn" title="重新生成回复">🔄</button>`
+        : '';
+      
       bubble.innerHTML = `
         <div class="desktop-pet-reply-content">${content}</div>
-        <button class="desktop-pet-reply-delete" onclick="this.closest('#desktop-pet-reply-bubble').remove()">✕</button>
+        <div class="desktop-pet-reply-actions">
+          ${rerollButton}
+          <button class="desktop-pet-reply-delete" onclick="this.closest('#desktop-pet-reply-bubble').remove()">✕</button>
+        </div>
       `;
       
       document.getElementById("phone-screen").appendChild(bubble);
+      
+      // 绑定重roll按钮事件
+      if (lastPetSystemPrompt) {
+        const rerollBtn = document.getElementById("desktop-pet-reroll-btn");
+        if (rerollBtn) {
+          rerollBtn.addEventListener("click", async () => {
+            await rerollPetAIResponse();
+          });
+        }
+      }
       
       // 添加淡入动画
       setTimeout(() => {
         bubble.classList.add("visible");
       }, 10);
+    }
+
+    /**
+     * 重roll桌宠AI回复（使用相同的systemPrompt）
+     */
+    async function rerollPetAIResponse() {
+      if (!lastPetSystemPrompt) {
+        console.warn("没有保存的systemPrompt，无法重roll");
+        return;
+      }
+
+      // 禁用重roll按钮，防止重复点击
+      const rerollBtn = document.getElementById("desktop-pet-reroll-btn");
+      if (rerollBtn) {
+        rerollBtn.disabled = true;
+      }
+
+      // 显示等待气泡
+      showPetWaitingBubble();
+      
+      try {
+        const reply = await callPetAI(lastPetSystemPrompt);
+        hidePetWaitingBubble();
+        
+        // 二次检查：如果回复为空，显示错误信息
+        if (!reply || reply.trim() === '') {
+          throw new Error('API返回空内容');
+        }
+        
+        showPetReplyBubble(reply);
+      } catch (error) {
+        console.error("桌宠AI重roll失败:", error);
+        hidePetWaitingBubble();
+        // 显示详细的错误信息
+        const errorMessage = error.message || '未知错误';
+        showPetReplyBubble(`抱歉，重新生成失败...\n\n错误信息: ${errorMessage}`);
+      } finally {
+        // 重新启用按钮（如果按钮还存在）
+        if (rerollBtn) {
+          rerollBtn.disabled = false;
+        }
+      }
     }
 
     /**
@@ -45444,6 +45507,9 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
           : `你发现用户当前界面是：${screenId || "未知界面"}，但无法获取页面内容。`;
         systemPrompt = buildBasePrompt(activePetChat, context, screenContent?.content || "", "", recentChatHistory, worldBookContext);
       }
+
+      // 保存 systemPrompt 用于重roll
+      lastPetSystemPrompt = systemPrompt;
 
       showPetWaitingBubble();
       try {
