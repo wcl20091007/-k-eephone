@@ -1322,8 +1322,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // main-app.js
 
-  db.version(62).stores({
-    // 版本号从 60 升级到 61 - 添加全局NPC库
+  db.version(64).stores({
+    // 版本号从 63 升级到 64 - 添加桌宠窥屏历史记录的includeInMemory字段
     chats:
       "&id, isGroup, groupId, ownerId, isPinned, characterPhoneData, latestInnerVoice, innerVoiceHistory, loversSpaceData.emotionDiaries, settings.summary, settings.weiboNickname, settings.innerVoiceHideHeaderBorder, settings.innerVoiceAdopterLabelFormat, interactionStats, unlockedSymbols, settings.selectedIntimacyBadge",
     apiConfig: "&id",
@@ -1382,6 +1382,7 @@ document.addEventListener("DOMContentLoaded", () => {
     tukeyAccountingGroups: "&id", // 记账群聊设置 (id, name, members, replySettings)
     tukeyAccountingRecords:
       "++id, groupId, timestamp, isRepliedTo, accountId",
+    desktopPetPeekingHistory: "++id, chatId, timestamp, screenId, screenContent, response, includeInMemory",
     tukeyAccountingReplies: "++id, recordId, charId", // AI的回复记录
     tukeyUserSettings: "&id",
     tukeyCustomConfig: "&id",
@@ -6264,8 +6265,27 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     const avatarEl = content.querySelector(".avatar, .avatar-with-frame");
     if (avatarEl) {
+      let clickTimer = null;
+      let clickCount = 0;
+      
+      // 单击打开心声面板（延迟处理，避免与双击冲突）
       avatarEl.addEventListener("click", (e) => {
         e.stopPropagation();
+        clickCount++;
+        if (clickCount === 1) {
+          clickTimer = setTimeout(() => {
+            if (clickCount === 1 && !chat.isGroup) {
+              openInnerVoiceModal();
+            }
+            clickCount = 0;
+          }, 300); // 300ms延迟，如果300ms内没有第二次点击，则执行单击
+        }
+      });
+      // 双击触发拍了拍
+      avatarEl.addEventListener("dblclick", (e) => {
+        e.stopPropagation();
+        clearTimeout(clickTimer);
+        clickCount = 0;
         handleUserPat(chat.id, chat.name);
       });
     }
@@ -8244,8 +8264,27 @@ document.addEventListener("DOMContentLoaded", () => {
       );
       if (avatarEl) {
         avatarEl.style.cursor = "pointer";
+        let clickTimer = null;
+        let clickCount = 0;
+        
+        // 单击打开心声面板（延迟处理，避免与双击冲突）
         avatarEl.addEventListener("click", (e) => {
           e.stopPropagation();
+          clickCount++;
+          if (clickCount === 1) {
+            clickTimer = setTimeout(() => {
+              if (clickCount === 1 && !chat.isGroup) {
+                openInnerVoiceModal();
+              }
+              clickCount = 0;
+            }, 300); // 300ms延迟，如果300ms内没有第二次点击，则执行单击
+          }
+        });
+        // 双击触发拍了拍
+        avatarEl.addEventListener("dblclick", (e) => {
+          e.stopPropagation();
+          clearTimeout(clickTimer);
+          clickCount = 0;
           const characterName = chat.isGroup ? msg.senderName : chat.name;
           handleUserPat(chat.id, characterName);
         });
@@ -9374,7 +9413,38 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
 
-      const historySlice = chat.history
+      // 【新增】读取标记为includeInMemory的桌宠窥屏历史记录，按时间戳插入到对话历史中
+      let peekingRecordsForHistory = [];
+      try {
+        const peekingRecords = await db.desktopPetPeekingHistory
+          .where("chatId")
+          .equals(chatId)
+          .and(record => record.includeInMemory === true)
+          .toArray();
+        
+        if (peekingRecords.length > 0) {
+          // 将窥屏记录转换为消息格式，插入到对话历史中
+          peekingRecordsForHistory = peekingRecords.map(record => ({
+            role: "system",
+            content: `[系统提示：这是你在窥屏用户手机时留下的记录。你在窥屏时说道：${record.response || "无回复"}]`,
+            timestamp: record.timestamp,
+            isHidden: true,
+            type: "peeking_history"
+          }));
+        }
+      } catch (error) {
+        console.error("读取桌宠窥屏历史记录失败:", error);
+      }
+
+      // 合并对话历史和窥屏记录，按时间戳排序
+      let combinedHistory = [...chat.history];
+      if (peekingRecordsForHistory.length > 0) {
+        combinedHistory = [...chat.history, ...peekingRecordsForHistory];
+        // 按时间戳排序
+        combinedHistory.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+      }
+      
+      const historySlice = combinedHistory
         .filter((msg) => !msg.isTemporary)
         .slice(-chat.settings.maxMemory); // 1. 【修复】把这行加回来！
 
@@ -27122,6 +27192,154 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("inner-voice-main-panel").style.display =
       "flex";
     isInnerVoiceHistoryOpen = false;
+  }
+
+  /**
+   * 打开桌宠窥屏历史记录
+   */
+  async function openDesktopPetPeekingHistory() {
+    if (!state.activeChatId) return;
+    const chat = state.chats[state.activeChatId];
+    if (!chat || chat.isGroup) return;
+
+    // 检查是否有桌宠功能
+    if (!chat.settings?.desktopPetEnabled) {
+      alert("该角色未启用桌宠功能");
+      return;
+    }
+
+    // 获取该角色的桌宠窥屏历史记录
+    const history = await db.desktopPetPeekingHistory
+      .where("chatId")
+      .equals(chat.id)
+      .reverse()
+      .sortBy("timestamp");
+
+    // 创建或获取弹窗
+    let modal = document.getElementById("desktop-pet-peeking-history-modal");
+    if (!modal) {
+      // 如果弹窗不存在，创建一个
+      modal = document.createElement("div");
+      modal.id = "desktop-pet-peeking-history-modal";
+      modal.className = "modal";
+      modal.innerHTML = `
+        <div class="modal-content" style="width: 90%; max-width: 400px; max-height: 80%;">
+          <div class="modal-header" style="border-bottom: 1px solid #ddd; padding: 15px; display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-weight: 600; font-size: 16px;">桌宠窥屏历史</span>
+            <span id="close-desktop-pet-history-modal" style="cursor: pointer; font-size: 24px;">×</span>
+          </div>
+          <div class="modal-body" id="desktop-pet-peeking-history-list" style="padding: 15px; overflow-y: auto; max-height: calc(80vh - 100px);">
+            <!-- 历史记录会在这里动态生成 -->
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+
+      // 绑定关闭按钮
+      document.getElementById("close-desktop-pet-history-modal").addEventListener("click", () => {
+        modal.classList.remove("visible");
+      });
+    }
+
+    // 渲染历史记录
+    const listEl = document.getElementById("desktop-pet-peeking-history-list");
+    listEl.innerHTML = "";
+
+    if (history.length === 0) {
+      listEl.innerHTML = '<p style="text-align: center; color: #888; padding: 20px;">还没有窥屏历史记录</p>';
+    } else {
+      history.forEach((item) => {
+        const itemEl = document.createElement("div");
+        itemEl.style.cssText = "padding: 15px; margin-bottom: 10px; background: #f5f5f5; border-radius: 8px; border: 1px solid #ddd; position: relative;";
+        itemEl.dataset.historyId = item.id;
+        
+        const date = new Date(item.timestamp);
+        const dateString = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+        
+        // 获取界面友好名称
+        const screenFriendlyName = typeof getScreenFriendlyName === "function" 
+          ? getScreenFriendlyName(item.screenId, chat)
+          : (item.screenId || "未知界面");
+        
+        // 眼睛图标：睁开表示已加入上下文记忆，闭上表示未加入
+        const eyeIcon = item.includeInMemory 
+          ? '👁️' // 睁开的眼睛
+          : '🙈'; // 闭上的眼睛
+        
+        itemEl.innerHTML = `
+          <div style="position: absolute; top: 10px; right: 10px; display: flex; gap: 8px; align-items: center;">
+            <span class="peeking-history-eye-btn" data-id="${item.id}" data-include="${item.includeInMemory || false}" style="cursor: pointer; font-size: 20px; user-select: none;" title="${item.includeInMemory ? '已加入上下文记忆（点击移除）' : '未加入上下文记忆（点击加入）'}">${eyeIcon}</span>
+            <span class="peeking-history-delete-btn" data-id="${item.id}" style="cursor: pointer; font-size: 18px; color: #ff3b30; user-select: none;" title="删除">×</span>
+          </div>
+          <div style="font-size: 12px; color: #999; margin-bottom: 8px;">${dateString}</div>
+          <div style="font-size: 13px; color: #666; margin-bottom: 8px;">
+            <strong>界面:</strong> ${screenFriendlyName}
+          </div>
+          ${item.screenContent ? `<div style="font-size: 12px; color: #888; margin-bottom: 8px; max-height: 60px; overflow-y: auto; padding: 8px; background: #fff; border-radius: 4px;">
+            <strong>页面内容:</strong><br>${item.screenContent}
+          </div>` : ''}
+          <div style="font-size: 14px; color: #333; padding: 10px; background: #fff; border-radius: 4px; border-left: 3px solid var(--accent-color);">
+            <strong>回复:</strong><br>${item.response || "无回复"}
+          </div>
+        `;
+        listEl.appendChild(itemEl);
+      });
+      
+      // 绑定删除按钮事件
+      listEl.querySelectorAll('.peeking-history-delete-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const historyId = parseInt(btn.dataset.id);
+          if (isNaN(historyId)) return;
+          
+          const confirmed = await showCustomConfirm(
+            '确认删除',
+            '确定要删除这条窥屏历史记录吗？',
+            { confirmButtonClass: 'btn-danger' }
+          );
+          
+          if (confirmed) {
+            try {
+              await db.desktopPetPeekingHistory.delete(historyId);
+              // 重新渲染列表
+              openDesktopPetPeekingHistory();
+            } catch (error) {
+              console.error('删除窥屏历史记录失败:', error);
+              alert('删除失败，请重试');
+            }
+          }
+        });
+      });
+      
+      // 绑定眼睛按钮事件
+      listEl.querySelectorAll('.peeking-history-eye-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const historyId = parseInt(btn.dataset.id);
+          if (isNaN(historyId)) return;
+          
+          const currentInclude = btn.dataset.include === 'true';
+          const newInclude = !currentInclude;
+          
+          try {
+            await db.desktopPetPeekingHistory.update(historyId, {
+              includeInMemory: newInclude
+            });
+            
+            // 更新按钮状态
+            btn.dataset.include = newInclude;
+            btn.textContent = newInclude ? '👁️' : '🙈';
+            btn.title = newInclude ? '已加入上下文记忆（点击移除）' : '未加入上下文记忆（点击加入）';
+          } catch (error) {
+            console.error('更新窥屏历史记录失败:', error);
+            alert('更新失败，请重试');
+          }
+        });
+      });
+    }
+
+    // 显示弹窗
+    modal.classList.add("visible");
   }
 
   /**
@@ -45036,6 +45254,62 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     /**
+     * 将界面ID转换为用户友好的名称
+     * @param {string} screenId - 界面ID
+     * @param {object} activePetChat - 当前桌宠角色（用于获取聊天信息）
+     * @returns {string} 用户友好的界面名称
+     */
+    function getScreenFriendlyName(screenId, activePetChat = null) {
+      const screenNameMap = {
+        "chat-interface-screen": () => {
+          if (!state.activeChatId || !state.chats[state.activeChatId]) {
+            return "聊天页面";
+          }
+          const currentChat = state.chats[state.activeChatId];
+          const chatTitle = document.getElementById("chat-header-title")?.textContent || currentChat.name;
+          return `与"${chatTitle}"的聊天页面`;
+        },
+        "qzone-screen": "QZone动态页面",
+        "character-chat-list-screen": () => {
+          const qqInfo = getQQMessageInfo();
+          if (qqInfo) {
+            return `"${qqInfo.characterName}"的QQ消息页面`;
+          }
+          return "QQ消息页面";
+        },
+        "calendar-screen": "日历页面",
+        "lovers-space-screen": () => {
+          if (!state.activeChatId || !state.chats[state.activeChatId]) {
+            return "情侣空间页面";
+          }
+          const currentChat = state.chats[state.activeChatId];
+          return `与"${currentChat.name}"的情侣空间页面`;
+        },
+        "weibo-screen": "微博页面",
+        "home-screen": "主屏幕",
+        "chat-list-screen": "聊天列表页面",
+        "settings-screen": "设置页面",
+        "studio-screen": "lrq小劇場页面",
+        "tukey-accounting-screen": "兔k记账页面",
+        "kk-checkin-screen": "kk查岗页面"
+      };
+
+      if (typeof screenNameMap[screenId] === "function") {
+        try {
+          return screenNameMap[screenId]();
+        } catch (error) {
+          console.error("获取界面名称失败:", error);
+          return screenId.replace(/-screen$/, "页面");
+        }
+      } else if (screenNameMap[screenId]) {
+        return screenNameMap[screenId];
+      } else {
+        // 默认处理：将screenId转换为友好名称
+        return screenId.replace(/-screen$/, "页面").replace(/-/g, " ");
+      }
+    }
+
+    /**
      * 生成基础提示词模板
      * @param {object} activePetChat - 窥屏角色对象
      * @param {string} context - 上下文描述
@@ -45073,21 +45347,35 @@ document.addEventListener("DOMContentLoaded", () => {
 你正在【窥屏】用户手机画面，查看用户在做什么。${context}${situationText}${recentHistoryText}${worldBookText}
 
 ${content ? `# 页面内容\n${content}\n` : ""}
-# 思考角度
-请从【窥屏、查用户手机】的角度开始思考。你需要：
+# 思考步骤（思维链）
+请按照以下步骤思考并输出：
+
+**第一步：分析页面**
+先简单分析一下这是什么页面、用户在做什么或查看什么内容。用一句话描述即可。
+
+**第二步：思考角度**
 1. 根据你的人设和与用户的最近聊天记录，确定你是在什么场合下窥屏的（例如：偷偷查手机、就在用户旁边看她的手机等）
 2. 理解页面内容关于谁的（例如：聊天页面是自己和用户的、情侣空间是用户和charA开启的等）
 3. 根据页面内容和你的窥屏场合，做出符合你人设的自然反应
 
-# 任务
-根据以上信息，用符合你人设的方式，表达你作为窥屏者的想法或反应。你可以：
+**第三步：生成回复**
+根据你的分析、人设和窥屏场合，用符合你人设的方式，表达你作为窥屏者的想法或反应。你可以：
 - 对页面上的内容表示好奇、吃醋或调侃（从窥屏者的角度）
 - 对用户正在查看的内容进行评论或吐槽（从窥屏者的角度）
 - 表达作为窥屏者发现这些信息时的心理活动
 - 根据窥屏场合（偷偷查手机 vs 在旁边看手机）调整你的反应语气和内容
 - 其他符合你人设的自然反应
 
-请直接输出你的反应，不要添加任何格式标记，语气要自然、符合你的人设。记住，你是在窥屏，需要根据你的窥屏场合做出合适的反应。`;
+# 输出格式要求
+请严格按照以下格式输出，用【页面分析】和【回复】两个标记分开：
+
+【页面分析】
+（这里写你的页面分析，一句话描述这是什么页面、用户在做什么）
+
+【回复】
+（这里写你的实际回复内容，语气要自然、符合你的人设）
+
+记住：必须包含【页面分析】和【回复】两个标记，这样才能正确解析你的回答。`;
     }
 
     /**
@@ -45513,15 +45801,76 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
 
       showPetWaitingBubble();
       try {
-        const reply = await callPetAI(systemPrompt);
+        const screenId = getCurrentScreenId();
+        
+        // 一步调用AI，同时进行页面分析和生成回复
+        const fullReply = await callPetAI(systemPrompt);
         hidePetWaitingBubble();
         
         // 二次检查：如果回复为空，显示错误信息
-        if (!reply || reply.trim() === '') {
+        if (!fullReply || fullReply.trim() === '') {
           throw new Error('API返回空内容');
         }
         
+        // 解析AI回复，提取页面分析和实际回复
+        let pageAnalysis = "";
+        let reply = "";
+        
+        // 尝试解析格式化的回复
+        const analysisMatch = fullReply.match(/【页面分析】\s*([\s\S]*?)(?=【回复】|$)/);
+        const replyMatch = fullReply.match(/【回复】\s*([\s\S]*?)$/);
+        
+        if (analysisMatch && replyMatch) {
+          // 成功解析格式化的回复
+          pageAnalysis = analysisMatch[1].trim();
+          reply = replyMatch[1].trim();
+        } else {
+          // 如果没有按格式输出，尝试其他解析方式
+          // 检查是否有其他分隔符
+          const altAnalysisMatch = fullReply.match(/\[页面分析\]\s*([\s\S]*?)(?=\[回复\]|$)/i);
+          const altReplyMatch = fullReply.match(/\[回复\]\s*([\s\S]*?)$/i);
+          
+          if (altAnalysisMatch && altReplyMatch) {
+            pageAnalysis = altAnalysisMatch[1].trim();
+            reply = altReplyMatch[1].trim();
+          } else {
+            // 如果完全没有格式，尝试按段落分割（第一段作为分析，其余作为回复）
+            const paragraphs = fullReply.split(/\n\s*\n/).filter(p => p.trim());
+            if (paragraphs.length >= 2) {
+              pageAnalysis = paragraphs[0].trim();
+              reply = paragraphs.slice(1).join('\n\n').trim();
+            } else {
+              // 如果只有一段，使用默认分析，整段作为回复
+              pageAnalysis = getScreenFriendlyName(screenId, activePetChat);
+              reply = fullReply.trim();
+            }
+          }
+        }
+        
+        // 如果解析失败，使用默认值
+        if (!pageAnalysis || pageAnalysis === '') {
+          pageAnalysis = getScreenFriendlyName(screenId, activePetChat);
+        }
+        if (!reply || reply === '') {
+          reply = fullReply.trim();
+        }
+        
+        // 显示回复（只显示实际回复部分，不显示分析部分）
         showPetReplyBubble(reply);
+        
+        // 保存桌宠窥屏历史记录（使用分析后的页面描述）
+        try {
+          await db.desktopPetPeekingHistory.add({
+            chatId: activePetChat.id,
+            timestamp: Date.now(),
+            screenId: screenId || "未知界面",
+            screenContent: pageAnalysis,
+            response: reply,
+            includeInMemory: false // 默认不加入上下文记忆
+          });
+        } catch (error) {
+          console.error("保存桌宠窥屏历史记录失败:", error);
+        }
       } catch (error) {
         console.error("桌宠AI回复失败:", error);
         hidePetWaitingBubble();
@@ -46226,7 +46575,7 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
 
     document
       .getElementById("char-heart-btn")
-      .addEventListener("click", openInnerVoiceModal);
+      .addEventListener("click", openDesktopPetPeekingHistory);
 
     document
       .getElementById("close-inner-voice-modal")
