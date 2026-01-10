@@ -1126,6 +1126,7 @@ document.addEventListener("DOMContentLoaded", () => {
     "kk-checkin": "kk查岗",
     studio: "lrq小剧场",
     calendar: "日历",
+    "task-splitter": "拆分机",
   };
 
   const STICKER_REGEX =
@@ -21716,6 +21717,7 @@ document.addEventListener("DOMContentLoaded", () => {
       "kk-checkin": "kk查岗",
       studio: "lrq小剧场",
       calendar: "日历",
+      "task-splitter": "拆分机",
     };
 
     for (const iconId in state.globalSettings.appIcons) {

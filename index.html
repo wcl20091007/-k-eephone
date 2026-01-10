@@ -81,6 +81,7 @@
     <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
     <script src="tukey-accounting.js" defer></script>
     <script src="kk-checkin.js" defer></script>
+    <script src="task-splitter.js" defer></script>
     <!-- 核心模块 - 按依赖顺序加载 -->
     <script src="app-state.js" defer></script>
     <script src="tarot-data.js" defer></script>
@@ -574,7 +575,7 @@
             </div>
           </div>
 
-          <!-- 第三页：日历app -->
+          <!-- 第三页：日历app和拆分机app -->
           <div class="home-page">
             <div style="position: absolute; top: 200px; left: 50%; transform: translateX(-50%);">
               <div class="desktop-app-icon" id="calendar-app-icon" onclick="showScreen('calendar-screen')">
@@ -586,6 +587,18 @@
                   />
                 </div>
                 <span class="label">日历</span>
+              </div>
+            </div>
+            <div style="position: absolute; top: 350px; left: 50%; transform: translateX(-50%);">
+              <div class="desktop-app-icon" id="task-splitter-app-icon" onclick="openTaskSplitter()">
+                <div class="icon-bg-desktop">
+                  <img
+                    id="icon-img-task-splitter"
+                    src="https://i.postimg.cc/pr0T3WfC/douban-icon.png"
+                    alt="拆分机"
+                  />
+                </div>
+                <span class="label">拆分机</span>
               </div>
             </div>
           </div>
@@ -13792,6 +13805,265 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           <div id="wardrobe-grid" class="wardrobe-grid">
             <!-- 衣服卡片由JS生成 -->
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 拆分机app - 角色选择界面 -->
+    <div id="task-splitter-char-selection-screen" class="screen">
+      <div class="header">
+        <span class="back-btn" onclick="showScreen('home-screen')">‹</span>
+        <span>选择角色</span>
+        <span style="width: 30px"></span>
+      </div>
+      <div id="task-splitter-char-list" class="list-container">
+        <!-- 角色列表将由JS动态生成 -->
+      </div>
+    </div>
+
+    <!-- 拆分机app - 主界面 -->
+    <div id="task-splitter-main-screen" class="screen">
+      <div class="header">
+        <span class="back-btn" id="task-splitter-back-btn">‹</span>
+        <span id="task-splitter-title">拆分机</span>
+        <span style="width: 30px"></span>
+      </div>
+      
+      <!-- 上半部分：自定义图片区域（立绘区域，更大范围） -->
+      <div id="task-splitter-image-area" style="
+        height: 60vh;
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        position: relative;
+        background-color: #f0f0f0;
+      ">
+        <!-- 设置按钮在右上角 -->
+        <div id="task-splitter-image-settings-btn" style="
+          position: absolute;
+          top: 10px;
+          right: 10px;
+          width: 36px;
+          height: 36px;
+          border-radius: 50%;
+          background: rgba(255, 255, 255, 0.8);
+          backdrop-filter: blur(10px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+          z-index: 10;
+        ">⚙️</div>
+        
+        <!-- 对话气泡（galgame样式） -->
+        <div id="task-splitter-dialog-bubble" style="
+          position: absolute;
+          bottom: 20px;
+          left: 20px;
+          right: 20px;
+          background: rgba(255, 255, 255, 0.95);
+          backdrop-filter: blur(10px);
+          border-radius: 15px;
+          padding: 20px;
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+          display: none;
+          z-index: 5;
+          max-height: 200px;
+          overflow-y: auto;
+        ">
+          <div id="task-splitter-dialog-content" style="
+            font-size: 16px;
+            line-height: 1.6;
+            color: #333;
+          "></div>
+        </div>
+      </div>
+
+      <!-- 下半部分：任务显示区域 -->
+      <div id="task-splitter-content-area" style="
+        height: 40vh;
+        overflow-y: auto;
+        padding: 20px;
+        background: #fff;
+      ">
+        <!-- 初始界面：角色头像和输入 -->
+        <div id="task-splitter-initial-view" style="
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          height: 100%;
+          text-align: center;
+        ">
+          <div id="task-splitter-char-avatar-container" style="
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            overflow: hidden;
+            margin-bottom: 20px;
+            cursor: pointer;
+            border: 3px solid #4CAF50;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+          ">
+            <img id="task-splitter-char-avatar" src="" alt="角色头像" style="
+              width: 100%;
+              height: 100%;
+              object-fit: cover;
+            ">
+          </div>
+          <p id="task-splitter-greeting" style="
+            font-size: 18px;
+            color: #333;
+            margin-bottom: 30px;
+          "></p>
+          <input 
+            type="text" 
+            id="task-splitter-goal-input" 
+            placeholder="输入你的目标..."
+            style="
+              width: 80%;
+              max-width: 400px;
+              padding: 12px 16px;
+              font-size: 16px;
+              border: 2px solid #4CAF50;
+              border-radius: 25px;
+              outline: none;
+            "
+          >
+          <button 
+            id="task-splitter-submit-goal-btn" 
+            style="
+              margin-top: 15px;
+              padding: 10px 30px;
+              font-size: 16px;
+              background: #4CAF50;
+              color: white;
+              border: none;
+              border-radius: 25px;
+              cursor: pointer;
+            "
+          >提交目标</button>
+        </div>
+
+        <!-- 询问当前状态 -->
+        <div id="task-splitter-current-status-view" style="display: none;">
+          <p style="font-size: 18px; color: #333; margin-bottom: 20px; text-align: center;">
+            你现在在做什么？
+          </p>
+          <input 
+            type="text" 
+            id="task-splitter-current-status-input" 
+            placeholder="例如：躺在床上刷手机"
+            style="
+              width: 80%;
+              max-width: 400px;
+              padding: 12px 16px;
+              font-size: 16px;
+              border: 2px solid #4CAF50;
+              border-radius: 25px;
+              outline: none;
+              display: block;
+              margin: 0 auto;
+            "
+          >
+          <button 
+            id="task-splitter-submit-status-btn" 
+            style="
+              margin-top: 15px;
+              padding: 10px 30px;
+              font-size: 16px;
+              background: #4CAF50;
+              color: white;
+              border: none;
+              border-radius: 25px;
+              cursor: pointer;
+              display: block;
+              margin: 15px auto;
+            "
+          >继续</button>
+        </div>
+
+        <!-- 加载动画 -->
+        <div id="task-splitter-loading-view" style="display: none; text-align: center; padding: 40px;">
+          <div style="font-size: 24px; margin-bottom: 20px;">⏳</div>
+          <p style="font-size: 16px; color: #666;">任务拆解中...</p>
+        </div>
+
+        <!-- 任务列表视图 -->
+        <div id="task-splitter-tasks-view" style="display: none;">
+          <div id="task-splitter-tasks-container">
+            <!-- 任务分组将由JS动态生成 -->
+          </div>
+
+          <div id="task-splitter-completion-view" style="display: none; text-align: center; padding: 40px;">
+            <div style="font-size: 48px; margin-bottom: 20px;">🎉</div>
+            <div id="task-splitter-end-message" style="
+              font-size: 18px;
+              color: #333;
+              line-height: 1.6;
+              margin-bottom: 20px;
+            "></div>
+            <button 
+              id="task-splitter-new-goal-btn" 
+              style="
+                margin-top: 20px;
+                padding: 12px 30px;
+                font-size: 16px;
+                background: #4CAF50;
+                color: white;
+                border: none;
+                border-radius: 25px;
+                cursor: pointer;
+              "
+            >+ 新增目标</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 右下角"遇到困难"按钮 -->
+      <button id="task-splitter-help-btn" style="
+        position: fixed;
+        bottom: 80px;
+        right: 20px;
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        color: white;
+        border: none;
+        font-size: 14px;
+        cursor: pointer;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        z-index: 100;
+        display: none;
+      ">遇到困难</button>
+    </div>
+
+    <!-- 拆分机app - 背景图片设置模态框 -->
+    <div id="task-splitter-image-settings-modal" class="modal">
+      <div class="modal-content" style="width: 90%; max-width: 500px;">
+        <div class="modal-header">
+          <span>设置背景图片</span>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>上传本地图片</label>
+            <input type="file" id="task-splitter-image-upload" accept="image/*" style="margin-top: 10px;">
+          </div>
+          <div class="form-group" style="margin-top: 20px;">
+            <label>或输入图片URL</label>
+            <input 
+              type="text" 
+              id="task-splitter-image-url-input" 
+              placeholder="https://..."
+              style="width: 100%; padding: 8px; margin-top: 10px; border: 1px solid #ddd; border-radius: 4px;"
+            >
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="cancel" id="task-splitter-image-cancel-btn">取消</button>
+          <button class="save" id="task-splitter-image-save-btn">保存</button>
         </div>
       </div>
     </div>
