@@ -9416,10 +9416,12 @@ document.addEventListener("DOMContentLoaded", () => {
       // 【新增】读取标记为includeInMemory的桌宠窥屏历史记录，按时间戳插入到对话历史中
       let peekingRecordsForHistory = [];
       try {
+        // 读取标记为includeInMemory的窥屏记录
+        // 默认状态为打开（true），只有明确为false的记录才不读取
         const peekingRecords = await db.desktopPetPeekingHistory
           .where("chatId")
           .equals(chatId)
-          .and(record => record.includeInMemory === true)
+          .filter(record => record.includeInMemory !== false) // 只有明确为false时才排除
           .toArray();
         
         if (peekingRecords.length > 0) {
@@ -27262,13 +27264,15 @@ document.addEventListener("DOMContentLoaded", () => {
           : (item.screenId || "未知界面");
         
         // 眼睛图标：睁开表示已加入上下文记忆，闭上表示未加入
-        const eyeIcon = item.includeInMemory 
+        // 默认状态为打开（true），如果字段不存在或为undefined/null，也视为打开
+        const isInMemory = item.includeInMemory !== false; // 只有明确为false时才视为关闭
+        const eyeIcon = isInMemory 
           ? '👁️' // 睁开的眼睛
           : '🙈'; // 闭上的眼睛
         
         itemEl.innerHTML = `
           <div style="position: absolute; top: 10px; right: 10px; display: flex; gap: 8px; align-items: center;">
-            <span class="peeking-history-eye-btn" data-id="${item.id}" data-include="${item.includeInMemory || false}" style="cursor: pointer; font-size: 20px; user-select: none;" title="${item.includeInMemory ? '已加入上下文记忆（点击移除）' : '未加入上下文记忆（点击加入）'}">${eyeIcon}</span>
+            <span class="peeking-history-eye-btn" data-id="${item.id}" data-include="${isInMemory}" style="cursor: pointer; font-size: 20px; user-select: none;" title="${isInMemory ? '已加入上下文记忆（点击移除）' : '未加入上下文记忆（点击加入）'}">${eyeIcon}</span>
             <span class="peeking-history-delete-btn" data-id="${item.id}" style="cursor: pointer; font-size: 18px; color: #ff3b30; user-select: none;" title="删除">×</span>
           </div>
           <div style="font-size: 12px; color: #999; margin-bottom: 8px;">${dateString}</div>
@@ -45866,7 +45870,7 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
             screenId: screenId || "未知界面",
             screenContent: pageAnalysis,
             response: reply,
-            includeInMemory: false // 默认不加入上下文记忆
+            includeInMemory: true // 默认加入上下文记忆
           });
         } catch (error) {
           console.error("保存桌宠窥屏历史记录失败:", error);
