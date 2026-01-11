@@ -1450,6 +1450,63 @@ body {
 }
 /* ▲▲▲ 替换结束 ▲▲▲ */
 
+/* 翻译气泡样式支持 - 确保details/summary在气泡内正确显示 */
+.message-bubble .content details {
+  margin: 0;
+  padding: 6px 9px; /* 匹配气泡的padding比例 (8px 12px -> 6px 9px) */
+  display: block;
+  background: transparent;
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+}
+
+.message-bubble .content details:hover {
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
+.message-bubble .content details summary {
+  display: block;
+  list-style: none;
+  margin: 0;
+  padding: 2px 0;
+  outline: none;
+  cursor: pointer;
+  line-height: 1.6;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.message-bubble .content details summary::-webkit-details-marker {
+  display: none;
+}
+
+.message-bubble .content details summary::marker {
+  display: none;
+}
+
+.message-bubble .content details[open] summary {
+  margin-bottom: 0;
+}
+
+.message-bubble .content details > div {
+  margin-top: 4px;
+  padding-top: 4px;
+  font-size: 0.85em;
+  opacity: 0.8;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 0.8;
+    transform: translateY(0);
+  }
+}
+
 /* === 气泡主题样式 === */
 .message-bubble.user .content {
   background-color: rgba(255, 255, 255, 0.75);

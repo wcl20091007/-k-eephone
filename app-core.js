@@ -8368,9 +8368,12 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // 检测是否是HTML消息（角色发出的消息且包含HTML标签）
+    // 排除 <details> 和 <summary> 标签，让它们走普通消息路径，在气泡内显示
     const isHtmlMessage = !isUser && 
                           typeof msg.content === "string" && 
-                          /<[a-z][\s\S]*>/i.test(msg.content);
+                          /<[a-z][\s\S]*>/i.test(msg.content) &&
+                          !msg.content.includes('<details') &&
+                          !msg.content.includes('</details>');
 
     // 如果是HTML消息（角色发出的），不使用气泡包裹，直接显示内容
     if (isHtmlMessage) {
