@@ -38714,7 +38714,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
             // 清空输入框
             chatInput.value = "";
-            chatInput.style.height = "auto";
+            chatInput.style.height = "40px"; // 重置为空状态的高度
             chatInput.focus();
 
             return; // 拦截成功，不再执行后续的普通发送逻辑
@@ -38870,7 +38870,7 @@ document.addEventListener("DOMContentLoaded", () => {
         appendMessage(msg, chat);
         renderChatList();
         chatInput.value = "";
-        chatInput.style.height = "auto";
+        chatInput.style.height = "40px"; // 重置为空状态的高度
         chatInput.focus();
 
         cancelReplyMode();
@@ -38884,10 +38884,21 @@ document.addEventListener("DOMContentLoaded", () => {
         document.getElementById("send-btn").click();
       }
     });
-    chatInput.addEventListener("input", () => {
+    // 初始化输入框高度，确保空状态时高度正确
+    const adjustChatInputHeight = () => {
       chatInput.style.height = "auto";
-      chatInput.style.height = chatInput.scrollHeight + "px";
-    });
+      // 如果输入框为空，保持最小高度；否则根据内容调整
+      if (chatInput.value.trim() === "") {
+        chatInput.style.height = "40px";
+      } else {
+        chatInput.style.height = Math.max(40, chatInput.scrollHeight) + "px";
+      }
+    };
+    
+    // 初始化时设置一次高度
+    adjustChatInputHeight();
+    
+    chatInput.addEventListener("input", adjustChatInputHeight);
 
     document
       .getElementById("wallpaper-upload-input")

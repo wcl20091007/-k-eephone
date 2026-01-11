@@ -801,6 +801,9 @@ body {
   font-size: 16px;
   max-height: 100px;
   resize: none;
+  min-height: 40px; /* 设置最小高度，防止初始状态和输入第一个字符时高度不一致 */
+  height: 40px; /* 设置初始高度，确保空状态时高度固定 */
+  box-sizing: border-box; /* 确保 padding 被包含在高度计算中 */
 }
 .action-button {
   border: none;
