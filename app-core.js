@@ -6828,45 +6828,74 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // 【优先级】加载优先级设置
     const prioritySelect = document.getElementById("world-book-priority-select");
+    const priorityHint = document.getElementById("world-book-priority-hint");
     
     // 【属性】加载属性设置
     const typeSelect = document.getElementById("world-book-type-select");
-    typeSelect.value = book.type || ""; // 默认为空（普通）
     
-    // 【破限属性优化】当属性为破限时，自动设置优先级为high并禁用选择
+    // 【破限属性优化】当属性为破限时，自动设置优先级为breakLimit并禁用选择
     // 先移除旧的监听器（如果存在），避免重复绑定
     const newTypeSelect = typeSelect.cloneNode(true);
     typeSelect.parentNode.replaceChild(newTypeSelect, typeSelect);
     
+    // 【修复属性保存问题】在克隆后重新设置值
+    newTypeSelect.value = book.type || ""; // 默认为空（普通）
+    
     // 处理破限属性的优先级设置
     function updatePriorityForBreakLimit() {
       if (newTypeSelect.value === "破限") {
-        prioritySelect.value = "high";
+        prioritySelect.value = "breakLimit"; // 破限属性使用最高优先级
         prioritySelect.disabled = true;
         prioritySelect.style.opacity = "0.6";
         prioritySelect.style.cursor = "not-allowed";
+        // 更新说明文字
+        if (priorityHint) {
+          priorityHint.textContent = "破限属性：最高优先级，必定第一个阅读，比高优先级还高。此选项已自动锁定。";
+          priorityHint.style.color = "#ff6b6b";
+        }
       } else {
         prioritySelect.disabled = false;
         prioritySelect.style.opacity = "1";
         prioritySelect.style.cursor = "pointer";
-        // 如果不是破限，恢复原来的优先级设置
-        if (book.priority) {
+        // 恢复原来的优先级设置
+        if (book.priority && book.priority !== "breakLimit") {
           prioritySelect.value = book.priority;
+        } else if (!book.priority) {
+          prioritySelect.value = "medium"; // 默认为中优先级
+        }
+        // 恢复说明文字
+        if (priorityHint) {
+          priorityHint.textContent = "控制世界书的读取顺序。高优先级最先读取，中优先级在读取人设前读取，低优先级在读取人设后读取。";
+          priorityHint.style.color = "#888";
         }
       }
     }
     
     // 初始化时检查
     if (book.type === "破限") {
-      prioritySelect.value = "high";
+      prioritySelect.value = "breakLimit"; // 破限属性使用最高优先级
       prioritySelect.disabled = true;
       prioritySelect.style.opacity = "0.6";
       prioritySelect.style.cursor = "not-allowed";
+      // 更新说明文字
+      if (priorityHint) {
+        priorityHint.textContent = "破限属性：最高优先级，必定第一个阅读，比高优先级还高。此选项已自动锁定。";
+        priorityHint.style.color = "#ff6b6b";
+      }
     } else {
-      prioritySelect.value = book.priority || "medium"; // 默认为中优先级
+      // 如果之前保存的是breakLimit但不是破限，重置为medium
+      const savedPriority = (book.priority === "breakLimit" && book.type !== "破限") 
+        ? "medium" 
+        : (book.priority || "medium");
+      prioritySelect.value = savedPriority;
       prioritySelect.disabled = false;
       prioritySelect.style.opacity = "1";
       prioritySelect.style.cursor = "pointer";
+      // 恢复说明文字
+      if (priorityHint) {
+        priorityHint.textContent = "控制世界书的读取顺序。高优先级最先读取，中优先级在读取人设前读取，低优先级在读取人设后读取。";
+        priorityHint.style.color = "#888";
+      }
     }
     
     // 监听属性选择变化
@@ -8520,7 +8549,8 @@ document.addEventListener("DOMContentLoaded", () => {
     // 【世界书关键词优化】将世界书读取提到这里，确保线下模式也能生效
     // 【全局世界书】自动加载全局世界书
     // 【优先级排序】按照优先级分组世界书内容
-    let worldBookContextHigh = ""; // 高优先级（最先）
+    let worldBookContextBreakLimit = ""; // 破限属性：最高优先级（比high还高，最先读取）
+    let worldBookContextHigh = ""; // 高优先级
     let worldBookContextMedium = ""; // 中优先级
     let worldBookContextLow = ""; // 低优先级（最后）
     
@@ -8547,6 +8577,17 @@ document.addEventListener("DOMContentLoaded", () => {
       // 构建各优先级的内容
       // 【HTML属性优化】只有html属性的条目保留HTML格式，私聊和群聊都支持HTML
       // 这是聊天页面，需要支持HTML格式生成
+      // 【破限属性最高优先级】破限属性内容最先读取，比high还高
+      const breakLimitContent = sortedBooks.breakLimit
+        .map((worldBook) => {
+          const shouldPreserveHtml = worldBook.type === "html";
+          const processedContent = shouldPreserveHtml 
+            ? preserveHtmlFormat(worldBook.content)
+            : stripHtmlAndCode(worldBook.content);
+          return `\n\n## 世界书条目: ${worldBook.name}\n${processedContent}`;
+        })
+        .join("");
+      
       const highPriorityContent = sortedBooks.high
         .map((worldBook) => {
           const shouldPreserveHtml = worldBook.type === "html";
@@ -8578,12 +8619,19 @@ document.addEventListener("DOMContentLoaded", () => {
         .join("");
       
       // 如果存在html属性条目，添加HTML格式保留提示（私聊和群聊都需要）
-      const hasHtmlEntries = sortedBooks.high.some(wb => wb.type === "html") ||
+      const hasHtmlEntries = sortedBooks.breakLimit.some(wb => wb.type === "html") ||
+                             sortedBooks.high.some(wb => wb.type === "html") ||
                              sortedBooks.medium.some(wb => wb.type === "html") ||
                              sortedBooks.low.some(wb => wb.type === "html");
       const htmlFormatInstruction = hasHtmlEntries 
         ? "\n【【【重要：HTML格式保留】】】以下标记为HTML属性的世界书内容中可能包含HTML标签（如<div>、<span>、<b>、<i>等），你【必须】在生成回复时保持这些HTML格式，不要将它们转换为纯文本。如果世界书中使用了HTML格式来展示特定样式或结构，你需要在回复中同样使用相同的HTML格式。\n"
         : "";
+      
+      // 【破限属性最高优先级】破限属性内容最先读取
+      let worldBookContextBreakLimit = "";
+      if (breakLimitContent) {
+        worldBookContextBreakLimit = `\n\n# 【破限属性 - 最高优先级】核心世界观设定 (必须严格遵守以下所有设定，优先级高于所有其他设定)${htmlFormatInstruction}${breakLimitContent}\n`;
+      }
       
       if (highPriorityContent) {
         worldBookContextHigh = `\n\n# 【高优先级】核心世界观设定 (必须严格遵守以下所有设定)${htmlFormatInstruction}${highPriorityContent}\n`;
@@ -8596,8 +8644,8 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
     
-    // 组合所有优先级的内容（群聊中按顺序排列）
-    const worldBookContext = worldBookContextHigh + worldBookContextMedium + worldBookContextLow;
+    // 组合所有优先级的内容（群聊中按顺序排列：破限 > 高 > 中 > 低）
+    const worldBookContext = worldBookContextBreakLimit + worldBookContextHigh + worldBookContextMedium + worldBookContextLow;
     // --- 线下模式核心拦截逻辑 ---
     if (
       !chat.isGroup &&
@@ -9680,7 +9728,8 @@ document.addEventListener("DOMContentLoaded", () => {
       // 【世界书关键词优化】根据关键词过滤世界书
       // 【全局世界书】自动加载全局世界书
       // 【优先级排序】按照优先级分组世界书内容
-      let worldBookContentHigh = ""; // 高优先级（最先）
+      let worldBookContentBreakLimit = ""; // 破限属性：最高优先级（比high还高，最先读取）
+      let worldBookContentHigh = ""; // 高优先级
       let worldBookContentMedium = ""; // 中优先级（在人设前）
       let worldBookContentLow = ""; // 低优先级（在人设后）
       
@@ -9703,6 +9752,17 @@ document.addEventListener("DOMContentLoaded", () => {
         
         // 【优先级排序】按照优先级分组世界书
         const sortedBooks = sortWorldBooksByPriority(filteredBooks);
+        
+        // 【破限属性最高优先级】破限属性内容最先读取，比high还高
+        const breakLimitContent = sortedBooks.breakLimit
+          .map((worldBook) => {
+            const shouldPreserveHtml = worldBook.type === "html";
+            const processedContent = shouldPreserveHtml 
+              ? preserveHtmlFormat(worldBook.content)
+              : stripHtmlAndCode(worldBook.content);
+            return `\n\n## 世界书: ${worldBook.name}\n${processedContent}`;
+          })
+          .join("");
         
         // 构建高优先级世界书内容
         // 【HTML属性优化】只有html属性的条目保留HTML格式，私聊和群聊都支持HTML
@@ -9740,7 +9800,8 @@ document.addEventListener("DOMContentLoaded", () => {
           .join("");
         
         // 如果存在html属性条目，添加HTML格式保留提示（私聊和群聊都需要）
-        const hasHtmlEntries = sortedBooks.high.some(wb => wb.type === "html") ||
+        const hasHtmlEntries = sortedBooks.breakLimit.some(wb => wb.type === "html") ||
+                               sortedBooks.high.some(wb => wb.type === "html") ||
                                sortedBooks.medium.some(wb => wb.type === "html") ||
                                sortedBooks.low.some(wb => wb.type === "html");
         const htmlFormatInstruction = hasHtmlEntries 
@@ -9748,6 +9809,10 @@ document.addEventListener("DOMContentLoaded", () => {
           : "";
         
         // 分别构建各优先级的内容
+        // 【破限属性最高优先级】破限属性内容最先读取
+        if (breakLimitContent) {
+          worldBookContentBreakLimit = `\n\n# 【破限属性 - 最高优先级】核心世界观设定 (必须严格遵守以下所有设定，优先级高于所有其他设定)${htmlFormatInstruction}${breakLimitContent}\n`;
+        }
         if (highPriorityContent) {
           worldBookContentHigh = `\n\n# 【高优先级】核心世界观设定 (必须严格遵守以下所有设定)${htmlFormatInstruction}${highPriorityContent}\n`;
         }
@@ -10106,6 +10171,7 @@ document.addEventListener("DOMContentLoaded", () => {
 			${summaryContext}
 			${announcementContext}
 			${redPacketContext}
+			${worldBookContentBreakLimit}
 			${worldBookContentHigh}
 			${worldBookContentMedium}
 			${worldBookContentLow}
@@ -10418,6 +10484,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 			你现在将扮演一个名为“**${chat.name}**”的角色，与用户（你的聊天对象）进行一场自然的、生活化的在线聊天。
 
+			${worldBookContentBreakLimit}
 			${worldBookContentHigh}
 			**1. 角色基本设定:**
 			${worldBookContentMedium}
@@ -16540,7 +16607,8 @@ document.addEventListener("DOMContentLoaded", () => {
     // 【世界书关键词优化】根据关键词过滤世界书
     // 【全局世界书】自动加载全局世界书
     // 【优先级排序】按照优先级分组世界书内容
-    let worldBookContextHigh = ""; // 高优先级（最先）
+    let worldBookContextBreakLimit = ""; // 破限属性：最高优先级（比high还高，最先读取）
+    let worldBookContextHigh = ""; // 高优先级
     let worldBookContextMedium = ""; // 中优先级（在人设前）
     let worldBookContextLow = ""; // 低优先级（在人设后）
     
@@ -16566,6 +16634,13 @@ document.addEventListener("DOMContentLoaded", () => {
       
       // 构建各优先级的内容
       // 【HTML属性优化】非私聊场景中，所有条目都清理HTML格式
+      // 【破限属性最高优先级】破限属性内容最先读取，比high还高
+      const breakLimitContent = sortedBooks.breakLimit
+        .map((worldBook) => {
+          return `\n\n## 世界书: ${worldBook.name}\n${stripHtmlAndCode(worldBook.content)}`;
+        })
+        .join("");
+      
       const highPriorityContent = sortedBooks.high
         .map((worldBook) => {
           return `\n\n## 世界书: ${worldBook.name}\n${stripHtmlAndCode(worldBook.content)}`;
@@ -16584,6 +16659,10 @@ document.addEventListener("DOMContentLoaded", () => {
         })
         .join("");
       
+      // 【破限属性最高优先级】破限属性内容最先读取
+      if (breakLimitContent) {
+        worldBookContextBreakLimit = `\n\n# 【破限属性 - 最高优先级】核心世界观设定 (你必须严格遵守，优先级高于所有其他设定)\n${breakLimitContent}\n`;
+      }
       if (highPriorityContent) {
         worldBookContextHigh = `\n\n# 【高优先级】核心世界观设定 (你必须严格遵守)\n${highPriorityContent}\n`;
       }
@@ -16594,9 +16673,9 @@ document.addEventListener("DOMContentLoaded", () => {
         worldBookContextLow = `\n\n# 【低优先级】核心世界观设定 (你必须严格遵守)\n${lowPriorityContent}\n`;
       }
     }
-
-    // 组合所有优先级的内容
-    const worldBookContext = worldBookContextHigh + worldBookContextMedium + worldBookContextLow;
+    
+    // 组合所有优先级的内容（破限 > 高 > 中 > 低）
+    const worldBookContext = worldBookContextBreakLimit + worldBookContextHigh + worldBookContextMedium + worldBookContextLow;
 
     // 【NPC库优化】从全局NPC库获取启用的NPC
     const npcLibrary = await getEnabledNpcs(chat);
@@ -16831,6 +16910,7 @@ document.addEventListener("DOMContentLoaded", () => {
 			-   **【新】在情侣空间分享书籍**: \`[{"type": "ls_share", "shareType": "book", "title": "书名", "summary": "在这里写下这本书的简介...", "thoughts": "在这里写下你分享这本书的感想..."}]\`
 
 			# 供你决策的参考信息：
+			${worldBookContextBreakLimit}
 			${worldBookContextHigh}
 			-   **你的角色设定**: ${chat.settings.aiPersona}
 			${worldBookContextMedium}
@@ -19753,7 +19833,8 @@ document.addEventListener("DOMContentLoaded", () => {
     // 【世界书关键词优化】根据关键词过滤世界书
     // 【全局世界书】自动加载全局世界书
     // 【优先级排序】按照优先级分组世界书内容
-    let worldBookContentHigh = ""; // 高优先级（最先）
+    let worldBookContentBreakLimit = ""; // 破限属性：最高优先级（比high还高，最先读取）
+    let worldBookContentHigh = ""; // 高优先级
     let worldBookContentMedium = ""; // 中优先级
     let worldBookContentLow = ""; // 低优先级（最后）
     
@@ -19779,6 +19860,13 @@ document.addEventListener("DOMContentLoaded", () => {
       
       // 构建各优先级的内容
       // 【HTML属性优化】视频通话场景中，所有条目都清理HTML格式
+      // 【破限属性最高优先级】破限属性内容最先读取，比high还高
+      const breakLimitContent = sortedBooks.breakLimit
+        .map((worldBook) => {
+          return `\n\n## 世界书: ${worldBook.name}\n${stripHtmlAndCode(worldBook.content)}`;
+        })
+        .join("");
+      
       const highPriorityContent = sortedBooks.high
         .map((worldBook) => {
           return `\n\n## 世界书: ${worldBook.name}\n${stripHtmlAndCode(worldBook.content)}`;
@@ -19797,6 +19885,10 @@ document.addEventListener("DOMContentLoaded", () => {
         })
         .join("");
       
+      // 【破限属性最高优先级】破限属性内容最先读取
+      if (breakLimitContent) {
+        worldBookContentBreakLimit = `\n\n# 【破限属性 - 最高优先级】核心世界观设定 (你必须严格遵守，优先级高于所有其他设定)\n${breakLimitContent}\n`;
+      }
       if (highPriorityContent) {
         worldBookContentHigh = `\n\n# 【高优先级】核心世界观设定 (你必须严格遵守)\n${highPriorityContent}\n`;
       }
@@ -19808,8 +19900,8 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
     
-    // 组合所有优先级的内容（视频通话中按顺序排列）
-    const worldBookContent = worldBookContentHigh + worldBookContentMedium + worldBookContentLow;
+    // 组合所有优先级的内容（视频通话中按顺序排列：破限 > 高 > 中 > 低）
+    const worldBookContent = worldBookContentBreakLimit + worldBookContentHigh + worldBookContentMedium + worldBookContentLow;
 
     if (userInput && videoCallState.isUserParticipating) {
       if (isVisualMode) {
@@ -20342,7 +20434,8 @@ document.addEventListener("DOMContentLoaded", () => {
     // 【世界书关键词优化】根据关键词过滤世界书
     // 【全局世界书】自动加载全局世界书
     // 【优先级排序】按照优先级分组世界书内容
-    let worldBookContentHigh = ""; // 高优先级（最先）
+    let worldBookContentBreakLimit = ""; // 破限属性：最高优先级（比high还高，最先读取）
+    let worldBookContentHigh = ""; // 高优先级
     let worldBookContentMedium = ""; // 中优先级
     let worldBookContentLow = ""; // 低优先级（最后）
     
@@ -20368,6 +20461,13 @@ document.addEventListener("DOMContentLoaded", () => {
       
       // 构建各优先级的内容
       // 【HTML属性优化】拉黑场景中，所有条目都清理HTML格式
+      // 【破限属性最高优先级】破限属性内容最先读取，比high还高
+      const breakLimitContent = sortedBooks.breakLimit
+        .map((worldBook) => {
+          return `\n\n## 世界书: ${worldBook.name}\n${stripHtmlAndCode(worldBook.content)}`;
+        })
+        .join("");
+      
       const highPriorityContent = sortedBooks.high
         .map((worldBook) => {
           return `\n\n## 世界书: ${worldBook.name}\n${stripHtmlAndCode(worldBook.content)}`;
@@ -20386,6 +20486,10 @@ document.addEventListener("DOMContentLoaded", () => {
         })
         .join("");
       
+      // 【破限属性最高优先级】破限属性内容最先读取
+      if (breakLimitContent) {
+        worldBookContentBreakLimit = `\n\n# 【破限属性 - 最高优先级】核心世界观设定 (请参考，优先级高于所有其他设定)\n${breakLimitContent}\n`;
+      }
       if (highPriorityContent) {
         worldBookContentHigh = `\n\n# 【高优先级】核心世界观设定 (请参考)\n${highPriorityContent}\n`;
       }
@@ -20397,18 +20501,16 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
     
-    // 组合所有优先级的内容
-    const worldBookContent = worldBookContentHigh + worldBookContentMedium + worldBookContentLow;
+    // 组合所有优先级的内容（破限 > 高 > 中 > 低）
+    const worldBookContent = worldBookContentBreakLimit + worldBookContentHigh + worldBookContentMedium + worldBookContentLow;
 
     const systemPrompt = `
 			# 你的任务
 			你现在是角色"${chat.name}"。你之前被用户（你的聊天对象）拉黑了，你们已经有一段时间没有联系了。
 			现在，你非常希望能够和好，重新和用户聊天。请你仔细分析下面的“被拉黑前的对话摘要”，理解当时发生了什么，然后思考一个真诚的、符合你人设、并且【针对具体事件】的申请理由。
-			${worldBookContentHigh}
+			${worldBookContent} // <--【核心】在这里注入世界书内容（包含破限属性最高优先级）
 			# 你的角色设定
-			${worldBookContentMedium}
 			${chat.settings.aiPersona}
-			${worldBookContentLow} // <--【核心】在这里注入世界书内容
 			# 被拉黑前的对话摘要 (这是你被拉黑的关键原因)
 			${contextSummary}
 			# 指令格式
@@ -21450,7 +21552,8 @@ document.addEventListener("DOMContentLoaded", () => {
       // 【世界书关键词优化】根据关键词过滤世界书
       // 【全局世界书】自动加载全局世界书
       // 【优先级排序】按照优先级分组世界书内容
-      let worldBookContentHigh = ""; // 高优先级（最先）
+      let worldBookContentBreakLimit = ""; // 破限属性：最高优先级（比high还高，最先读取）
+      let worldBookContentHigh = ""; // 高优先级
       let worldBookContentMedium = ""; // 中优先级
       let worldBookContentLow = ""; // 低优先级（最后）
       
@@ -21476,6 +21579,13 @@ document.addEventListener("DOMContentLoaded", () => {
         
         // 构建各优先级的内容
         // 【HTML属性优化】后台群聊场景中，所有条目都清理HTML格式
+        // 【破限属性最高优先级】破限属性内容最先读取，比high还高
+        const breakLimitContent = sortedBooks.breakLimit
+          .map((worldBook) => {
+            return `\n\n## 世界书: ${worldBook.name}\n${stripHtmlAndCode(worldBook.content)}`;
+          })
+          .join("");
+        
         const highPriorityContent = sortedBooks.high
           .map((worldBook) => {
             return `\n\n## 世界书: ${worldBook.name}\n${stripHtmlAndCode(worldBook.content)}`;
@@ -21494,6 +21604,10 @@ document.addEventListener("DOMContentLoaded", () => {
           })
           .join("");
         
+        // 【破限属性最高优先级】破限属性内容最先读取
+        if (breakLimitContent) {
+          worldBookContentBreakLimit = `\n\n# 【破限属性 - 最高优先级】核心世界观设定 (你必须严格遵守，优先级高于所有其他设定)\n${breakLimitContent}\n`;
+        }
         if (highPriorityContent) {
           worldBookContentHigh = `\n\n# 【高优先级】核心世界观设定 (你必须严格遵守)\n${highPriorityContent}\n`;
         }
@@ -21505,8 +21619,8 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       }
       
-      // 组合所有优先级的内容
-      const worldBookContent = worldBookContentHigh + worldBookContentMedium + worldBookContentLow;
+      // 组合所有优先级的内容（破限 > 高 > 中 > 低）
+      const worldBookContent = worldBookContentBreakLimit + worldBookContentHigh + worldBookContentMedium + worldBookContentLow;
       let musicContext = "";
       // 注意：后台群聊活动通常不与特定的“一起听歌”会话绑定，因此这里我们提供一个空的音乐上下文。
       // 如果未来需要更复杂的功能，可以在此扩展。
@@ -22845,17 +22959,23 @@ document.addEventListener("DOMContentLoaded", () => {
    */
   function sortWorldBooksByPriority(books) {
     const sorted = {
+      breakLimit: [], // 破限属性：最高优先级，比high还高，确保第一个读取
       high: [],
       medium: [],
       low: []
     };
     
     books.forEach(book => {
-      const priority = book.priority || "medium"; // 默认为中优先级
-      if (sorted[priority]) {
-        sorted[priority].push(book);
+      // 如果属性是破限，强制使用breakLimit优先级
+      if (book.type === "破限") {
+        sorted.breakLimit.push(book);
       } else {
-        sorted.medium.push(book); // 如果优先级无效，默认放到中优先级
+        const priority = book.priority || "medium"; // 默认为中优先级
+        if (sorted[priority]) {
+          sorted[priority].push(book);
+        } else {
+          sorted.medium.push(book); // 如果优先级无效，默认放到中优先级
+        }
       }
     });
     
@@ -39523,11 +39643,15 @@ document.addEventListener("DOMContentLoaded", () => {
           const typeValue = document.getElementById("world-book-type-select").value.trim();
           book.type = typeValue || null; // 如果为空则设为null
           
-          // 【优先级】保存优先级设置（破限属性强制为high）
+          // 【优先级】保存优先级设置（破限属性强制为breakLimit，比high还高）
           if (typeValue === "破限") {
-            book.priority = "high"; // 破限属性强制为最高优先级
+            book.priority = "breakLimit"; // 破限属性强制为最高优先级（比high还高）
           } else {
-            book.priority = document.getElementById("world-book-priority-select").value || "medium";
+            const priorityValue = document.getElementById("world-book-priority-select").value;
+            // 如果选择的是breakLimit但不是破限，重置为medium
+            book.priority = (priorityValue === "breakLimit" && typeValue !== "破限") 
+              ? "medium" 
+              : (priorityValue || "medium");
           }
 
           await db.worldBooks.put(book);

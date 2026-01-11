@@ -1181,11 +1181,12 @@
               id="world-book-priority-select"
               class="moe-input"
             >
+              <option value="breakLimit">破限（最高优先级，必定第一个阅读，比高优先级还高）</option>
               <option value="high">高（最高优先级，最先读取）</option>
               <option value="medium">中（比人设高，在读取人设前读取）</option>
               <option value="low">低（最低优先级，在读取人设后读取）</option>
             </select>
-            <small style="color: #888; font-size: 12px; display: block; margin-top: 4px;">
+            <small id="world-book-priority-hint" style="color: #888; font-size: 12px; display: block; margin-top: 4px;">
               控制世界书的读取顺序。高优先级最先读取，中优先级在读取人设前读取，低优先级在读取人设后读取。
             </small>
           </div>
