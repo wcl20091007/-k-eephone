@@ -14018,27 +14018,55 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
             <!-- 任务分组将由JS动态生成 -->
           </div>
 
-          <div id="task-splitter-completion-view" style="display: none; text-align: center; padding: 40px;">
-            <div style="font-size: 48px; margin-bottom: 20px;">🎉</div>
-            <div id="task-splitter-end-message" style="
-              font-size: 18px;
-              color: #333;
-              line-height: 1.6;
+          <div id="task-splitter-completion-view" style="display: none; text-align: center; padding: 20px 40px;">
+            <div style="font-size: 48px; margin-bottom: 15px;">🎉</div>
+            <div id="task-splitter-reward-container" style="
               margin-bottom: 20px;
-            "></div>
-            <button 
-              id="task-splitter-new-goal-btn" 
-              style="
-                margin-top: 20px;
-                padding: 12px 30px;
-                font-size: 16px;
-                background: #4CAF50;
+              cursor: pointer;
+              user-select: none;
+            ">
+              <div id="task-splitter-reward-message" style="
+                font-size: 18px;
+                color: #333;
+                line-height: 1.6;
+                padding: 20px;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                 color: white;
-                border: none;
-                border-radius: 25px;
-                cursor: pointer;
-              "
-            >+ 新增目标</button>
+                border-radius: 16px;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+                transition: transform 0.3s ease;
+              "></div>
+              <div id="task-splitter-reward-visualization" style="
+                display: none;
+                padding: 20px;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                border-radius: 16px;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+                min-height: 200px;
+              "></div>
+              <div style="
+                margin-top: 10px;
+                font-size: 14px;
+                color: #666;
+                opacity: 0.7;
+              ">点击切换显示</div>
+            </div>
+            <div style="display: flex; justify-content: center; align-items: center;">
+              <button 
+                id="task-splitter-new-goal-btn" 
+                style="
+                  padding: 12px 30px;
+                  font-size: 16px;
+                  background: #4CAF50;
+                  color: white;
+                  border: none;
+                  border-radius: 25px;
+                  cursor: pointer;
+                  display: block;
+                  margin: 0 auto;
+                "
+              >完成</button>
+            </div>
           </div>
         </div>
       </div>

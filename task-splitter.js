@@ -48,6 +48,8 @@ async function openTaskSplitterWithChar(charId) {
       currentStatus: savedProgress.currentStatus,
       startMessage: savedProgress.startMessage,
       endMessage: savedProgress.endMessage,
+      reward: savedProgress.reward || '恭喜你完成了目标！', // 奖励内容
+      rewardVisualization: savedProgress.rewardVisualization || '', // 奖励可视化代码
       taskGroups: savedProgress.taskGroups,
       completedTasks: new Set(savedProgress.completedTasks || []),
       createdAt: savedProgress.createdAt,
@@ -104,24 +106,12 @@ async function openTaskSplitterWithChar(charId) {
     
     if (allTasksCompleted) {
       // 所有任务已完成，显示完成界面
-      const completionView = document.getElementById('task-splitter-completion-view');
-      const endMessageEl = document.getElementById('task-splitter-end-message');
-      const helpBtn = document.getElementById('task-splitter-help-btn');
-      const tasksView = document.getElementById('task-splitter-tasks-view');
-      
-      tasksView.style.display = 'block';
-      endMessageEl.textContent = currentTaskData.endMessage;
-      completionView.style.display = 'block';
-      helpBtn.style.display = 'none';
-      
-      // 隐藏取消任务和切换角色按钮
-      const cancelBtn = document.getElementById('task-splitter-cancel-task-btn');
-      const switchCharBtn = document.getElementById('task-splitter-switch-char-btn');
-      if (cancelBtn) cancelBtn.style.display = 'none';
-      if (switchCharBtn) switchCharBtn.style.display = 'none';
-      
-      // 显示结束语
-      showDialogBubble(currentTaskData.endMessage);
+      // 先渲染任务列表（用于翻页动画）
+      renderTaskList();
+      // 等待一小段时间让任务列表渲染完成
+      await new Promise(resolve => setTimeout(resolve, 100));
+      // 然后显示完成界面（带翻页动画）
+      await showTaskCompletion();
     } else {
       // 显示任务界面
       renderTaskList();
@@ -639,6 +629,18 @@ async function generateTaskBreakdown(charId, goal, currentStatus, goalType = 'sh
 - **每个任务必须包含具体的完成日期**（scheduledDate字段，格式：YYYY-MM-DD，从今天${todayStr}开始往后分配）
 - **每个任务必须包含时间**（scheduledTime字段，格式：HH:mm，例如"09:00"或"14:30"）
 - **每个任务必须指定是行程还是待办**（isEvent字段：true=行程，false=待办）
+
+**支持日期范围和重复任务：**
+- **日期范围任务**：如果任务需要持续多天（例如"1号到5号每天记录饮食"），使用scheduledEndDate字段（格式：YYYY-MM-DD）
+  - 例如：scheduledDate: "2024-01-01", scheduledEndDate: "2024-01-05" 表示1号到5号每天都有这个任务
+- **每天重复任务**：如果任务是每天重复的（例如"每天6点跑步一小时"），使用isDaily: true和repeatDays字段
+  - isDaily: true 表示这是每天重复的任务
+  - repeatDays: 7 表示连续7天（从scheduledDate开始）
+  - 例如：scheduledDate: "2024-01-01", isDaily: true, repeatDays: 7, scheduledTime: "06:00" 表示从1号开始，连续7天，每天6点都有这个任务
+- **时间范围**：如果任务有开始和结束时间（例如"8点到19点"），使用scheduledEndTime字段（格式：HH:mm）
+  - 例如：scheduledTime: "08:00", scheduledEndTime: "19:00" 表示8点到19点
+  - 这样在任务列表中会显示为"1月11至20，8点到19点"这样的格式
+
 - 任务应该按时间顺序排列，从近期到远期
 - **日期跨度要合理**：如果目标是减肥8kg，总时间跨度应该是3-4个月，不要压缩到1-2周
 
@@ -703,6 +705,10 @@ ${worldBookContext ? `# 世界观设定\n${worldBookContext}\n` : ''}
 
 5. **生成结束语**：生成一段角色赞美用户成功完成目标的结束语（50-100字）
 
+6. **生成奖励**：生成一个角色送给用户的奖励（可以是虚拟物品、称号、特权等，符合你的人设，50-100字）
+   - 奖励描述：文字描述奖励的内容和意义
+   - 奖励可视化：如果奖励是物品、徽章、卡片等，可以生成一个CSS/HTML代码来可视化渲染这个奖励（可选，如果奖励不适合可视化可以省略）
+
 # 任务拆分规则
 
 ${goalTypeInstruction}
@@ -719,6 +725,8 @@ ${goalTypeInstruction}
 {
   "startMessage": "开始语内容",
   "endMessage": "结束语内容",
+  "reward": "角色送给用户的奖励内容（符合人设，50-100字）",
+  "rewardVisualization": "奖励的可视化CSS/HTML代码（可选，如果奖励是物品、徽章、卡片等可以生成，格式：包含style标签的HTML代码，或者纯CSS代码，用于渲染奖励的外观。如果奖励不适合可视化，可以设为空字符串）",
   "taskGroups": [
     {
       "groupName": "任务组名称（可选，如果不需要分组可以为空字符串）",
@@ -727,7 +735,7 @@ ${goalTypeInstruction}
           "id": "task_1",
           "content": "任务内容",
           "completed": false,
-          "completionMessage": "完成这个任务时的鼓励话语（20-40字）"${isLongTerm ? ',\n          "scheduledDate": "2024-01-15",\n          "scheduledTime": "09:00",\n          "isEvent": false' : ''}
+          "completionMessage": "完成这个任务时的鼓励话语（20-40字）"${isLongTerm ? ',\n          "scheduledDate": "2024-01-15",\n          "scheduledTime": "09:00",\n          "scheduledEndTime": "19:00",\n          "isEvent": false,\n          "scheduledEndDate": "2024-01-20",\n          "isDaily": false,\n          "repeatDays": 0' : ''}
         }
       ]
     }
@@ -738,10 +746,14 @@ ${goalTypeInstruction}
 - 如果不需要分组，可以只有一个taskGroup，groupName为空字符串
 - 每个任务必须有唯一的id
 - 每个任务必须包含completionMessage字段，这是完成该任务时角色要说的话
+- 必须包含reward字段，这是角色送给用户的奖励（符合你的人设，可以是虚拟物品、称号、特权等）
 ${isLongTerm ? `- **对于长线目标，每个任务必须包含以下字段（这是必须的，不能省略）：**
-  * scheduledDate: 任务应该完成的日期（YYYY-MM-DD格式，必须从今天${todayStr}开始往后分配，不能是过去的日期）
+  * scheduledDate: 任务开始日期（YYYY-MM-DD格式，必须从今天${todayStr}开始往后分配，不能是过去的日期）
   * scheduledTime: 任务的时间（HH:mm格式，例如"09:00"、"14:30"，如果没有具体时间可以设为"09:00"，但不能为空）
   * isEvent: 是否为行程（true=行程，false=待办，必须明确指定）
+  * scheduledEndDate: （可选）任务结束日期（YYYY-MM-DD格式），如果任务需要持续多天，使用此字段。例如：scheduledDate: "2024-01-01", scheduledEndDate: "2024-01-07" 表示1号到7号每天都有这个任务
+  * isDaily: （可选）是否每天重复（布尔值），如果任务是每天重复的（例如"每天6点跑步"），设为true
+  * repeatDays: （可选）重复天数（数字），如果isDaily为true，指定连续多少天。例如：isDaily: true, repeatDays: 7 表示连续7天每天都有这个任务
 
 - **时间跨度要求**：
   * 必须根据目标类型和难度，规划合理的时间跨度（不要压缩时间！）
@@ -751,7 +763,9 @@ ${isLongTerm ? `- **对于长线目标，每个任务必须包含以下字段（
 
 - **任务密度要求**：
   * 不要天天换任务！每个任务应该持续一段时间（至少3-7天）
-  * 例如：安排"第1-7天：每天运动30分钟"（7个相同内容的待办），而不是"第1天运动，第2天饮食，第3天运动..."
+  * **对于需要每天执行的任务（例如"每天6点跑步一小时"），使用isDaily和repeatDays字段，系统会自动为每一天创建月历项**
+  * **对于需要持续多天的任务（例如"1号到5号每天记录饮食"），使用scheduledEndDate字段，系统会自动为每一天创建月历项**
+  * 例如：安排"第1-7天：每天运动30分钟"应该使用isDaily: true, repeatDays: 7，而不是创建7个单独的任务
   * 任务之间应该有合理的间隔，不要过于密集
 
 - **日期分配原则**：
@@ -763,10 +777,10 @@ ${isLongTerm ? `- **对于长线目标，每个任务必须包含以下字段（
 - **示例**：
   * 如果今天是${todayStr}，目标是"减肥8kg"（未指定时间）
   * 应该规划3-4个月的时间跨度（约90-120天）
-  * 第一个任务可以是${todayStr}（开始记录饮食）
+  * 第一个任务可以是${todayStr}（开始记录饮食，使用isDaily: true, repeatDays: 14表示连续14天）
   * 最后一个任务应该在3-4个月后（约90-120天后）
   * 中间的任务应该合理分布，不要过于密集
-  * 例如：第1-14天每天记录饮食，第15-28天每天运动30分钟，第29-56天增加运动强度...` : ''}
+  * 例如：第1-14天每天记录饮食（isDaily: true, repeatDays: 14），第15-28天每天运动30分钟（isDaily: true, repeatDays: 14）...` : ''}
 - 直接输出JSON，不要添加任何其他文字`;
 
     const isGemini = proxyUrl === 'https://generativelanguage.googleapis.com/v1beta/models';
@@ -877,11 +891,18 @@ ${isLongTerm ? `- **对于长线目标，每个任务必须包含以下字段（
       currentStatus: currentStatus,
       startMessage: taskData.startMessage,
       endMessage: taskData.endMessage,
+      reward: taskData.reward || `${charName}送给你一个特别的奖励：恭喜你完成了目标！这是你应得的！`, // 奖励内容，如果没有则生成默认奖励
+      rewardVisualization: taskData.rewardVisualization || '', // 奖励可视化代码
       taskGroups: taskData.taskGroups,
       completedTasks: new Set(),
       createdAt: Date.now(),
       calendarTaskIds: [], // 存储添加到月历的任务ID
     };
+    
+    // 如果没有reward字段，生成一个默认的
+    if (!taskData.reward) {
+      console.warn('AI没有生成reward字段，使用默认奖励');
+    }
 
     // 如果是长线目标，将任务添加到月历
     if (goalType === 'long') {
@@ -1031,14 +1052,70 @@ function renderTaskList() {
       const taskLabel = document.createElement('label');
       taskLabel.htmlFor = `task-checkbox-${task.id}`;
       
-      // 如果是长线目标且有日期信息，显示日期和时间
+      // 如果是长线目标且有日期信息，显示日期和时间（优化格式）
       let taskContent = task.content;
       if (currentTaskData.goalType === 'long' && task.scheduledDate) {
-        const dateObj = new Date(task.scheduledDate);
-        const month = dateObj.getMonth() + 1;
-        const day = dateObj.getDate();
+        const startDateObj = new Date(task.scheduledDate);
+        const startMonth = startDateObj.getMonth() + 1;
+        const startDay = startDateObj.getDate();
         const timeStr = task.scheduledTime || '';
-        const dateTimeStr = timeStr ? `${month}月${day}日 ${timeStr}` : `${month}月${day}日`;
+        
+        let dateTimeStr = '';
+        
+        // 检查是否有结束日期（日期范围）
+        if (task.scheduledEndDate) {
+          const endDateObj = new Date(task.scheduledEndDate);
+          const endMonth = endDateObj.getMonth() + 1;
+          const endDay = endDateObj.getDate();
+          
+          // 如果是同一个月
+          if (startMonth === endMonth) {
+            dateTimeStr = `${startMonth}月${startDay}日至${endDay}日`;
+          } else {
+            dateTimeStr = `${startMonth}月${startDay}日至${endMonth}月${endDay}日`;
+          }
+        }
+        // 检查是否是每天重复任务
+        else if (task.isDaily && task.repeatDays) {
+          const endDateObj = new Date(startDateObj);
+          endDateObj.setDate(startDateObj.getDate() + task.repeatDays - 1);
+          const endMonth = endDateObj.getMonth() + 1;
+          const endDay = endDateObj.getDate();
+          
+          if (startMonth === endMonth) {
+            dateTimeStr = `${startMonth}月${startDay}日至${endDay}日`;
+          } else {
+            dateTimeStr = `${startMonth}月${startDay}日至${endMonth}月${endDay}日`;
+          }
+        }
+        // 检查是否是每天重复但没有指定天数（默认30天）
+        else if (task.isDaily) {
+          const endDateObj = new Date(startDateObj);
+          endDateObj.setDate(startDateObj.getDate() + 29); // 30天包括起始日
+          const endMonth = endDateObj.getMonth() + 1;
+          const endDay = endDateObj.getDate();
+          
+          if (startMonth === endMonth) {
+            dateTimeStr = `${startMonth}月${startDay}日至${endDay}日`;
+          } else {
+            dateTimeStr = `${startMonth}月${startDay}日至${endMonth}月${endDay}日`;
+          }
+        }
+        // 单日任务
+        else {
+          dateTimeStr = `${startMonth}月${startDay}日`;
+        }
+        
+        // 添加时间信息
+        if (timeStr) {
+          // 检查是否有结束时间
+          if (task.scheduledEndTime) {
+            dateTimeStr += `，${timeStr}至${task.scheduledEndTime}`;
+          } else {
+            dateTimeStr += `，${timeStr}`;
+          }
+        }
+        
         taskContent = `[${dateTimeStr}] ${task.content}`;
       }
       
@@ -1147,6 +1224,13 @@ async function handleTaskCompletion(taskId, completed) {
 
   if (allTasksCompleted) {
     // 所有任务完成，显示完成界面
+    console.log('所有任务已完成，准备显示完成界面');
+    console.log('currentTaskData:', currentTaskData);
+    // 确保currentTaskData存在
+    if (!currentTaskData) {
+      console.error('currentTaskData为空，无法显示完成界面');
+      return;
+    }
     await showTaskCompletion();
   }
 }
@@ -1186,16 +1270,177 @@ async function showNextTaskGroup(currentGroupIndex) {
  * 显示任务完成界面
  */
 async function showTaskCompletion() {
+  if (!currentTaskData) {
+    console.error('currentTaskData为空，无法显示完成界面');
+    return;
+  }
+  
+  const tasksView = document.getElementById('task-splitter-tasks-view');
   const completionView = document.getElementById('task-splitter-completion-view');
-  const endMessageEl = document.getElementById('task-splitter-end-message');
+  let rewardEl = document.getElementById('task-splitter-reward-message');
+  
+  // 如果reward元素不存在，尝试使用旧的end-message元素
+  if (!rewardEl) {
+    rewardEl = document.getElementById('task-splitter-end-message');
+  }
+  
   const helpBtn = document.getElementById('task-splitter-help-btn');
+  const newGoalBtn = document.getElementById('task-splitter-new-goal-btn');
 
   // 显示结束语在对话气泡中
-  showDialogBubble(currentTaskData.endMessage);
+  if (currentTaskData.endMessage) {
+    showDialogBubble(currentTaskData.endMessage);
+  }
 
-  endMessageEl.textContent = currentTaskData.endMessage;
-  completionView.style.display = 'block';
-  helpBtn.style.display = 'none';
+  // 隐藏任务列表（翻页效果）
+  // 注意：不要隐藏整个tasksView，因为completionView在里面
+  const tasksContainer = document.getElementById('task-splitter-tasks-container');
+  if (tasksContainer) {
+    tasksContainer.style.transition = 'transform 0.5s, opacity 0.5s';
+    tasksContainer.style.transform = 'translateX(-100%)';
+    tasksContainer.style.opacity = '0';
+    
+    // 等待动画完成后再隐藏
+    setTimeout(() => {
+      tasksContainer.style.display = 'none';
+    }, 500);
+  }
+  
+  // 确保tasksView保持显示，因为completionView在里面
+  if (tasksView) {
+    tasksView.style.display = 'block';
+  }
+
+  // 显示奖励（而不是结束语）
+  const rewardText = currentTaskData.reward || `${state.chats[activeTaskSplitterCharId]?.name || '角色'}送给你一个特别的奖励：恭喜你完成了目标！这是你应得的！`;
+  const rewardVisualization = currentTaskData.rewardVisualization || '';
+  
+  const rewardContainer = document.getElementById('task-splitter-reward-container');
+  const rewardVisualizationEl = document.getElementById('task-splitter-reward-visualization');
+  
+  if (rewardEl) {
+    // 转义HTML特殊字符
+    const safeRewardText = rewardText
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;')
+      .replace(/\n/g, '<br>');
+    
+    rewardEl.innerHTML = `<div style="font-weight: bold; margin-bottom: 10px; font-size: 20px;">🎁 奖励</div><div style="font-size: 16px; line-height: 1.6;">${safeRewardText}</div>`;
+    rewardEl.style.display = 'block';
+    rewardEl.style.visibility = 'visible';
+    rewardEl.style.opacity = '1';
+  } else {
+    console.error('找不到task-splitter-reward-message元素，尝试创建');
+  }
+  
+  // 设置奖励可视化（如果有）
+  if (rewardVisualizationEl && rewardVisualization) {
+    // 尝试渲染可视化代码
+    try {
+      // 如果包含style标签，提取内容
+      let visualizationHTML = rewardVisualization;
+      if (rewardVisualization.includes('<style>')) {
+        const styleMatch = rewardVisualization.match(/<style>([\s\S]*?)<\/style>/);
+        if (styleMatch) {
+          const styleContent = styleMatch[1];
+          const styleEl = document.createElement('style');
+          styleEl.textContent = styleContent;
+          document.head.appendChild(styleEl);
+        }
+        // 提取HTML部分
+        visualizationHTML = rewardVisualization.replace(/<style>[\s\S]*?<\/style>/g, '').trim();
+      }
+      rewardVisualizationEl.innerHTML = visualizationHTML || '<div style="text-align: center; padding: 40px; color: white; font-size: 18px;">🎁</div>';
+    } catch (error) {
+      console.error('渲染奖励可视化失败:', error);
+      rewardVisualizationEl.innerHTML = '<div style="text-align: center; padding: 40px; color: white; font-size: 18px;">🎁</div>';
+    }
+  }
+  
+  // 添加点击切换功能（如果有可视化）
+  if (rewardContainer && rewardVisualization) {
+    let showingText = true;
+    rewardContainer.onclick = () => {
+      if (showingText) {
+        rewardEl.style.display = 'none';
+        if (rewardVisualizationEl) {
+          rewardVisualizationEl.style.display = 'block';
+        }
+        showingText = false;
+      } else {
+        rewardEl.style.display = 'block';
+        if (rewardVisualizationEl) {
+          rewardVisualizationEl.style.display = 'none';
+        }
+        showingText = true;
+      }
+    };
+    // 显示提示文字
+    const hintEl = rewardContainer.querySelector('div:last-child');
+    if (hintEl) {
+      hintEl.style.display = 'block';
+    }
+  } else if (rewardContainer) {
+    // 如果没有可视化，隐藏提示
+    const hintEl = rewardContainer.querySelector('div:last-child');
+    if (hintEl) {
+      hintEl.style.display = 'none';
+    }
+    rewardContainer.style.cursor = 'default';
+  }
+  
+  // 确保完成界面元素存在
+  if (!completionView) {
+    console.error('找不到task-splitter-completion-view元素，无法显示完成界面');
+    return;
+  }
+  
+  // 显示完成界面（翻页效果）
+  // completionView在tasksView内部，所以只需要确保tasksView显示
+  if (tasksView) {
+    tasksView.style.display = 'block';
+  }
+  
+  if (completionView) {
+    completionView.style.display = 'block';
+    completionView.style.visibility = 'visible';
+    completionView.style.opacity = '0';
+    completionView.style.transform = 'translateX(100%)';
+    completionView.style.transition = 'transform 0.5s, opacity 0.5s';
+    completionView.style.position = 'relative';
+    completionView.style.zIndex = '10';
+    completionView.style.width = '100%';
+    completionView.style.minHeight = '200px';
+    // 上移界面，减少padding
+    completionView.style.paddingTop = '20px';
+    completionView.style.paddingBottom = '20px';
+  }
+  
+  // 确保按钮显示
+  if (newGoalBtn) {
+    newGoalBtn.style.display = 'block';
+    newGoalBtn.style.visibility = 'visible';
+    newGoalBtn.style.opacity = '1';
+  }
+  
+  // 延迟显示，实现翻页效果
+  setTimeout(() => {
+    if (completionView) {
+      completionView.style.transform = 'translateX(0)';
+      completionView.style.opacity = '1';
+    }
+    if (rewardEl) {
+      rewardEl.style.opacity = '1';
+    }
+  }, 500);
+  
+  // 隐藏帮助按钮
+  if (helpBtn) {
+    helpBtn.style.display = 'none';
+  }
   
   // 隐藏取消任务和切换角色按钮
   const cancelBtn = document.getElementById('task-splitter-cancel-task-btn');
@@ -1203,21 +1448,45 @@ async function showTaskCompletion() {
   if (cancelBtn) cancelBtn.style.display = 'none';
   if (switchCharBtn) switchCharBtn.style.display = 'none';
 
+  // 修改"新增目标"按钮为"完成"按钮
+  if (newGoalBtn) {
+    newGoalBtn.textContent = '完成';
+    newGoalBtn.style.display = 'block';
+    newGoalBtn.style.visibility = 'visible';
+    newGoalBtn.style.pointerEvents = 'auto';
+    newGoalBtn.style.opacity = '1';
+    
+    // 移除旧的事件监听器，添加新的事件
+    const newBtn = newGoalBtn.cloneNode(true);
+    newGoalBtn.parentNode.replaceChild(newBtn, newGoalBtn);
+    newBtn.onclick = () => {
+      // 清除保存的进度（因为已经完成了）
+      clearTaskProgress(activeTaskSplitterCharId);
+      currentTaskData = null;
+      hideDialogBubble();
+      showScreen('home-screen');
+    };
+  } else {
+    console.error('找不到task-splitter-new-goal-btn元素');
+  }
+
   // 保存记录
   await saveTaskRecord();
   
-  // 清除保存的进度（因为已经完成了）
-  clearTaskProgress(activeTaskSplitterCharId);
+  // 注意：不要立即清除进度，让用户可以看到完成界面
+  // 只有在用户点击"完成"按钮或返回首页时才清除
 
   // 滚动到完成界面
-  completionView.scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-  // 播放完成动画
-  completionView.style.opacity = '0';
-  completionView.style.transition = 'opacity 0.5s';
   setTimeout(() => {
-    completionView.style.opacity = '1';
-  }, 10);
+    if (completionView) {
+      completionView.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, 1000);
+  
+  console.log('完成界面显示完成，reward:', rewardText);
+  console.log('completionView:', completionView);
+  console.log('rewardEl:', rewardEl);
+  console.log('newGoalBtn:', newGoalBtn);
 }
 
 /**
@@ -1239,6 +1508,7 @@ async function saveTaskRecord() {
       currentStatus: currentTaskData.currentStatus,
       startMessage: currentTaskData.startMessage,
       endMessage: currentTaskData.endMessage,
+      reward: currentTaskData.reward || '恭喜你完成了目标！', // 奖励内容
       taskGroups: currentTaskData.taskGroups,
       completedTasks: Array.from(currentTaskData.completedTasks),
       createdAt: currentTaskData.createdAt,
@@ -1550,6 +1820,8 @@ function saveTaskProgress() {
       currentStatus: currentTaskData.currentStatus,
       startMessage: currentTaskData.startMessage,
       endMessage: currentTaskData.endMessage,
+      reward: currentTaskData.reward || '恭喜你完成了目标！', // 奖励内容
+      rewardVisualization: currentTaskData.rewardVisualization || '', // 奖励可视化代码
       taskGroups: currentTaskData.taskGroups,
       completedTasks: Array.from(currentTaskData.completedTasks),
       createdAt: currentTaskData.createdAt,
@@ -1704,105 +1976,125 @@ async function addTasksToCalendar(taskGroups, charId) {
         }
         
         const dateStr = task.scheduledDate;
+        const endDateStr = task.scheduledEndDate || null; // 支持结束日期（日期范围）
         const timeStr = task.scheduledTime || '09:00';
         const isEvent = task.isEvent === true; // 明确转换为布尔值
         const taskContent = task.content;
+        const isDaily = task.isDaily || false; // 是否每天重复（例如"每天6点跑步"）
+        const repeatDays = task.repeatDays || 0; // 重复天数（例如连续7天）
         
-        console.log(`处理任务: ${task.id}, 日期: ${dateStr}, 时间: ${timeStr}, 类型: ${isEvent ? '行程' : '待办'}, 内容: ${taskContent}`);
+        console.log(`处理任务: ${task.id}, 日期: ${dateStr}, 结束日期: ${endDateStr || '无'}, 时间: ${timeStr}, 类型: ${isEvent ? '行程' : '待办'}, 每天重复: ${isDaily}, 重复天数: ${repeatDays}, 内容: ${taskContent}`);
         
-        // 检查是否已经存在（优化：只检查当前任务ID，避免加载所有数据）
-        let existingTask = null;
-        try {
-          // 先检查calendarTaskIds中是否已有记录
-          if (currentTaskData && currentTaskData.calendarTaskIds) {
-            const existingCalendarTask = currentTaskData.calendarTaskIds.find(
-              ct => ct.taskId === task.id
-            );
-            if (existingCalendarTask) {
-              // 验证这个ID是否还存在
-              if (isEvent) {
-                existingTask = await db.calendarEvents.get(existingCalendarTask.id);
-              } else {
-                existingTask = await db.calendarTodos.get(existingCalendarTask.id);
-              }
-            }
-          }
+        // 处理日期范围或重复任务
+        const datesToAdd = [];
+        
+        if (endDateStr) {
+          // 日期范围任务（例如：1号到5号）
+          const startDate = new Date(dateStr);
+          const endDate = new Date(endDateStr);
+          let currentDate = new Date(startDate);
           
-          // 如果calendarTaskIds中没有，尝试通过日期范围查找（更高效）
-          if (!existingTask) {
-            // 只查找该日期范围内的任务，而不是所有任务
-            const taskDate = new Date(dateStr);
-            const monthStart = new Date(taskDate.getFullYear(), taskDate.getMonth(), 1);
-            const monthEnd = new Date(taskDate.getFullYear(), taskDate.getMonth() + 1, 0);
-            const monthStartStr = `${monthStart.getFullYear()}-${String(monthStart.getMonth() + 1).padStart(2, '0')}-${String(monthStart.getDate()).padStart(2, '0')}`;
-            const monthEndStr = `${monthEnd.getFullYear()}-${String(monthEnd.getMonth() + 1).padStart(2, '0')}-${String(monthEnd.getDate()).padStart(2, '0')}`;
-            
+          while (currentDate <= endDate) {
+            const dateToAdd = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
+            datesToAdd.push(dateToAdd);
+            currentDate.setDate(currentDate.getDate() + 1);
+          }
+        } else if (isDaily && repeatDays > 0) {
+          // 每天重复任务（例如：每天6点跑步，连续7天）
+          const startDate = new Date(dateStr);
+          for (let i = 0; i < repeatDays; i++) {
+            const currentDate = new Date(startDate);
+            currentDate.setDate(startDate.getDate() + i);
+            const dateToAdd = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
+            datesToAdd.push(dateToAdd);
+          }
+        } else if (isDaily) {
+          // 每天重复，但没有指定重复天数，默认添加未来30天
+          const startDate = new Date(dateStr);
+          for (let i = 0; i < 30; i++) {
+            const currentDate = new Date(startDate);
+            currentDate.setDate(startDate.getDate() + i);
+            const dateToAdd = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
+            datesToAdd.push(dateToAdd);
+          }
+        } else {
+          // 单日任务
+          datesToAdd.push(dateStr);
+        }
+        
+        console.log(`任务 ${task.id} 需要添加到 ${datesToAdd.length} 个日期:`, datesToAdd);
+        
+        // 为每个日期添加任务
+        for (const dateToAdd of datesToAdd) {
+          // 检查该日期是否已存在该任务
+          let existingTask = null;
+          try {
             if (isEvent) {
-              const monthEvents = await db.calendarEvents
+              const existingEvents = await db.calendarEvents
                 .where('date')
-                .between(monthStartStr, monthEndStr, true, true)
+                .equals(dateToAdd)
                 .toArray();
-              existingTask = monthEvents.find(e => 
+              existingTask = existingEvents.find(e => 
                 e.taskSplitterId === task.id && e.taskSplitterCharId === charId
               );
             } else {
-              const monthTodos = await db.calendarTodos
+              const existingTodos = await db.calendarTodos
                 .where('date')
-                .between(monthStartStr, monthEndStr, true, true)
+                .equals(dateToAdd)
                 .toArray();
-              existingTask = monthTodos.find(t => 
+              existingTask = existingTodos.find(t => 
                 t.taskSplitterId === task.id && t.taskSplitterCharId === charId
               );
             }
+          } catch (error) {
+            console.warn(`检查任务 ${task.id} 在日期 ${dateToAdd} 是否存在时出错:`, error);
           }
-        } catch (error) {
-          console.warn('检查任务是否存在时出错:', error);
-          // 继续执行，假设不存在
-        }
-        
-        if (existingTask) {
-          // 如果已存在，使用现有的ID
-          console.log(`任务 ${task.id} 已存在于月历，ID: ${existingTask.id}`);
-          calendarTaskIds.push({ 
-            type: isEvent ? 'event' : 'todo', 
-            id: existingTask.id, 
-            taskId: task.id 
-          });
-          continue;
-        }
-        
-        if (isEvent) {
-          // 添加到行程
-          const eventData = {
-            date: dateStr,
-            startTime: timeStr,
-            endTime: '',
-            time: timeStr,
-            content: taskContent,
-            categoryId: null,
-            type: 'event',
-            taskSplitterId: task.id, // 关联到任务拆分器的任务ID
-            taskSplitterCharId: charId,
-          };
-          console.log('添加行程到月历:', eventData);
-          const eventId = await db.calendarEvents.add(eventData);
-          console.log('行程添加成功，ID:', eventId);
-          calendarTaskIds.push({ type: 'event', id: eventId, taskId: task.id });
-          addedCount++;
-        } else {
-          // 添加到待办
-          const todoData = {
-            date: dateStr,
-            content: taskContent,
-            completed: false,
-            taskSplitterId: task.id, // 关联到任务拆分器的任务ID
-            taskSplitterCharId: charId,
-          };
-          console.log('添加待办到月历:', todoData);
-          const todoId = await db.calendarTodos.add(todoData);
-          console.log('待办添加成功，ID:', todoId);
-          calendarTaskIds.push({ type: 'todo', id: todoId, taskId: task.id });
-          addedCount++;
+          
+          if (existingTask) {
+            // 如果已存在，使用现有的ID
+            console.log(`任务 ${task.id} 在日期 ${dateToAdd} 已存在于月历，ID: ${existingTask.id}`);
+            calendarTaskIds.push({ 
+              type: isEvent ? 'event' : 'todo', 
+              id: existingTask.id, 
+              taskId: task.id,
+              date: dateToAdd
+            });
+            continue;
+          }
+          
+          if (isEvent) {
+            // 添加到行程
+            const eventData = {
+              date: dateToAdd,
+              startTime: timeStr,
+              endTime: '',
+              time: timeStr,
+              content: taskContent,
+              categoryId: null,
+              type: 'event',
+              taskSplitterId: task.id, // 关联到任务拆分器的任务ID
+              taskSplitterCharId: charId,
+            };
+            console.log(`添加行程到月历 (${dateToAdd}):`, eventData);
+            const eventId = await db.calendarEvents.add(eventData);
+            console.log('行程添加成功，ID:', eventId);
+            calendarTaskIds.push({ type: 'event', id: eventId, taskId: task.id, date: dateToAdd });
+            addedCount++;
+          } else {
+            // 添加到待办
+            const todoData = {
+              date: dateToAdd,
+              content: taskContent,
+              completed: false,
+              taskSplitterId: task.id, // 关联到任务拆分器的任务ID
+              taskSplitterCharId: charId,
+            };
+            console.log(`添加待办到月历 (${dateToAdd}):`, todoData);
+            const todoId = await db.calendarTodos.add(todoData);
+            console.log('待办添加成功，ID:', todoId);
+            calendarTaskIds.push({ type: 'todo', id: todoId, taskId: task.id, date: dateToAdd });
+            addedCount++;
+          }
         }
       }
     }
