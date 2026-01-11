@@ -244,6 +244,26 @@ async function renderTaskSplitterInitialView(chat) {
   
   // 绑定事件
   setupTaskSplitterEvents(chat);
+  
+  // 确保头像完整显示（手机端优化）
+  setTimeout(() => {
+    const avatarContainer = document.getElementById('task-splitter-char-avatar-container');
+    const contentArea = document.getElementById('task-splitter-content-area');
+    if (avatarContainer && contentArea) {
+      // 检查头像是否在可视区域内
+      const avatarRect = avatarContainer.getBoundingClientRect();
+      const contentRect = contentArea.getBoundingClientRect();
+      
+      // 如果头像不在可视区域内或显示不完全，滚动到头像位置
+      if (avatarRect.top < contentRect.top || avatarRect.bottom > contentRect.bottom) {
+        avatarContainer.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'center',
+          inline: 'center'
+        });
+      }
+    }
+  }, 100);
 }
 
 /**
@@ -1373,6 +1393,49 @@ async function handleTaskCompletion(taskId, completed) {
   if (allCompleted && groupIndex < currentTaskData.taskGroups.length - 1) {
     // 当前分组完成，显示下一个分组（翻页动画）
     await showNextTaskGroup(groupIndex);
+  } else if (completed) {
+    // 任务完成时，自动滚动到下一个未完成的任务（手机端优化）
+    setTimeout(() => {
+      const allTasks = groupDiv.querySelectorAll('.task-item');
+      let nextTask = null;
+      
+      // 找到下一个未完成的任务
+      for (let i = 0; i < allTasks.length; i++) {
+        const item = allTasks[i];
+        const itemTaskId = item.dataset.taskId;
+        if (!currentTaskData.completedTasks.has(itemTaskId)) {
+          nextTask = item;
+          break;
+        }
+      }
+      
+      // 如果当前分组没有未完成任务，查找下一个分组
+      if (!nextTask && groupIndex < currentTaskData.taskGroups.length - 1) {
+        const nextGroup = document.querySelector(`[data-group-index="${groupIndex + 1}"]`);
+        if (nextGroup) {
+          const nextGroupTasks = nextGroup.querySelectorAll('.task-item');
+          if (nextGroupTasks.length > 0) {
+            nextTask = nextGroupTasks[0];
+          }
+        }
+      }
+      
+      // 滚动到下一个任务
+      if (nextTask) {
+        nextTask.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'center',
+          inline: 'nearest'
+        });
+      } else {
+        // 如果没有下一个任务，滚动到当前任务项（确保它可见）
+        taskItem.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'center',
+          inline: 'nearest'
+        });
+      }
+    }, 300); // 延迟300ms，等待UI更新完成
   }
 
   // 检查所有任务是否完成
