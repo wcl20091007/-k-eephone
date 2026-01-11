@@ -30,17 +30,59 @@ async function openTaskSplitterWithChar(charId) {
   const chat = state.chats[charId];
   if (!chat) return;
 
-  // 重置状态
-  currentTaskData = null;
-  
   // 隐藏对话气泡
   hideDialogBubble();
   
   // 显示主界面
   showScreen('task-splitter-main-screen');
   
-  // 渲染初始界面
-  await renderTaskSplitterInitialView(chat);
+  // 检查是否有保存的进度
+  const savedProgress = loadTaskProgress(charId);
+  if (savedProgress && savedProgress.taskGroups && savedProgress.taskGroups.length > 0) {
+    // 恢复保存的进度
+    currentTaskData = {
+      charId: savedProgress.charId,
+      goal: savedProgress.goal,
+      currentStatus: savedProgress.currentStatus,
+      startMessage: savedProgress.startMessage,
+      endMessage: savedProgress.endMessage,
+      taskGroups: savedProgress.taskGroups,
+      completedTasks: new Set(savedProgress.completedTasks || []),
+      createdAt: savedProgress.createdAt,
+    };
+    
+    // 检查是否所有任务都已完成
+    const allTasksCompleted = currentTaskData.taskGroups.every(group =>
+      group.tasks.every(task => currentTaskData.completedTasks.has(task.id))
+    );
+    
+    if (allTasksCompleted) {
+      // 所有任务已完成，显示完成界面
+      const completionView = document.getElementById('task-splitter-completion-view');
+      const endMessageEl = document.getElementById('task-splitter-end-message');
+      const helpBtn = document.getElementById('task-splitter-help-btn');
+      const tasksView = document.getElementById('task-splitter-tasks-view');
+      
+      tasksView.style.display = 'block';
+      endMessageEl.textContent = currentTaskData.endMessage;
+      completionView.style.display = 'block';
+      helpBtn.style.display = 'none';
+      
+      // 显示结束语
+      showDialogBubble(currentTaskData.endMessage);
+    } else {
+      // 显示任务界面
+      renderTaskList();
+      // 显示开始语
+      if (currentTaskData.startMessage) {
+        showDialogBubble(currentTaskData.startMessage);
+      }
+    }
+  } else {
+    // 没有保存的进度，显示初始界面
+    currentTaskData = null;
+    await renderTaskSplitterInitialView(chat);
+  }
   
   // 加载保存的背景图片
   loadTaskSplitterBackground();
@@ -135,6 +177,10 @@ function setupTaskSplitterEvents(chat) {
   
   // 返回按钮
   document.getElementById('task-splitter-back-btn').onclick = () => {
+    // 保存当前进度
+    if (currentTaskData) {
+      saveTaskProgress();
+    }
     hideDialogBubble();
     showScreen('home-screen');
   };
@@ -158,6 +204,8 @@ function setupTaskSplitterEvents(chat) {
   const newGoalBtn = document.getElementById('task-splitter-new-goal-btn');
   if (newGoalBtn) {
     newGoalBtn.onclick = () => {
+      // 清除保存的进度
+      clearTaskProgress(activeTaskSplitterCharId);
       // 重置状态，返回初始界面
       currentTaskData = null;
       renderTaskSplitterInitialView(chat);
@@ -350,6 +398,9 @@ ${worldBookContext ? `# 世界观设定\n${worldBookContext}\n` : ''}
       createdAt: Date.now(),
     };
 
+    // 保存进度
+    saveTaskProgress();
+
     // 显示开始语在对话气泡中
     showDialogBubble(taskData.startMessage);
 
@@ -446,10 +497,12 @@ function renderTaskList() {
         transition: all 0.3s;
       `;
 
+      const isCompleted = currentTaskData.completedTasks.has(task.id);
+      
       const checkbox = document.createElement('input');
       checkbox.type = 'checkbox';
       checkbox.id = `task-checkbox-${task.id}`;
-      checkbox.checked = task.completed || false;
+      checkbox.checked = isCompleted;
       checkbox.style.cssText = `
         width: 20px;
         height: 20px;
@@ -465,8 +518,12 @@ function renderTaskList() {
         font-size: 16px;
         color: #333;
         cursor: pointer;
-        ${task.completed ? 'text-decoration: line-through; color: #999;' : ''}
+        ${isCompleted ? 'text-decoration: line-through; color: #999;' : ''}
       `;
+      
+      if (isCompleted) {
+        taskItem.style.opacity = '0.7';
+      }
 
       taskItem.appendChild(checkbox);
       taskItem.appendChild(taskLabel);
@@ -512,6 +569,9 @@ async function handleTaskCompletion(taskId, completed) {
   } else {
     currentTaskData.completedTasks.delete(taskId);
   }
+  
+  // 保存进度
+  saveTaskProgress();
 
   // 更新UI
   const taskItem = document.querySelector(`[data-task-id="${taskId}"]`);
@@ -600,6 +660,9 @@ async function showTaskCompletion() {
 
   // 保存记录
   await saveTaskRecord();
+  
+  // 清除保存的进度（因为已经完成了）
+  clearTaskProgress(activeTaskSplitterCharId);
 
   // 滚动到完成界面
   completionView.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -926,4 +989,66 @@ async function showTaskSplitterHistoryDetail(record) {
   `;
   
   detailModal.classList.add('visible');
+}
+
+/**
+ * 保存当前任务进度
+ */
+function saveTaskProgress() {
+  if (!currentTaskData || !activeTaskSplitterCharId) return;
+  
+  try {
+    const progressData = {
+      charId: currentTaskData.charId,
+      goal: currentTaskData.goal,
+      currentStatus: currentTaskData.currentStatus,
+      startMessage: currentTaskData.startMessage,
+      endMessage: currentTaskData.endMessage,
+      taskGroups: currentTaskData.taskGroups,
+      completedTasks: Array.from(currentTaskData.completedTasks),
+      createdAt: currentTaskData.createdAt,
+      savedAt: Date.now(),
+    };
+    
+    // 使用charId作为key的一部分，这样每个角色有独立的进度
+    localStorage.setItem(`task-splitter-progress-${activeTaskSplitterCharId}`, JSON.stringify(progressData));
+  } catch (error) {
+    console.error('保存任务进度失败:', error);
+  }
+}
+
+/**
+ * 加载保存的任务进度
+ * @param {string} charId - 角色ID
+ * @returns {object|null} - 保存的进度数据，如果没有则返回null
+ */
+function loadTaskProgress(charId) {
+  try {
+    const savedData = localStorage.getItem(`task-splitter-progress-${charId}`);
+    if (!savedData) return null;
+    
+    const progressData = JSON.parse(savedData);
+    
+    // 检查数据是否完整
+    if (!progressData.taskGroups || progressData.taskGroups.length === 0) {
+      return null;
+    }
+    
+    return progressData;
+  } catch (error) {
+    console.error('加载任务进度失败:', error);
+    return null;
+  }
+}
+
+/**
+ * 清除保存的任务进度
+ * @param {string} charId - 角色ID
+ */
+function clearTaskProgress(charId) {
+  try {
+    localStorage.removeItem(`task-splitter-progress-${charId}`);
+  } catch (error) {
+    console.error('清除任务进度失败:', error);
+  }
 }

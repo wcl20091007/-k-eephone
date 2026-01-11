@@ -1106,6 +1106,7 @@ document.addEventListener("DOMContentLoaded", () => {
     "tukey-accounting": "https://i.postimg.cc/k4fZKVXP/tu-tu.png",
     "kk-checkin": "https://i.postimg.cc/MGwrL0nf/kitty.png",
     studio: "https://i.postimg.cc/W3sLz11s/clapperboard-icon.png",
+    "task-splitter": "https://i.postimg.cc/pr0T3WfC/douban-icon.png", // 白狗拆分机默认图标
   };
 
   const DEFAULT_APP_LABELS = {
@@ -1126,7 +1127,7 @@ document.addEventListener("DOMContentLoaded", () => {
     "kk-checkin": "kk查岗",
     studio: "lrq小剧场",
     calendar: "日历",
-    "task-splitter": "拆分机",
+    "task-splitter": "白狗拆分机",
   };
 
   const STICKER_REGEX =
@@ -21717,12 +21718,14 @@ document.addEventListener("DOMContentLoaded", () => {
       "kk-checkin": "kk查岗",
       studio: "lrq小剧场",
       calendar: "日历",
-      "task-splitter": "拆分机",
+      "task-splitter": "白狗拆分机",
     };
 
-    for (const iconId in state.globalSettings.appIcons) {
-      const iconUrl = state.globalSettings.appIcons[iconId];
-      const labelText = appLabels[iconId] || "未知App";
+    // 遍历所有在appLabels中定义的app，确保所有app都显示在列表中
+    for (const iconId in appLabels) {
+      // 优先使用用户自定义的图标，如果没有则使用默认图标
+      const iconUrl = state.globalSettings.appIcons[iconId] || DEFAULT_APP_ICONS[iconId] || "";
+      const labelText = appLabels[iconId];
 
       const item = document.createElement("div");
       item.className = "icon-setting-item";
