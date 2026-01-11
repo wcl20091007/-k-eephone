@@ -652,6 +652,72 @@ body {
   flex-direction: row-reverse; /* 时间戳、气泡、头像，从右到左排列 */
 }
 
+/* HTML消息样式 - 不使用气泡包裹，居中显示 */
+.message-wrapper.html-message-wrapper {
+  width: 100%;
+  max-width: 100%;
+  align-self: center;
+  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  margin: 10px 0;
+}
+
+.html-message-content {
+  width: 100%;
+  max-width: 100%;
+  padding: 10px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.html-message-content .html-document-container {
+  width: 100%;
+  max-width: 100%;
+  margin: 0 auto;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: transparent !important;
+}
+
+.html-message-content .html-document-container iframe {
+  display: block;
+  margin: 0 auto;
+  background: transparent !important;
+}
+
+.html-message-wrapper .timestamp {
+  margin-top: 5px;
+  text-align: center;
+}
+
+.reward-message-wrapper .timestamp {
+  margin-top: 5px;
+  text-align: center;
+}
+
+/* 奖励消息样式 - 不使用气泡包裹，居中显示 */
+.message-wrapper.reward-message-wrapper {
+  width: 100%;
+  max-width: 100%;
+  align-self: center;
+  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  margin: 10px 0;
+}
+
+.reward-message-content {
+  width: 100%;
+  max-width: 100%;
+  padding: 10px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
 /* 4. 气泡和头像的直接容器 (保持不变) */
 .message-bubble {
   display: flex;

@@ -7245,12 +7245,10 @@ document.addEventListener("DOMContentLoaded", () => {
       });
       return wrapper;
     } else if (msg.type === "task_reward") {
-      // 任务奖励消息
+      // 任务奖励消息 - 不使用气泡包裹，居中显示
       const wrapper = document.createElement("div");
-      wrapper.className = "message-wrapper ai";
-      const bubble = document.createElement("div");
-      bubble.className = "message-bubble ai";
-      bubble.dataset.timestamp = msg.timestamp;
+      wrapper.className = "message-wrapper reward-message-wrapper";
+      wrapper.dataset.timestamp = msg.timestamp;
       
       const payload = msg.payload || {};
       const rewardText = payload.rewardText || msg.content || '恭喜你完成了目标！';
@@ -7286,21 +7284,18 @@ document.addEventListener("DOMContentLoaded", () => {
       // 文字描述（默认隐藏）
       const textHTML = `<div class="reward-text" style="display: none; margin-top: 10px; padding: 15px; background: rgba(255,255,255,0.1); border-radius: 8px; line-height: 1.6; cursor: pointer;">${rewardText.replace(/\n/g, "<br>")}</div>`;
       
-      bubble.innerHTML = `
-        <img src="${chat.settings.aiAvatar}" class="avatar">
-        <div class="content">
-          ${visualizationHTML}
-          ${textHTML}
-        </div>
-      `;
+      // 创建内容容器，不使用气泡样式
+      const contentContainer = document.createElement("div");
+      contentContainer.className = "reward-message-content";
+      contentContainer.innerHTML = visualizationHTML + textHTML;
       
       // 添加点击切换功能
-      const vizEl = bubble.querySelector('.reward-visualization');
-      const textEl = bubble.querySelector('.reward-text');
+      const vizEl = contentContainer.querySelector('.reward-visualization');
+      const textEl = contentContainer.querySelector('.reward-text');
       if (vizEl && textEl) {
         let showingViz = true;
-        bubble.addEventListener('click', (e) => {
-          // 只响应点击奖励区域，不响应点击头像
+        contentContainer.addEventListener('click', (e) => {
+          // 只响应点击奖励区域
           if (e.target.closest('.reward-visualization') || e.target.closest('.reward-text')) {
             e.stopPropagation();
             if (showingViz) {
@@ -7316,7 +7311,15 @@ document.addEventListener("DOMContentLoaded", () => {
         });
       }
       
-      wrapper.appendChild(bubble);
+      // 创建时间戳元素
+      const timestampEl = document.createElement("span");
+      timestampEl.className = "timestamp";
+      timestampEl.textContent = formatTimestamp(msg.timestamp);
+      
+      // 将内容容器和时间戳添加到wrapper
+      wrapper.appendChild(contentContainer);
+      wrapper.appendChild(timestampEl);
+      
       addLongPressListener(wrapper, () => showMessageActions(msg.timestamp));
       wrapper.addEventListener("click", (e) => {
         // 如果点击的是奖励区域，不触发选择模式
@@ -8289,10 +8292,10 @@ document.addEventListener("DOMContentLoaded", () => {
         // 使用iframe来完全隔离HTML内容和样式
         const iframeId = `html-content-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         contentHtml = `
-          <div class="html-document-container" style="width: 100%; max-width: 100%; overflow: hidden; border-radius: 8px; background: #f2f2f7;">
+          <div class="html-document-container" style="width: 100%; max-width: 100%; overflow: hidden; border-radius: 8px; background: transparent; display: flex; justify-content: center; align-items: center;">
             <iframe 
               id="${iframeId}"
-              style="width: 100%; max-width: 100%; border: none; min-height: 400px; max-height: 600px; overflow-y: auto; overflow-x: hidden; display: block;"
+              style="width: 100%; max-width: 100%; border: none; min-height: 400px; max-height: 600px; overflow-y: auto; overflow-x: hidden; display: block; background: transparent;"
               sandbox="allow-same-origin allow-scripts"
               scrolling="yes">
             </iframe>
@@ -8304,13 +8307,16 @@ document.addEventListener("DOMContentLoaded", () => {
           const iframe = document.getElementById(iframeId);
           if (iframe && iframe.contentDocument) {
             const doc = iframe.contentDocument;
-            // 添加CSS确保内容不会横向溢出
+            // 添加CSS确保内容不会横向溢出，并且居中显示，背景透明
             const overflowFixStyles = `
               * { box-sizing: border-box; max-width: 100%; }
-              html, body { width: 100%; overflow-x: hidden; word-wrap: break-word; margin: 0; padding: 0; }
-              body { background: #f2f2f7; }
+              html, body { width: 100%; overflow-x: hidden; word-wrap: break-word; margin: 0; padding: 0; display: flex; flex-direction: column; align-items: center; }
+              html { background: transparent !important; }
+              body { background: transparent !important; }
               img, video, iframe, table { max-width: 100%; height: auto; }
               pre, code { overflow-x: auto; word-wrap: break-word; white-space: pre-wrap; }
+              /* 确保所有直接子元素在body中居中 */
+              body > * { margin-left: auto; margin-right: auto; }
             `;
             doc.open();
             doc.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><style>${overflowFixStyles}${extractedStyles}</style></head><body>${bodyContent}</body></html>`);
@@ -8349,10 +8355,40 @@ document.addEventListener("DOMContentLoaded", () => {
 			    `;
     }
 
-    // 2. 拼接最终的气泡内容
-    //    将构建好的 quoteHtml (如果存在) 和 contentHtml 组合起来
-    // --- 将头像和内容都放回气泡内部 ---
-    bubble.innerHTML = `
+    // 检测是否是HTML消息（角色发出的消息且包含HTML标签）
+    const isHtmlMessage = !isUser && 
+                          typeof msg.content === "string" && 
+                          /<[a-z][\s\S]*>/i.test(msg.content);
+
+    // 如果是HTML消息（角色发出的），不使用气泡包裹，直接显示内容
+    if (isHtmlMessage) {
+      // 设置wrapper的timestamp属性，确保事件处理能正常工作
+      wrapper.dataset.timestamp = msg.timestamp;
+      
+      // 创建内容容器，不使用气泡样式
+      const contentContainer = document.createElement("div");
+      contentContainer.className = "html-message-content";
+      contentContainer.style.cssText = "width: 100%; max-width: 100%; padding: 10px 0;";
+      contentContainer.innerHTML = quoteHtml + contentHtml;
+      
+      // 在contentContainer上也添加长按监听器，确保长按HTML内容也能触发
+      // 这样即使HTML内容中有iframe等元素，也能通过长按容器来触发菜单
+      addLongPressListener(contentContainer, () =>
+        showMessageActions(msg.timestamp)
+      );
+      
+      // 将内容容器和时间戳直接添加到wrapper，不添加气泡
+      wrapper.appendChild(contentContainer);
+      wrapper.appendChild(timestampEl);
+      
+      // 移除气泡相关的样式类，添加HTML消息标识
+      wrapper.classList.remove("user", "ai");
+      wrapper.classList.add("html-message-wrapper");
+    } else {
+      // 2. 拼接最终的气泡内容
+      //    将构建好的 quoteHtml (如果存在) 和 contentHtml 组合起来
+      // --- 将头像和内容都放回气泡内部 ---
+      bubble.innerHTML = `
 			        ${avatarHtml}
 			        <div class="content">
 			            ${quoteHtml}
@@ -8361,8 +8397,9 @@ document.addEventListener("DOMContentLoaded", () => {
 			    `;
 
     // --- 将完整的“气泡”和“时间戳”放入容器 ---
-    wrapper.appendChild(bubble);
-    wrapper.appendChild(timestampEl);
+      wrapper.appendChild(bubble);
+      wrapper.appendChild(timestampEl);
+    }
 
     addLongPressListener(wrapper, () =>
       showMessageActions(msg.timestamp)
