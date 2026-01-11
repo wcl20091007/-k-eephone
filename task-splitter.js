@@ -1100,12 +1100,18 @@ function renderTaskList() {
   
   try {
     currentTaskData.taskGroups.forEach((group, groupIndex) => {
+    // 检查分组是否有任务
+    if (!group.tasks || group.tasks.length === 0) {
+      console.warn(`分组 ${groupIndex} 没有任务，跳过渲染`);
+      return;
+    }
+    
     const groupDiv = document.createElement('div');
     groupDiv.className = 'task-group';
     groupDiv.dataset.groupIndex = groupIndex;
     groupDiv.style.cssText = `
       margin-bottom: 30px;
-      ${groupIndex !== currentGroupIndex ? 'display: none;' : ''}
+      ${groupIndex !== currentGroupIndex ? 'display: none;' : 'display: block;'}
     `;
 
     // 如果有组名，显示组名
@@ -1488,21 +1494,39 @@ async function showTaskCompletion() {
           // 提取HTML部分
           visualizationHTML = rewardVisualization.replace(/<style>[\s\S]*?<\/style>/g, '').trim();
         }
-        rewardVisualizationEl.innerHTML = visualizationHTML;
-        rewardVisualizationEl.style.display = 'block';
+        // 确保可视化内容居中 - 包装在一个居中的容器中
+        // 如果可视化HTML本身已经有样式，我们需要确保它被包裹在一个居中的容器中
+        const wrappedHTML = visualizationHTML.trim();
+        // 检查是否已经有外层div，如果没有则添加
+        let finalHTML = wrappedHTML;
+        if (!wrappedHTML.startsWith('<div') || !wrappedHTML.includes('display: flex') && !wrappedHTML.includes('margin: 0 auto')) {
+          finalHTML = `<div style="display: flex; justify-content: center; align-items: center; width: 100%; margin: 0 auto;">${wrappedHTML}</div>`;
+        }
+        rewardVisualizationEl.innerHTML = finalHTML;
+        rewardVisualizationEl.style.display = 'flex';
+        rewardVisualizationEl.style.justifyContent = 'center';
+        rewardVisualizationEl.style.alignItems = 'center';
+        rewardVisualizationEl.style.margin = '0 auto';
+        rewardVisualizationEl.style.textAlign = 'center';
       } catch (error) {
         console.error('渲染奖励可视化失败:', error);
         rewardVisualizationEl.innerHTML = '<div style="text-align: center; padding: 40px; font-size: 48px;">🎁</div>';
-        rewardVisualizationEl.style.display = 'block';
+        rewardVisualizationEl.style.display = 'flex';
+        rewardVisualizationEl.style.justifyContent = 'center';
+        rewardVisualizationEl.style.alignItems = 'center';
+        rewardVisualizationEl.style.margin = '0 auto';
       }
     } else {
       // 如果没有可视化代码，显示默认图标
       rewardVisualizationEl.innerHTML = '<div style="text-align: center; padding: 40px; font-size: 48px;">🎁</div>';
-      rewardVisualizationEl.style.display = 'block';
+      rewardVisualizationEl.style.display = 'flex';
+      rewardVisualizationEl.style.justifyContent = 'center';
+      rewardVisualizationEl.style.alignItems = 'center';
+      rewardVisualizationEl.style.margin = '0 auto';
     }
   }
   
-  // 显示奖励文字描述
+  // 显示奖励文字描述（保留在下方）
   if (rewardEl) {
     // 转义HTML特殊字符
     const safeRewardText = rewardText
@@ -1521,7 +1545,7 @@ async function showTaskCompletion() {
     console.error('找不到task-splitter-reward-message元素，尝试创建');
   }
   
-  // 移除点击切换功能（不再需要）
+  // 移除点击切换功能（不再需要，因为要同时显示）
   if (rewardContainer) {
     rewardContainer.style.cursor = 'default';
     rewardContainer.onclick = null;
@@ -1540,7 +1564,7 @@ async function showTaskCompletion() {
   }
   
   if (completionView) {
-    completionView.style.display = 'block';
+    completionView.style.display = 'flex';
     completionView.style.visibility = 'visible';
     completionView.style.opacity = '0';
     completionView.style.transform = 'translateX(100%)';
@@ -1552,6 +1576,10 @@ async function showTaskCompletion() {
     // 上移界面，减少padding
     completionView.style.paddingTop = '20px';
     completionView.style.paddingBottom = '20px';
+    // 确保内容居中
+    completionView.style.flexDirection = 'column';
+    completionView.style.justifyContent = 'center';
+    completionView.style.alignItems = 'center';
   }
   
   // 确保按钮显示
@@ -1869,13 +1897,13 @@ function openTaskSplitterHistory() {
             }
             visualizationHTML = rewardVisualization.replace(/<style>[\s\S]*?<\/style>/g, '').trim();
           }
-          rewardVisualizationHTML = `<div style="margin: 10px 0; padding: 15px; background: white; border-radius: 8px; min-height: 100px;">${visualizationHTML}</div>`;
+          rewardVisualizationHTML = `<div style="margin: 10px 0; padding: 15px; background: white; border-radius: 8px; min-height: 100px; display: flex; justify-content: center; align-items: center;">${visualizationHTML}</div>`;
         } catch (error) {
           console.error('渲染奖励可视化失败:', error);
-          rewardVisualizationHTML = `<div style="margin: 10px 0; padding: 15px; background: white; border-radius: 8px; text-align: center; font-size: 48px;">🎁</div>`;
+          rewardVisualizationHTML = `<div style="margin: 10px 0; padding: 15px; background: white; border-radius: 8px; text-align: center; font-size: 48px; display: flex; justify-content: center; align-items: center;">🎁</div>`;
         }
       } else {
-        rewardVisualizationHTML = `<div style="margin: 10px 0; padding: 15px; background: white; border-radius: 8px; text-align: center; font-size: 48px;">🎁</div>`;
+        rewardVisualizationHTML = `<div style="margin: 10px 0; padding: 15px; background: white; border-radius: 8px; text-align: center; font-size: 48px; display: flex; justify-content: center; align-items: center;">🎁</div>`;
       }
       
       item.innerHTML = `
@@ -1889,8 +1917,10 @@ function openTaskSplitterHistory() {
             </div>
           </div>
         </div>
-        ${rewardVisualizationHTML}
-        <div style="font-size: 14px; color: #333; margin-top: 10px; line-height: 1.6; padding: 10px; background: white; border-radius: 8px;">
+        <div style="display: flex; justify-content: center; align-items: center; margin: 10px 0;">
+          ${rewardVisualizationHTML}
+        </div>
+        <div style="font-size: 14px; color: #333; margin-top: 10px; line-height: 1.6; padding: 10px; background: white; border-radius: 8px; text-align: center;">
           ${rewardText}
         </div>
         <div style="font-size: 12px; color: #666; margin-top: 8px;">
