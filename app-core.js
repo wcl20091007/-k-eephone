@@ -7215,6 +7215,62 @@ document.addEventListener("DOMContentLoaded", () => {
         if (isSelectionMode) toggleMessageSelection(msg.timestamp);
       });
       return wrapper;
+    } else if (msg.type === "task_reward") {
+      // 任务奖励消息
+      const wrapper = document.createElement("div");
+      wrapper.className = "message-wrapper ai";
+      const bubble = document.createElement("div");
+      bubble.className = "message-bubble ai";
+      bubble.dataset.timestamp = msg.timestamp;
+      
+      const payload = msg.payload || {};
+      const rewardText = payload.rewardText || msg.content || '恭喜你完成了目标！';
+      const rewardVisualization = payload.rewardVisualization || '';
+      const goal = payload.goal || '';
+      
+      let visualizationHTML = '';
+      if (rewardVisualization) {
+        try {
+          let vizHTML = rewardVisualization;
+          if (rewardVisualization.includes('<style>')) {
+            const styleMatch = rewardVisualization.match(/<style>([\s\S]*?)<\/style>/);
+            if (styleMatch) {
+              const styleContent = styleMatch[1];
+              const styleId = `task-reward-style-${msg.timestamp}`;
+              if (!document.getElementById(styleId)) {
+                const styleEl = document.createElement('style');
+                styleEl.id = styleId;
+                styleEl.textContent = styleContent;
+                document.head.appendChild(styleEl);
+              }
+            }
+            vizHTML = rewardVisualization.replace(/<style>[\s\S]*?<\/style>/g, '').trim();
+          }
+          visualizationHTML = `<div style="margin: 10px 0; padding: 15px; background: rgba(255,255,255,0.1); border-radius: 8px; min-height: 100px;">${vizHTML}</div>`;
+        } catch (error) {
+          console.error('渲染奖励可视化失败:', error);
+          visualizationHTML = '<div style="margin: 10px 0; padding: 15px; text-align: center; font-size: 48px;">🎁</div>';
+        }
+      } else {
+        visualizationHTML = '<div style="margin: 10px 0; padding: 15px; text-align: center; font-size: 48px;">🎁</div>';
+      }
+      
+      bubble.innerHTML = `
+        <img src="${chat.settings.aiAvatar}" class="avatar">
+        <div class="content">
+          <div style="font-weight: bold; margin-bottom: 10px; color: #4CAF50;">🎁 奖励</div>
+          ${goal ? `<div style="font-size: 12px; color: #999; margin-bottom: 10px;">目标：${goal}</div>` : ''}
+          ${visualizationHTML}
+          <div style="margin-top: 10px; line-height: 1.6;">${rewardText.replace(/\n/g, "<br>")}</div>
+        </div>
+      `;
+      
+      wrapper.appendChild(bubble);
+      addLongPressListener(wrapper, () => showMessageActions(msg.timestamp));
+      wrapper.addEventListener("click", () => {
+        if (isSelectionMode) toggleMessageSelection(msg.timestamp);
+      });
+      return wrapper;
     }
 
     const isUser = msg.role === "user";

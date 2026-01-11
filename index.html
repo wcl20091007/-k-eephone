@@ -14019,39 +14019,22 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           </div>
 
           <div id="task-splitter-completion-view" style="display: none; text-align: center; padding: 20px 40px;">
-            <div style="font-size: 48px; margin-bottom: 15px;">🎉</div>
             <div id="task-splitter-reward-container" style="
               margin-bottom: 20px;
-              cursor: pointer;
-              user-select: none;
             ">
+              <div id="task-splitter-reward-visualization" style="
+                padding: 20px;
+                min-height: 200px;
+                margin-bottom: 20px;
+              "></div>
               <div id="task-splitter-reward-message" style="
-                font-size: 18px;
+                font-size: 16px;
                 color: #333;
                 line-height: 1.6;
-                padding: 20px;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                color: white;
-                border-radius: 16px;
-                box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-                transition: transform 0.3s ease;
+                padding: 0;
               "></div>
-              <div id="task-splitter-reward-visualization" style="
-                display: none;
-                padding: 20px;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                border-radius: 16px;
-                box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-                min-height: 200px;
-              "></div>
-              <div style="
-                margin-top: 10px;
-                font-size: 14px;
-                color: #666;
-                opacity: 0.7;
-              ">点击切换显示</div>
             </div>
-            <div style="display: flex; justify-content: center; align-items: center;">
+            <div style="display: flex; justify-content: center; align-items: center; margin-top: 30px;">
               <button 
                 id="task-splitter-new-goal-btn" 
                 style="
@@ -14158,7 +14141,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
     <div id="task-splitter-history-modal" class="modal">
       <div class="modal-content" style="width: 90%; max-width: 600px; max-height: 80%;">
         <div class="modal-header">
-          <span>完成目标历史</span>
+          <span>奖励柜</span>
           <span id="task-splitter-history-close-btn" style="cursor: pointer; font-size: 24px;">×</span>
         </div>
         <div class="modal-body" id="task-splitter-history-list" style="padding: 15px; overflow-y: auto; max-height: calc(80vh - 100px);">

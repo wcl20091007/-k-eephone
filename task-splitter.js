@@ -550,7 +550,11 @@ async function generateTaskBreakdown(charId, goal, currentStatus, goalType = 'sh
   // 显示加载动画
   document.getElementById('task-splitter-initial-view').style.display = 'none';
   document.getElementById('task-splitter-current-status-view').style.display = 'none';
+  // 隐藏所有视图，只显示加载视图
+  document.getElementById('task-splitter-initial-view').style.display = 'none';
+  document.getElementById('task-splitter-current-status-view').style.display = 'none';
   document.getElementById('task-splitter-tasks-view').style.display = 'none';
+  document.getElementById('task-splitter-completion-view').style.display = 'none';
   document.getElementById('task-splitter-loading-view').style.display = 'block';
 
   try {
@@ -825,8 +829,25 @@ ${isLongTerm ? `- **对于长线目标，每个任务必须包含以下字段（
     }
 
     // 解析JSON（去除可能的markdown代码块）
-    const jsonContent = aiContent.replace(/^```json\s*|```$/g, '').trim();
-    const taskData = JSON.parse(jsonContent);
+    let jsonContent = aiContent.replace(/^```json\s*|```$/g, '').trim();
+    // 也尝试去除可能的markdown代码块标记
+    jsonContent = jsonContent.replace(/^```\s*|```$/g, '').trim();
+    
+    let taskData;
+    try {
+      taskData = JSON.parse(jsonContent);
+    } catch (parseError) {
+      console.error('JSON解析失败:', parseError);
+      console.error('原始内容:', aiContent);
+      console.error('清理后的内容:', jsonContent);
+      throw new Error(`AI返回的JSON格式不正确: ${parseError.message}`);
+    }
+    
+    // 验证taskData结构
+    if (!taskData || !taskData.taskGroups || !Array.isArray(taskData.taskGroups) || taskData.taskGroups.length === 0) {
+      console.error('taskData结构不正确:', taskData);
+      throw new Error('AI返回的任务数据格式不正确：缺少taskGroups或taskGroups为空');
+    }
 
     // 验证长线目标的任务数据
     if (goalType === 'long') {
@@ -916,14 +937,41 @@ ${isLongTerm ? `- **对于长线目标，每个任务必须包含以下字段（
     showDialogBubble(taskData.startMessage);
 
     // 渲染任务列表
-    renderTaskList();
+    console.log('准备渲染任务列表，currentTaskData:', currentTaskData);
+    console.log('taskGroups数量:', currentTaskData.taskGroups?.length);
+    
+    try {
+      renderTaskList();
+      console.log('任务列表渲染完成');
+    } catch (renderError) {
+      console.error('渲染任务列表失败:', renderError);
+      console.error('错误堆栈:', renderError.stack);
+      // 隐藏加载视图
+      const loadingView = document.getElementById('task-splitter-loading-view');
+      if (loadingView) {
+        loadingView.style.display = 'none';
+      }
+      await showCustomAlert('错误', `渲染任务列表失败：${renderError.message}`);
+      await renderTaskSplitterInitialView(chat);
+      return;
+    }
     
     // 确保按钮事件已绑定
     ensureTaskSplitterButtonsBound(chat);
 
   } catch (error) {
     console.error('生成任务拆解失败:', error);
+    console.error('错误堆栈:', error.stack);
+    
+    // 隐藏加载视图
+    const loadingView = document.getElementById('task-splitter-loading-view');
+    if (loadingView) {
+      loadingView.style.display = 'none';
+    }
+    
+    // 显示错误信息
     await showCustomAlert('错误', `生成任务拆解失败：${error.message}`);
+    
     // 返回初始界面
     await renderTaskSplitterInitialView(chat);
   }
@@ -964,11 +1012,43 @@ function renderTaskList() {
     console.error('找不到任务视图元素');
     return;
   }
+  
+  // 检查currentTaskData是否存在
+  if (!currentTaskData) {
+    console.error('currentTaskData为空，无法渲染任务列表');
+    if (loadingView) loadingView.style.display = 'none';
+    return;
+  }
+  
+  // 检查taskGroups是否存在
+  if (!currentTaskData.taskGroups || currentTaskData.taskGroups.length === 0) {
+    console.error('taskGroups为空，无法渲染任务列表');
+    if (loadingView) loadingView.style.display = 'none';
+    return;
+  }
 
   // 隐藏加载，显示任务列表
-  if (loadingView) loadingView.style.display = 'none';
-  tasksView.style.display = 'block';
-  if (helpBtn) helpBtn.style.display = 'block';
+  if (loadingView) {
+    loadingView.style.display = 'none';
+  }
+  
+  // 确保任务视图显示
+  if (tasksView) {
+    tasksView.style.display = 'block';
+    tasksView.style.visibility = 'visible';
+    tasksView.style.opacity = '1';
+  }
+  
+  // 确保任务容器显示
+  if (tasksContainer) {
+    tasksContainer.style.display = 'block';
+    tasksContainer.style.visibility = 'visible';
+    tasksContainer.style.opacity = '1';
+  }
+  
+  if (helpBtn) {
+    helpBtn.style.display = 'block';
+  }
   
   // 显示取消任务和切换角色按钮
   const cancelBtn = document.getElementById('task-splitter-cancel-task-btn');
@@ -994,14 +1074,38 @@ function renderTaskList() {
   tasksContainer.innerHTML = '';
 
   // 渲染任务分组
+  // 找到当前应该显示的分组（第一个有未完成任务的分组）
   let currentGroupIndex = 0;
-  currentTaskData.taskGroups.forEach((group, groupIndex) => {
+  for (let i = 0; i < currentTaskData.taskGroups.length; i++) {
+    const group = currentTaskData.taskGroups[i];
+    const hasUncompletedTask = group.tasks.some(task => 
+      !currentTaskData.completedTasks.has(task.id)
+    );
+    if (hasUncompletedTask) {
+      currentGroupIndex = i;
+      break;
+    }
+  }
+  // 如果所有任务都完成了，显示最后一个分组
+  if (currentGroupIndex === 0 && currentTaskData.taskGroups.length > 0) {
+    const allCompleted = currentTaskData.taskGroups.every(group =>
+      group.tasks.every(task => currentTaskData.completedTasks.has(task.id))
+    );
+    if (allCompleted) {
+      currentGroupIndex = currentTaskData.taskGroups.length - 1;
+    }
+  }
+  
+  console.log('开始渲染任务分组，共', currentTaskData.taskGroups.length, '个分组，当前显示分组:', currentGroupIndex);
+  
+  try {
+    currentTaskData.taskGroups.forEach((group, groupIndex) => {
     const groupDiv = document.createElement('div');
     groupDiv.className = 'task-group';
     groupDiv.dataset.groupIndex = groupIndex;
     groupDiv.style.cssText = `
       margin-bottom: 30px;
-      ${groupIndex > 0 ? 'display: none;' : ''}
+      ${groupIndex !== currentGroupIndex ? 'display: none;' : ''}
     `;
 
     // 如果有组名，显示组名
@@ -1152,10 +1256,58 @@ function renderTaskList() {
 
     groupDiv.appendChild(tasksList);
     tasksContainer.appendChild(groupDiv);
-  });
+    console.log(`分组 ${groupIndex} 渲染完成，包含 ${group.tasks.length} 个任务`);
+    });
+  } catch (renderError) {
+    console.error('渲染任务分组时出错:', renderError);
+    console.error('错误堆栈:', renderError.stack);
+    // 显示错误信息
+    tasksContainer.innerHTML = `
+      <div style="padding: 40px; text-align: center; color: #f44336;">
+        <p style="font-size: 18px; margin-bottom: 10px;">渲染任务列表时出错</p>
+        <p style="font-size: 14px; color: #666;">${renderError.message}</p>
+      </div>
+    `;
+    throw renderError; // 重新抛出错误，让上层处理
+  }
 
-  // 滚动到顶部
-  document.getElementById('task-splitter-content-area').scrollTop = 0;
+  // 确保至少有一个分组被显示
+  const renderedGroups = tasksContainer.querySelectorAll('.task-group');
+  if (renderedGroups.length === 0) {
+    console.error('没有渲染任何任务分组！');
+    tasksContainer.innerHTML = `
+      <div style="padding: 40px; text-align: center; color: #f44336;">
+        <p style="font-size: 18px; margin-bottom: 10px;">渲染任务列表时出错</p>
+        <p style="font-size: 14px; color: #666;">没有找到任何任务分组</p>
+      </div>
+    `;
+    return;
+  }
+  
+  // 滚动到当前显示的分组
+  const currentGroupDiv = document.querySelector(`[data-group-index="${currentGroupIndex}"]`);
+  if (currentGroupDiv) {
+    setTimeout(() => {
+      currentGroupDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
+  } else {
+    // 如果没有找到当前分组，显示第一个分组
+    const firstGroup = renderedGroups[0];
+    if (firstGroup) {
+      firstGroup.style.display = 'block';
+      setTimeout(() => {
+        firstGroup.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
+    } else {
+      // 如果没有找到当前分组，滚动到顶部
+      const contentArea = document.getElementById('task-splitter-content-area');
+      if (contentArea) {
+        contentArea.scrollTop = 0;
+      }
+    }
+  }
+  
+  console.log('所有任务分组渲染完成，当前显示分组:', currentGroupIndex, '，共渲染', renderedGroups.length, '个分组');
 }
 
 /**
@@ -1311,13 +1463,46 @@ async function showTaskCompletion() {
     tasksView.style.display = 'block';
   }
 
-  // 显示奖励（而不是结束语）
+  // 显示奖励：先显示可视化，再显示文字描述
   const rewardText = currentTaskData.reward || `${state.chats[activeTaskSplitterCharId]?.name || '角色'}送给你一个特别的奖励：恭喜你完成了目标！这是你应得的！`;
   const rewardVisualization = currentTaskData.rewardVisualization || '';
   
   const rewardContainer = document.getElementById('task-splitter-reward-container');
   const rewardVisualizationEl = document.getElementById('task-splitter-reward-visualization');
   
+  // 设置奖励可视化（优先显示）
+  if (rewardVisualizationEl) {
+    if (rewardVisualization) {
+      // 尝试渲染可视化代码
+      try {
+        // 如果包含style标签，提取内容
+        let visualizationHTML = rewardVisualization;
+        if (rewardVisualization.includes('<style>')) {
+          const styleMatch = rewardVisualization.match(/<style>([\s\S]*?)<\/style>/);
+          if (styleMatch) {
+            const styleContent = styleMatch[1];
+            const styleEl = document.createElement('style');
+            styleEl.textContent = styleContent;
+            document.head.appendChild(styleEl);
+          }
+          // 提取HTML部分
+          visualizationHTML = rewardVisualization.replace(/<style>[\s\S]*?<\/style>/g, '').trim();
+        }
+        rewardVisualizationEl.innerHTML = visualizationHTML;
+        rewardVisualizationEl.style.display = 'block';
+      } catch (error) {
+        console.error('渲染奖励可视化失败:', error);
+        rewardVisualizationEl.innerHTML = '<div style="text-align: center; padding: 40px; font-size: 48px;">🎁</div>';
+        rewardVisualizationEl.style.display = 'block';
+      }
+    } else {
+      // 如果没有可视化代码，显示默认图标
+      rewardVisualizationEl.innerHTML = '<div style="text-align: center; padding: 40px; font-size: 48px;">🎁</div>';
+      rewardVisualizationEl.style.display = 'block';
+    }
+  }
+  
+  // 显示奖励文字描述
   if (rewardEl) {
     // 转义HTML特殊字符
     const safeRewardText = rewardText
@@ -1328,7 +1513,7 @@ async function showTaskCompletion() {
       .replace(/'/g, '&#039;')
       .replace(/\n/g, '<br>');
     
-    rewardEl.innerHTML = `<div style="font-weight: bold; margin-bottom: 10px; font-size: 20px;">🎁 奖励</div><div style="font-size: 16px; line-height: 1.6;">${safeRewardText}</div>`;
+    rewardEl.innerHTML = safeRewardText;
     rewardEl.style.display = 'block';
     rewardEl.style.visibility = 'visible';
     rewardEl.style.opacity = '1';
@@ -1336,60 +1521,10 @@ async function showTaskCompletion() {
     console.error('找不到task-splitter-reward-message元素，尝试创建');
   }
   
-  // 设置奖励可视化（如果有）
-  if (rewardVisualizationEl && rewardVisualization) {
-    // 尝试渲染可视化代码
-    try {
-      // 如果包含style标签，提取内容
-      let visualizationHTML = rewardVisualization;
-      if (rewardVisualization.includes('<style>')) {
-        const styleMatch = rewardVisualization.match(/<style>([\s\S]*?)<\/style>/);
-        if (styleMatch) {
-          const styleContent = styleMatch[1];
-          const styleEl = document.createElement('style');
-          styleEl.textContent = styleContent;
-          document.head.appendChild(styleEl);
-        }
-        // 提取HTML部分
-        visualizationHTML = rewardVisualization.replace(/<style>[\s\S]*?<\/style>/g, '').trim();
-      }
-      rewardVisualizationEl.innerHTML = visualizationHTML || '<div style="text-align: center; padding: 40px; color: white; font-size: 18px;">🎁</div>';
-    } catch (error) {
-      console.error('渲染奖励可视化失败:', error);
-      rewardVisualizationEl.innerHTML = '<div style="text-align: center; padding: 40px; color: white; font-size: 18px;">🎁</div>';
-    }
-  }
-  
-  // 添加点击切换功能（如果有可视化）
-  if (rewardContainer && rewardVisualization) {
-    let showingText = true;
-    rewardContainer.onclick = () => {
-      if (showingText) {
-        rewardEl.style.display = 'none';
-        if (rewardVisualizationEl) {
-          rewardVisualizationEl.style.display = 'block';
-        }
-        showingText = false;
-      } else {
-        rewardEl.style.display = 'block';
-        if (rewardVisualizationEl) {
-          rewardVisualizationEl.style.display = 'none';
-        }
-        showingText = true;
-      }
-    };
-    // 显示提示文字
-    const hintEl = rewardContainer.querySelector('div:last-child');
-    if (hintEl) {
-      hintEl.style.display = 'block';
-    }
-  } else if (rewardContainer) {
-    // 如果没有可视化，隐藏提示
-    const hintEl = rewardContainer.querySelector('div:last-child');
-    if (hintEl) {
-      hintEl.style.display = 'none';
-    }
+  // 移除点击切换功能（不再需要）
+  if (rewardContainer) {
     rewardContainer.style.cursor = 'default';
+    rewardContainer.onclick = null;
   }
   
   // 确保完成界面元素存在
@@ -1459,7 +1594,10 @@ async function showTaskCompletion() {
     // 移除旧的事件监听器，添加新的事件
     const newBtn = newGoalBtn.cloneNode(true);
     newGoalBtn.parentNode.replaceChild(newBtn, newGoalBtn);
-    newBtn.onclick = () => {
+    newBtn.onclick = async () => {
+      // 发送奖励消息到聊天
+      await sendTaskRewardToChat();
+      
       // 清除保存的进度（因为已经完成了）
       clearTaskProgress(activeTaskSplitterCharId);
       currentTaskData = null;
@@ -1509,10 +1647,12 @@ async function saveTaskRecord() {
       startMessage: currentTaskData.startMessage,
       endMessage: currentTaskData.endMessage,
       reward: currentTaskData.reward || '恭喜你完成了目标！', // 奖励内容
+      rewardVisualization: currentTaskData.rewardVisualization || '', // 奖励可视化代码
       taskGroups: currentTaskData.taskGroups,
       completedTasks: Array.from(currentTaskData.completedTasks),
       createdAt: currentTaskData.createdAt,
       completedAt: Date.now(),
+      calendarTaskIds: currentTaskData.calendarTaskIds || [], // 保存月历任务ID，用于删除
     };
     
     records.unshift(record); // 最新的在前面
@@ -1690,7 +1830,7 @@ function openTaskSplitterHistory() {
   if (records.length === 0) {
     listEl.innerHTML = '<p style="text-align:center; color: var(--text-secondary); padding: 40px;">暂无完成记录</p>';
   } else {
-    records.forEach(record => {
+    records.forEach((record, index) => {
       const item = document.createElement('div');
       item.style.cssText = `
         padding: 15px;
@@ -1699,12 +1839,44 @@ function openTaskSplitterHistory() {
         border-radius: 8px;
         cursor: pointer;
         transition: all 0.3s;
+        position: relative;
       `;
       
       const completedDate = new Date(record.completedAt).toLocaleString();
       const createdDate = new Date(record.createdAt).toLocaleString();
       const completedCount = record.completedTasks.length;
       const totalTasks = record.taskGroups.reduce((sum, group) => sum + group.tasks.length, 0);
+      const rewardVisualization = record.rewardVisualization || '';
+      const rewardText = record.reward || '恭喜你完成了目标！';
+      
+      // 创建奖励可视化容器
+      let rewardVisualizationHTML = '';
+      if (rewardVisualization) {
+        try {
+          let visualizationHTML = rewardVisualization;
+          if (rewardVisualization.includes('<style>')) {
+            const styleMatch = rewardVisualization.match(/<style>([\s\S]*?)<\/style>/);
+            if (styleMatch) {
+              const styleContent = styleMatch[1];
+              const styleId = `reward-style-${record.id}`;
+              // 检查样式是否已存在
+              if (!document.getElementById(styleId)) {
+                const styleEl = document.createElement('style');
+                styleEl.id = styleId;
+                styleEl.textContent = styleContent;
+                document.head.appendChild(styleEl);
+              }
+            }
+            visualizationHTML = rewardVisualization.replace(/<style>[\s\S]*?<\/style>/g, '').trim();
+          }
+          rewardVisualizationHTML = `<div style="margin: 10px 0; padding: 15px; background: white; border-radius: 8px; min-height: 100px;">${visualizationHTML}</div>`;
+        } catch (error) {
+          console.error('渲染奖励可视化失败:', error);
+          rewardVisualizationHTML = `<div style="margin: 10px 0; padding: 15px; background: white; border-radius: 8px; text-align: center; font-size: 48px;">🎁</div>`;
+        }
+      } else {
+        rewardVisualizationHTML = `<div style="margin: 10px 0; padding: 15px; background: white; border-radius: 8px; text-align: center; font-size: 48px;">🎁</div>`;
+      }
       
       item.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
@@ -1717,15 +1889,64 @@ function openTaskSplitterHistory() {
             </div>
           </div>
         </div>
+        ${rewardVisualizationHTML}
+        <div style="font-size: 14px; color: #333; margin-top: 10px; line-height: 1.6; padding: 10px; background: white; border-radius: 8px;">
+          ${rewardText}
+        </div>
         <div style="font-size: 12px; color: #666; margin-top: 8px;">
           <div>开始：${createdDate}</div>
           <div>完成：${completedDate}</div>
         </div>
+        <div style="position: absolute; top: 10px; right: 10px; font-size: 12px; color: #999; opacity: 0.7;">
+          长按删除
+        </div>
       `;
       
+      // 点击打开详情
       item.onclick = () => {
         showTaskSplitterHistoryDetail(record);
       };
+      
+      // 长按删除
+      let longPressTimer = null;
+      item.addEventListener('touchstart', (e) => {
+        longPressTimer = setTimeout(() => {
+          e.preventDefault();
+          deleteTaskRecord(record, index);
+        }, 800); // 800ms长按
+      });
+      item.addEventListener('touchend', () => {
+        if (longPressTimer) {
+          clearTimeout(longPressTimer);
+          longPressTimer = null;
+        }
+      });
+      item.addEventListener('touchmove', () => {
+        if (longPressTimer) {
+          clearTimeout(longPressTimer);
+          longPressTimer = null;
+        }
+      });
+      
+      // 鼠标长按（桌面端）
+      item.addEventListener('mousedown', (e) => {
+        longPressTimer = setTimeout(() => {
+          e.preventDefault();
+          deleteTaskRecord(record, index);
+        }, 800);
+      });
+      item.addEventListener('mouseup', () => {
+        if (longPressTimer) {
+          clearTimeout(longPressTimer);
+          longPressTimer = null;
+        }
+      });
+      item.addEventListener('mouseleave', () => {
+        if (longPressTimer) {
+          clearTimeout(longPressTimer);
+          longPressTimer = null;
+        }
+      });
       
       listEl.appendChild(item);
     });
@@ -1738,6 +1959,57 @@ function openTaskSplitterHistory() {
   };
   
   modal.classList.add('visible');
+}
+
+/**
+ * 发送任务奖励到聊天
+ */
+async function sendTaskRewardToChat() {
+  if (!currentTaskData || !activeTaskSplitterCharId) return;
+  
+  const chat = state.chats[activeTaskSplitterCharId];
+  if (!chat) return;
+  
+  const rewardText = currentTaskData.reward || '恭喜你完成了目标！';
+  const rewardVisualization = currentTaskData.rewardVisualization || '';
+  const goal = currentTaskData.goal;
+  
+  // 创建奖励消息（对用户可见）
+  const rewardMessage = {
+    role: 'user', // 由用户触发，但显示为角色发送
+    type: 'task_reward',
+    timestamp: Date.now(),
+    content: rewardText,
+    payload: {
+      goal: goal,
+      rewardText: rewardText,
+      rewardVisualization: rewardVisualization,
+      charId: activeTaskSplitterCharId,
+      charName: chat.name,
+    },
+  };
+  
+  chat.history.push(rewardMessage);
+  
+  // 创建给AI看的隐藏指令
+  const hiddenMessage = {
+    role: 'system',
+    content: `[系统指令：用户刚刚完成了你设定的目标"${goal}"。你送给用户的奖励是：${rewardText}。请根据这个奖励和用户完成的事情，以你的角色人设，主动开启一段新的对话，表达你对用户完成目标的祝贺和鼓励。]`,
+    timestamp: Date.now() + 1,
+    isHidden: true,
+  };
+  chat.history.push(hiddenMessage);
+  
+  // 保存到数据库
+  await db.chats.put(chat);
+  
+  // 打开聊天界面并触发AI响应
+  if (typeof openChat === 'function') {
+    openChat(activeTaskSplitterCharId);
+  }
+  if (typeof triggerAiResponse === 'function') {
+    triggerAiResponse();
+  }
 }
 
 /**
@@ -1796,6 +2068,15 @@ async function showTaskSplitterHistoryDetail(record) {
         <div style="font-size: 13px; color: #666; margin-bottom: 5px;">结束语：</div>
         <div style="font-size: 14px; color: #333; line-height: 1.6;">${record.endMessage}</div>
       </div>
+      ${record.reward ? `
+      <div style="margin-top: 15px; padding: 12px; background: #fff3e0; border-radius: 8px;">
+        <div style="font-size: 13px; color: #666; margin-bottom: 5px;">奖励：</div>
+        ${record.rewardVisualization ? `
+          <div style="margin: 10px 0; padding: 15px; background: white; border-radius: 8px; min-height: 100px;" id="detail-reward-visualization-${record.id}"></div>
+        ` : ''}
+        <div style="font-size: 14px; color: #333; line-height: 1.6;">${record.reward}</div>
+      </div>
+      ` : ''}
       <div style="margin-top: 15px; font-size: 12px; color: #999; text-align: center; padding-top: 15px; border-top: 1px solid #eee;">
         创建时间：${new Date(record.createdAt).toLocaleString()}<br>
         完成时间：${new Date(record.completedAt).toLocaleString()}
@@ -1803,7 +2084,75 @@ async function showTaskSplitterHistoryDetail(record) {
     </div>
   `;
   
+  // 渲染奖励可视化（如果有）
+  if (record.rewardVisualization) {
+    const visualizationEl = document.getElementById(`detail-reward-visualization-${record.id}`);
+    if (visualizationEl) {
+      try {
+        let visualizationHTML = record.rewardVisualization;
+        if (record.rewardVisualization.includes('<style>')) {
+          const styleMatch = record.rewardVisualization.match(/<style>([\s\S]*?)<\/style>/);
+          if (styleMatch) {
+            const styleContent = styleMatch[1];
+            const styleId = `detail-reward-style-${record.id}`;
+            if (!document.getElementById(styleId)) {
+              const styleEl = document.createElement('style');
+              styleEl.id = styleId;
+              styleEl.textContent = styleContent;
+              document.head.appendChild(styleEl);
+            }
+          }
+          visualizationHTML = record.rewardVisualization.replace(/<style>[\s\S]*?<\/style>/g, '').trim();
+        }
+        visualizationEl.innerHTML = visualizationHTML;
+      } catch (error) {
+        console.error('渲染奖励可视化失败:', error);
+        visualizationEl.innerHTML = '<div style="text-align: center; padding: 40px; font-size: 48px;">🎁</div>';
+      }
+    }
+  }
+  
   detailModal.classList.add('visible');
+}
+
+/**
+ * 删除任务记录（包括月历中的任务）
+ */
+async function deleteTaskRecord(record, index) {
+  if (!confirm(`确定要删除这个目标记录吗？\n目标：${record.goal}\n\n这将同时删除该目标在月历中生成的所有行程和待办。`)) {
+    return;
+  }
+  
+  try {
+    // 删除月历中的任务
+    if (record.calendarTaskIds && record.calendarTaskIds.length > 0) {
+      for (const taskInfo of record.calendarTaskIds) {
+        try {
+          if (taskInfo.type === 'event') {
+            await db.calendarEvents.delete(taskInfo.id);
+          } else if (taskInfo.type === 'todo') {
+            await db.calendarTodos.delete(taskInfo.id);
+          }
+        } catch (error) {
+          console.warn(`删除月历任务失败 (${taskInfo.type}:${taskInfo.id}):`, error);
+        }
+      }
+      console.log(`已删除 ${record.calendarTaskIds.length} 个月历任务`);
+    }
+    
+    // 从记录列表中删除
+    const records = JSON.parse(localStorage.getItem('task-splitter-records') || '[]');
+    records.splice(index, 1);
+    localStorage.setItem('task-splitter-records', JSON.stringify(records));
+    
+    // 重新渲染列表
+    openTaskSplitterHistory();
+    
+    await showCustomAlert('删除成功', '目标记录及相关的月历任务已删除');
+  } catch (error) {
+    console.error('删除任务记录失败:', error);
+    await showCustomAlert('错误', `删除失败：${error.message}`);
+  }
 }
 
 /**
