@@ -1074,6 +1074,30 @@ body {
   cursor: pointer;
   color: var(--accent-color);
 }
+#sticker-search-container {
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+#sticker-search-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 14px;
+  background-color: rgba(255, 255, 255, 0.8);
+  color: var(--text-color);
+  outline: none;
+  transition: all 0.2s ease;
+}
+#sticker-search-input:focus {
+  border-color: var(--accent-color);
+  background-color: rgba(255, 255, 255, 1);
+  box-shadow: 0 0 0 2px rgba(var(--accent-color-rgb, 0, 122, 255), 0.1);
+}
+#sticker-search-input::placeholder {
+  color: var(--text-secondary);
+}
 #sticker-grid,
 #exclusive-sticker-grid,
 #common-sticker-grid {

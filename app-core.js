@@ -208,6 +208,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let isUserStickerSelectionMode = false;
   let activeStickerCategoryId = "uncategorized";
   let userStickerCategories = []; // 用于缓存用户的所有分类
+  let stickerSearchKeyword = ""; // 表情包搜索关键词
 
   let isCharStickerSelectionMode = false;
   let selectedCharStickers = new Set();
@@ -6937,10 +6938,21 @@ document.addEventListener("DOMContentLoaded", () => {
       );
     }
 
+    // 如果有关键词，按名称搜索过滤
+    if (stickerSearchKeyword.trim()) {
+      const keyword = stickerSearchKeyword.trim().toLowerCase();
+      stickersToRender = stickersToRender.filter((sticker) =>
+        sticker.name.toLowerCase().includes(keyword)
+      );
+    }
+
     if (stickersToRender.length === 0) {
-      // 根据当前选中的分类，显示不同的提示语
+      // 根据当前选中的分类和搜索状态，显示不同的提示语
       let message;
-      if (activeStickerCategoryId === "uncategorized") {
+      if (stickerSearchKeyword.trim()) {
+        // 如果有搜索关键词但没有结果
+        message = `没有找到名称包含"${stickerSearchKeyword.trim()}"的表情包`;
+      } else if (activeStickerCategoryId === "uncategorized") {
         // 如果所有表情都有分类了，这里也会是空的
         message = "没有未分类的表情哦~";
       } else {
@@ -41491,14 +41503,31 @@ document.addEventListener("DOMContentLoaded", () => {
     document
       .getElementById("open-sticker-panel-btn")
       .addEventListener("click", () => {
+        // 打开面板时清空搜索关键词
+        stickerSearchKeyword = "";
+        const searchInput = document.getElementById("sticker-search-input");
+        if (searchInput) searchInput.value = "";
         renderStickerPanel();
         stickerPanel.classList.add("visible");
       });
     document
       .getElementById("close-sticker-panel-btn")
-      .addEventListener("click", () =>
-        stickerPanel.classList.remove("visible")
-      );
+      .addEventListener("click", () => {
+        stickerPanel.classList.remove("visible");
+        // 关闭面板时清空搜索关键词
+        stickerSearchKeyword = "";
+        const searchInput = document.getElementById("sticker-search-input");
+        if (searchInput) searchInput.value = "";
+      });
+
+    // 搜索输入框事件监听
+    const stickerSearchInput = document.getElementById("sticker-search-input");
+    if (stickerSearchInput) {
+      stickerSearchInput.addEventListener("input", (e) => {
+        stickerSearchKeyword = e.target.value;
+        renderStickerPanel();
+      });
+    }
 
     document
       .getElementById("add-sticker-btn")
