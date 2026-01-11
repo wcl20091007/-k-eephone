@@ -1,6 +1,7 @@
 // 拆分机app - 帮助用户将目标拆分成小任务
 let activeTaskSplitterCharId = null;
 let currentTaskData = null; // 存储当前任务数据
+let isSyncingFromCalendar = false; // 标志：是否正在从月历同步，防止循环同步
 
 /**
  * 【总入口】打开拆分机功能
@@ -43,18 +44,63 @@ async function openTaskSplitterWithChar(charId) {
     currentTaskData = {
       charId: savedProgress.charId,
       goal: savedProgress.goal,
+      goalType: savedProgress.goalType || 'short',
       currentStatus: savedProgress.currentStatus,
       startMessage: savedProgress.startMessage,
       endMessage: savedProgress.endMessage,
       taskGroups: savedProgress.taskGroups,
       completedTasks: new Set(savedProgress.completedTasks || []),
       createdAt: savedProgress.createdAt,
+      calendarTaskIds: savedProgress.calendarTaskIds || [],
     };
+    
+    // 如果是长线目标但还没有添加到月历，尝试添加（异步执行，不阻塞界面）
+    if (currentTaskData.goalType === 'long') {
+      // 检查月历中是否已有任务（验证数据完整性）
+      const hasCalendarTasks = currentTaskData.calendarTaskIds && currentTaskData.calendarTaskIds.length > 0;
+      if (!hasCalendarTasks) {
+        console.log('恢复进度：检测到长线目标但月历中没有任务，开始添加...');
+        // 异步执行，不阻塞界面渲染
+        addTasksToCalendar(currentTaskData.taskGroups, charId).catch(error => {
+          console.error('添加任务到月历失败:', error);
+        });
+      } else {
+        console.log('恢复进度：月历中已有任务，跳过添加');
+        // 快速验证：只检查第一个任务是否存在，不全部验证（避免卡顿）
+        if (currentTaskData.calendarTaskIds.length > 0) {
+          const firstTask = currentTaskData.calendarTaskIds[0];
+          try {
+            let exists = false;
+            if (firstTask.type === 'event') {
+              const event = await db.calendarEvents.get(firstTask.id);
+              exists = !!event;
+            } else {
+              const todo = await db.calendarTodos.get(firstTask.id);
+              exists = !!todo;
+            }
+            if (!exists) {
+              console.log('恢复进度：月历中的任务已丢失，重新添加...');
+              // 异步执行，不阻塞界面渲染
+              addTasksToCalendar(currentTaskData.taskGroups, charId).catch(error => {
+                console.error('添加任务到月历失败:', error);
+              });
+            }
+          } catch (error) {
+            console.warn('验证月历任务失败:', error);
+          }
+        }
+      }
+    }
     
     // 检查是否所有任务都已完成
     const allTasksCompleted = currentTaskData.taskGroups.every(group =>
       group.tasks.every(task => currentTaskData.completedTasks.has(task.id))
     );
+    
+    // 隐藏所有视图，确保没有重叠
+    document.getElementById('task-splitter-initial-view').style.display = 'none';
+    document.getElementById('task-splitter-current-status-view').style.display = 'none';
+    document.getElementById('task-splitter-loading-view').style.display = 'none';
     
     if (allTasksCompleted) {
       // 所有任务已完成，显示完成界面
@@ -68,6 +114,12 @@ async function openTaskSplitterWithChar(charId) {
       completionView.style.display = 'block';
       helpBtn.style.display = 'none';
       
+      // 隐藏取消任务和切换角色按钮
+      const cancelBtn = document.getElementById('task-splitter-cancel-task-btn');
+      const switchCharBtn = document.getElementById('task-splitter-switch-char-btn');
+      if (cancelBtn) cancelBtn.style.display = 'none';
+      if (switchCharBtn) switchCharBtn.style.display = 'none';
+      
       // 显示结束语
       showDialogBubble(currentTaskData.endMessage);
     } else {
@@ -77,15 +129,95 @@ async function openTaskSplitterWithChar(charId) {
       if (currentTaskData.startMessage) {
         showDialogBubble(currentTaskData.startMessage);
       }
+      
+      // 确保按钮事件已绑定（恢复进度时可能没有调用setupTaskSplitterEvents）
+      ensureTaskSplitterButtonsBound(chat);
     }
   } else {
     // 没有保存的进度，显示初始界面
     currentTaskData = null;
+    // 确保隐藏其他视图
+    document.getElementById('task-splitter-current-status-view').style.display = 'none';
+    document.getElementById('task-splitter-tasks-view').style.display = 'none';
+    document.getElementById('task-splitter-loading-view').style.display = 'none';
+    document.getElementById('task-splitter-completion-view').style.display = 'none';
+    document.getElementById('task-splitter-help-btn').style.display = 'none';
+    const cancelBtn = document.getElementById('task-splitter-cancel-task-btn');
+    const switchCharBtn = document.getElementById('task-splitter-switch-char-btn');
+    if (cancelBtn) cancelBtn.style.display = 'none';
+    if (switchCharBtn) switchCharBtn.style.display = 'none';
+    
     await renderTaskSplitterInitialView(chat);
   }
   
   // 加载保存的背景图片
   loadTaskSplitterBackground();
+}
+
+/**
+ * 确保任务拆分器按钮事件已绑定（用于恢复进度时）
+ */
+function ensureTaskSplitterButtonsBound(chat) {
+  // 返回按钮
+  const backBtn = document.getElementById('task-splitter-back-btn');
+  if (backBtn && !backBtn.hasAttribute('data-bound')) {
+    backBtn.onclick = () => {
+      // 保存当前进度
+      if (currentTaskData) {
+        saveTaskProgress();
+      }
+      hideDialogBubble();
+      showScreen('home-screen');
+    };
+    backBtn.setAttribute('data-bound', 'true');
+  }
+  
+  // 取消任务按钮
+  const cancelTaskBtn = document.getElementById('task-splitter-cancel-task-btn');
+  if (cancelTaskBtn && !cancelTaskBtn.hasAttribute('data-bound')) {
+    cancelTaskBtn.onclick = async () => {
+      if (confirm('确定要取消当前任务吗？取消后可以从月历中删除相关任务。')) {
+        await cancelCurrentTask();
+      }
+    };
+    cancelTaskBtn.setAttribute('data-bound', 'true');
+  }
+  
+  // 切换角色按钮
+  const switchCharBtn = document.getElementById('task-splitter-switch-char-btn');
+  if (switchCharBtn && !switchCharBtn.hasAttribute('data-bound')) {
+    switchCharBtn.onclick = () => {
+      showTaskSplitterCharSelection();
+    };
+    switchCharBtn.setAttribute('data-bound', 'true');
+  }
+  
+  // 遇到困难按钮
+  const helpBtn = document.getElementById('task-splitter-help-btn');
+  if (helpBtn && !helpBtn.hasAttribute('data-bound')) {
+    helpBtn.onclick = async () => {
+      await handleTaskSplitterHelp();
+    };
+    helpBtn.setAttribute('data-bound', 'true');
+  }
+  
+  // 查看历史按钮
+  const historyBtn = document.getElementById('task-splitter-history-btn');
+  if (historyBtn && !historyBtn.hasAttribute('data-bound')) {
+    historyBtn.onclick = () => {
+      openTaskSplitterHistory();
+    };
+    historyBtn.setAttribute('data-bound', 'true');
+  }
+  
+  // 设置按钮
+  const settingsBtn = document.getElementById('task-splitter-image-settings-btn');
+  if (settingsBtn && !settingsBtn.hasAttribute('data-bound')) {
+    settingsBtn.onclick = () => {
+      showTaskSplitterImageSettings();
+    };
+    settingsBtn.setAttribute('data-bound', 'true');
+  }
 }
 
 /**
@@ -117,8 +249,92 @@ async function renderTaskSplitterInitialView(chat) {
   document.getElementById('task-splitter-goal-input').value = '';
   document.getElementById('task-splitter-current-status-input').value = '';
   
+  // 确保目标类型选择器存在
+  ensureGoalTypeSelector();
+  
   // 绑定事件
   setupTaskSplitterEvents(chat);
+}
+
+/**
+ * 确保目标类型选择器存在
+ */
+function ensureGoalTypeSelector() {
+  const initialView = document.getElementById('task-splitter-initial-view');
+  let typeSelector = document.getElementById('task-splitter-goal-type-selector');
+  
+  if (!typeSelector) {
+    typeSelector = document.createElement('div');
+    typeSelector.id = 'task-splitter-goal-type-selector';
+    typeSelector.style.cssText = `
+      display: flex;
+      gap: 15px;
+      margin-bottom: 20px;
+      justify-content: center;
+    `;
+    
+    const longTermBtn = document.createElement('button');
+    longTermBtn.id = 'task-splitter-goal-type-long';
+    longTermBtn.textContent = '长线目标';
+    longTermBtn.dataset.type = 'long';
+    longTermBtn.style.cssText = `
+      padding: 10px 20px;
+      font-size: 14px;
+      background: #e3f2fd;
+      color: #1976d2;
+      border: 2px solid #1976d2;
+      border-radius: 20px;
+      cursor: pointer;
+      transition: all 0.3s;
+    `;
+    
+    const shortTermBtn = document.createElement('button');
+    shortTermBtn.id = 'task-splitter-goal-type-short';
+    shortTermBtn.textContent = '短期目标';
+    shortTermBtn.dataset.type = 'short';
+    shortTermBtn.style.cssText = `
+      padding: 10px 20px;
+      font-size: 14px;
+      background: #fff3e0;
+      color: #f57c00;
+      border: 2px solid #f57c00;
+      border-radius: 20px;
+      cursor: pointer;
+      transition: all 0.3s;
+    `;
+    
+    // 默认选中短期目标
+    shortTermBtn.style.background = '#f57c00';
+    shortTermBtn.style.color = 'white';
+    
+    let selectedType = 'short';
+    
+    longTermBtn.onclick = () => {
+      selectedType = 'long';
+      longTermBtn.style.background = '#1976d2';
+      longTermBtn.style.color = 'white';
+      shortTermBtn.style.background = '#fff3e0';
+      shortTermBtn.style.color = '#f57c00';
+      typeSelector.dataset.selectedType = 'long';
+    };
+    
+    shortTermBtn.onclick = () => {
+      selectedType = 'short';
+      shortTermBtn.style.background = '#f57c00';
+      shortTermBtn.style.color = 'white';
+      longTermBtn.style.background = '#e3f2fd';
+      longTermBtn.style.color = '#1976d2';
+      typeSelector.dataset.selectedType = 'short';
+    };
+    
+    typeSelector.appendChild(longTermBtn);
+    typeSelector.appendChild(shortTermBtn);
+    typeSelector.dataset.selectedType = 'short';
+    
+    // 插入到问候语和输入框之间
+    const greetingEl = document.getElementById('task-splitter-greeting');
+    greetingEl.parentNode.insertBefore(typeSelector, greetingEl.nextSibling);
+  }
 }
 
 /**
@@ -158,8 +374,12 @@ function setupTaskSplitterEvents(chat) {
       return;
     }
     
+    // 获取目标类型
+    const typeSelector = document.getElementById('task-splitter-goal-type-selector');
+    const goalType = typeSelector ? typeSelector.dataset.selectedType || 'short' : 'short';
+    
     // 开始生成任务拆解
-    await generateTaskBreakdown(activeTaskSplitterCharId, goal, currentStatus);
+    await generateTaskBreakdown(activeTaskSplitterCharId, goal, currentStatus, goalType);
   };
   
   // 回车键提交
@@ -213,6 +433,24 @@ function setupTaskSplitterEvents(chat) {
     };
   }
   
+  // 取消任务按钮
+  const cancelTaskBtn = document.getElementById('task-splitter-cancel-task-btn');
+  if (cancelTaskBtn) {
+    cancelTaskBtn.onclick = async () => {
+      if (confirm('确定要取消当前任务吗？取消后可以从月历中删除相关任务。')) {
+        await cancelCurrentTask();
+      }
+    };
+  }
+  
+  // 切换角色任务进度按钮
+  const switchCharBtn = document.getElementById('task-splitter-switch-char-btn');
+  if (switchCharBtn) {
+    switchCharBtn.onclick = () => {
+      showTaskSplitterCharSelection();
+    };
+  }
+  
   // 背景图片设置模态框事件
   setupImageSettingsModal();
 }
@@ -222,26 +460,89 @@ function setupTaskSplitterEvents(chat) {
  */
 async function showTaskSplitterCharSelection() {
   const listEl = document.getElementById('task-splitter-char-list');
+  if (!listEl) {
+    console.error('找不到task-splitter-char-list元素');
+    return;
+  }
+  
   listEl.innerHTML = '';
   const characters = Object.values(state.chats).filter(chat => !chat.isGroup);
 
   if (characters.length === 0) {
     listEl.innerHTML = '<p style="text-align:center; color: var(--text-secondary);">还没有可以使用的角色</p>';
-  } else {
-    characters.forEach(char => {
+    showScreen('task-splitter-char-selection-screen');
+    return;
+  }
+  
+  // 使用try-catch包装，避免单个角色数据错误导致整个列表无法显示
+  for (const char of characters) {
+    try {
       const item = document.createElement('div');
       item.className = 'character-select-item';
       item.dataset.chatId = char.id;
+      item.style.position = 'relative';
+      
+      // 检查是否有进行中的任务（使用try-catch避免错误）
+      let taskBadgeHtml = '';
+      try {
+        const taskProgress = loadTaskProgress(char.id);
+        const hasActiveTask = taskProgress && taskProgress.taskGroups && taskProgress.taskGroups.length > 0;
+        
+        if (hasActiveTask) {
+          const completedTasks = new Set(taskProgress.completedTasks || []);
+          const allTasksCompleted = taskProgress.taskGroups.every(group =>
+            group.tasks.every(task => completedTasks.has(task.id))
+          );
+          
+          if (!allTasksCompleted) {
+            // 显示任务气泡，包含目标内容
+            const goalText = (taskProgress.goal || '进行中的任务').replace(/"/g, '&quot;'); // 转义引号
+            // 限制显示长度
+            const displayGoal = goalText.length > 20 ? goalText.substring(0, 20) + '...' : goalText;
+            taskBadgeHtml = `
+              <span class="task-badge" style="
+                position: absolute;
+                top: 5px;
+                right: 5px;
+                background: #4CAF50;
+                color: white;
+                font-size: 10px;
+                padding: 4px 8px;
+                border-radius: 12px;
+                white-space: nowrap;
+                max-width: 150px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                z-index: 10;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+              " title="${goalText}">任务中: ${displayGoal}</span>
+            `;
+          }
+        }
+      } catch (error) {
+        console.warn(`检查角色 ${char.id} 的任务状态失败:`, error);
+        // 即使检查失败，也继续显示角色
+      }
+      
+      // 转义HTML特殊字符
+      const charName = (char.name || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const avatarUrl = (char.settings?.aiAvatar || defaultAvatar || '').replace(/"/g, '&quot;');
+      
       item.innerHTML = `
-        <img src="${char.settings.aiAvatar || defaultAvatar}" alt="${char.name}">
-        <span class="name">${char.name}</span>
+        <img src="${avatarUrl}" alt="${charName}">
+        <span class="name">${charName}</span>
+        ${taskBadgeHtml}
       `;
       item.onclick = () => {
         openTaskSplitterWithChar(char.id);
       };
       listEl.appendChild(item);
-    });
+    } catch (error) {
+      console.error(`渲染角色 ${char.id} 失败:`, error);
+      // 即使单个角色失败，也继续处理其他角色
+    }
   }
+  
   showScreen('task-splitter-char-selection-screen');
 }
 
@@ -250,8 +551,9 @@ async function showTaskSplitterCharSelection() {
  * @param {string} charId - 角色ID
  * @param {string} goal - 用户目标
  * @param {string} currentStatus - 用户当前状态
+ * @param {string} goalType - 目标类型：'long' 或 'short'
  */
-async function generateTaskBreakdown(charId, goal, currentStatus) {
+async function generateTaskBreakdown(charId, goal, currentStatus, goalType = 'short') {
   const chat = state.chats[charId];
   if (!chat) return;
 
@@ -285,6 +587,28 @@ async function generateTaskBreakdown(charId, goal, currentStatus) {
       : { all: '' };
     const worldBookContext = worldBookByPosition.all || '';
 
+    const isLongTerm = goalType === 'long';
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    
+    const goalTypeInstruction = isLongTerm 
+      ? `这是一个长线目标（例如：减肥到50kg，半年内学会意大利语）。你需要：
+- 根据目标的时间跨度，将任务分配到具体的时间段
+- **每个任务必须包含具体的完成日期**（scheduledDate字段，格式：YYYY-MM-DD，从今天${todayStr}开始往后分配）
+- **每个任务必须包含时间**（scheduledTime字段，格式：HH:mm，例如"09:00"或"14:30"，如果没有具体时间可以设为"09:00"）
+- **每个任务必须指定是行程还是待办**（isEvent字段：true=行程，false=待办）
+- 任务应该按时间顺序排列，从近期到远期
+- 日期应该合理分配，考虑任务的依赖关系和执行周期
+- 例如：如果目标是"半年内学会意大利语"，可以分配：
+  * 第1周：每天学习30分钟（2024-01-15到2024-01-21，每天一个待办）
+  * 第2-4周：完成基础语法（每周一个任务）
+  * 第2个月：开始练习对话（每周一个任务）
+  * 等等`
+      : `这是一个短期目标。任务应该：
+- 具体、可执行
+- 可以立即开始
+- 不需要特别的时间段分配`;
+
     const systemPrompt = `# 任务：目标拆分助手
 
 你现在是角色"${charName}"，你的人设是："${charPersona}"
@@ -294,6 +618,7 @@ async function generateTaskBreakdown(charId, goal, currentStatus) {
 # 用户信息
 - 用户名：${userNickname}
 - 目标：${goal}
+- 目标类型：${isLongTerm ? '长线目标' : '短期目标'}
 - 当前状态：${currentStatus}
 
 ${worldBookContext ? `# 世界观设定\n${worldBookContext}\n` : ''}
@@ -307,6 +632,7 @@ ${worldBookContext ? `# 世界观设定\n${worldBookContext}\n` : ''}
 
 # 任务拆分规则
 
+${goalTypeInstruction}
 - 任务应该具体、可执行
 - 任务可以分组，例如："不玩手机"这个任务可以拆分为：
   - 关闭小红书
@@ -328,7 +654,7 @@ ${worldBookContext ? `# 世界观设定\n${worldBookContext}\n` : ''}
           "id": "task_1",
           "content": "任务内容",
           "completed": false,
-          "completionMessage": "完成这个任务时的鼓励话语（20-40字）"
+          "completionMessage": "完成这个任务时的鼓励话语（20-40字）"${isLongTerm ? ',\n          "scheduledDate": "2024-01-15",\n          "scheduledTime": "09:00",\n          "isEvent": false' : ''}
         }
       ]
     }
@@ -339,6 +665,13 @@ ${worldBookContext ? `# 世界观设定\n${worldBookContext}\n` : ''}
 - 如果不需要分组，可以只有一个taskGroup，groupName为空字符串
 - 每个任务必须有唯一的id
 - 每个任务必须包含completionMessage字段，这是完成该任务时角色要说的话
+${isLongTerm ? `- **对于长线目标，每个任务必须包含以下字段（这是必须的，不能省略）：**
+  * scheduledDate: 任务应该完成的日期（YYYY-MM-DD格式，必须从今天${todayStr}开始往后分配，不能是过去的日期）
+  * scheduledTime: 任务的时间（HH:mm格式，例如"09:00"、"14:30"，如果没有具体时间可以设为"09:00"，但不能为空）
+  * isEvent: 是否为行程（true=行程，false=待办，必须明确指定）
+- **重要**：所有任务的日期必须按时间顺序排列，从近期到远期
+- **重要**：日期应该合理分配，考虑任务的依赖关系和执行周期
+- **示例**：如果今天是${todayStr}，第一个任务可以是${todayStr}，第二个任务可以是明天，以此类推` : ''}
 - 直接输出JSON，不要添加任何其他文字`;
 
     const isGemini = proxyUrl === 'https://generativelanguage.googleapis.com/v1beta/models';
@@ -386,17 +719,79 @@ ${worldBookContext ? `# 世界观设定\n${worldBookContext}\n` : ''}
     const jsonContent = aiContent.replace(/^```json\s*|```$/g, '').trim();
     const taskData = JSON.parse(jsonContent);
 
+    // 验证长线目标的任务数据
+    if (goalType === 'long') {
+      const today = new Date();
+      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      
+      console.log('验证长线目标任务数据，今天日期:', todayStr);
+      console.log('任务数据:', JSON.stringify(taskData, null, 2));
+      
+      // 检查并修复任务数据
+      let taskDate = new Date(today);
+      for (const group of taskData.taskGroups) {
+        for (const task of group.tasks) {
+          // 如果没有scheduledDate，使用递增的日期
+          if (!task.scheduledDate) {
+            task.scheduledDate = `${taskDate.getFullYear()}-${String(taskDate.getMonth() + 1).padStart(2, '0')}-${String(taskDate.getDate()).padStart(2, '0')}`;
+            console.log(`任务 ${task.id} 没有日期，自动分配: ${task.scheduledDate}`);
+          } else {
+            // 验证日期格式
+            const dateMatch = task.scheduledDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+            if (!dateMatch) {
+              console.warn(`任务 ${task.id} 日期格式不正确: ${task.scheduledDate}，使用今天`);
+              task.scheduledDate = todayStr;
+            }
+          }
+          // 如果没有scheduledTime，使用默认时间
+          if (!task.scheduledTime) {
+            task.scheduledTime = '09:00';
+            console.log(`任务 ${task.id} 没有时间，使用默认: 09:00`);
+          } else {
+            // 验证时间格式
+            const timeMatch = task.scheduledTime.match(/^(\d{2}):(\d{2})$/);
+            if (!timeMatch) {
+              console.warn(`任务 ${task.id} 时间格式不正确: ${task.scheduledTime}，使用默认`);
+              task.scheduledTime = '09:00';
+            }
+          }
+          // 如果没有isEvent，默认为待办
+          if (task.isEvent === undefined) {
+            task.isEvent = false;
+            console.log(`任务 ${task.id} 没有isEvent，默认为待办`);
+          }
+          
+          // 为下一个任务递增日期（如果任务没有指定日期）
+          taskDate.setDate(taskDate.getDate() + 1);
+          
+          console.log(`任务 ${task.id} 最终数据:`, {
+            scheduledDate: task.scheduledDate,
+            scheduledTime: task.scheduledTime,
+            isEvent: task.isEvent,
+            content: task.content
+          });
+        }
+      }
+    }
+
     // 保存任务数据
     currentTaskData = {
       charId: charId,
       goal: goal,
+      goalType: goalType,
       currentStatus: currentStatus,
       startMessage: taskData.startMessage,
       endMessage: taskData.endMessage,
       taskGroups: taskData.taskGroups,
       completedTasks: new Set(),
       createdAt: Date.now(),
+      calendarTaskIds: [], // 存储添加到月历的任务ID
     };
+
+    // 如果是长线目标，将任务添加到月历
+    if (goalType === 'long') {
+      await addTasksToCalendar(taskData.taskGroups, charId);
+    }
 
     // 保存进度
     saveTaskProgress();
@@ -406,6 +801,9 @@ ${worldBookContext ? `# 世界观设定\n${worldBookContext}\n` : ''}
 
     // 渲染任务列表
     renderTaskList();
+    
+    // 确保按钮事件已绑定
+    ensureTaskSplitterButtonsBound(chat);
 
   } catch (error) {
     console.error('生成任务拆解失败:', error);
@@ -446,10 +844,35 @@ function renderTaskList() {
   const tasksContainer = document.getElementById('task-splitter-tasks-container');
   const helpBtn = document.getElementById('task-splitter-help-btn');
 
+  if (!tasksView || !tasksContainer) {
+    console.error('找不到任务视图元素');
+    return;
+  }
+
   // 隐藏加载，显示任务列表
-  loadingView.style.display = 'none';
+  if (loadingView) loadingView.style.display = 'none';
   tasksView.style.display = 'block';
-  helpBtn.style.display = 'block';
+  if (helpBtn) helpBtn.style.display = 'block';
+  
+  // 显示取消任务和切换角色按钮
+  const cancelBtn = document.getElementById('task-splitter-cancel-task-btn');
+  const switchCharBtn = document.getElementById('task-splitter-switch-char-btn');
+  if (cancelBtn) {
+    cancelBtn.style.display = 'block';
+    cancelBtn.style.pointerEvents = 'auto';
+    cancelBtn.style.zIndex = '1000';
+  }
+  if (switchCharBtn) {
+    switchCharBtn.style.display = 'block';
+    switchCharBtn.style.pointerEvents = 'auto';
+    switchCharBtn.style.zIndex = '1000';
+  }
+  
+  // 确保按钮事件已绑定
+  const chat = state.chats[activeTaskSplitterCharId];
+  if (chat) {
+    ensureTaskSplitterButtonsBound(chat);
+  }
 
   // 清空任务容器
   tasksContainer.innerHTML = '';
@@ -512,7 +935,19 @@ function renderTaskList() {
 
       const taskLabel = document.createElement('label');
       taskLabel.htmlFor = `task-checkbox-${task.id}`;
-      taskLabel.textContent = task.content;
+      
+      // 如果是长线目标且有日期信息，显示日期和时间
+      let taskContent = task.content;
+      if (currentTaskData.goalType === 'long' && task.scheduledDate) {
+        const dateObj = new Date(task.scheduledDate);
+        const month = dateObj.getMonth() + 1;
+        const day = dateObj.getDate();
+        const timeStr = task.scheduledTime || '';
+        const dateTimeStr = timeStr ? `${month}月${day}日 ${timeStr}` : `${month}月${day}日`;
+        taskContent = `[${dateTimeStr}] ${task.content}`;
+      }
+      
+      taskLabel.textContent = taskContent;
       taskLabel.style.cssText = `
         flex: 1;
         font-size: 16px;
@@ -566,8 +1001,17 @@ async function handleTaskCompletion(taskId, completed) {
         break;
       }
     }
+    
+    // 同步到月历（如果不是从月历同步过来的）
+    if (!isSyncingFromCalendar) {
+      await syncTaskSplitterCompletionToCalendar(taskId, true);
+    }
   } else {
     currentTaskData.completedTasks.delete(taskId);
+    // 同步到月历（如果不是从月历同步过来的）
+    if (!isSyncingFromCalendar) {
+      await syncTaskSplitterCompletionToCalendar(taskId, false);
+    }
   }
   
   // 保存进度
@@ -657,6 +1101,12 @@ async function showTaskCompletion() {
   endMessageEl.textContent = currentTaskData.endMessage;
   completionView.style.display = 'block';
   helpBtn.style.display = 'none';
+  
+  // 隐藏取消任务和切换角色按钮
+  const cancelBtn = document.getElementById('task-splitter-cancel-task-btn');
+  const switchCharBtn = document.getElementById('task-splitter-switch-char-btn');
+  if (cancelBtn) cancelBtn.style.display = 'none';
+  if (switchCharBtn) switchCharBtn.style.display = 'none';
 
   // 保存记录
   await saveTaskRecord();
@@ -1001,12 +1451,14 @@ function saveTaskProgress() {
     const progressData = {
       charId: currentTaskData.charId,
       goal: currentTaskData.goal,
+      goalType: currentTaskData.goalType || 'short',
       currentStatus: currentTaskData.currentStatus,
       startMessage: currentTaskData.startMessage,
       endMessage: currentTaskData.endMessage,
       taskGroups: currentTaskData.taskGroups,
       completedTasks: Array.from(currentTaskData.completedTasks),
       createdAt: currentTaskData.createdAt,
+      calendarTaskIds: currentTaskData.calendarTaskIds || [],
       savedAt: Date.now(),
     };
     
@@ -1014,6 +1466,51 @@ function saveTaskProgress() {
     localStorage.setItem(`task-splitter-progress-${activeTaskSplitterCharId}`, JSON.stringify(progressData));
   } catch (error) {
     console.error('保存任务进度失败:', error);
+  }
+}
+
+/**
+ * 取消当前任务
+ */
+async function cancelCurrentTask() {
+  if (!currentTaskData) return;
+  
+  try {
+    // 如果是长线目标，从月历中删除相关任务
+    if (currentTaskData.goalType === 'long' && currentTaskData.calendarTaskIds) {
+      for (const calendarTask of currentTaskData.calendarTaskIds) {
+        try {
+          if (calendarTask.type === 'todo') {
+            await db.calendarTodos.delete(calendarTask.id);
+          } else if (calendarTask.type === 'event') {
+            await db.calendarEvents.delete(calendarTask.id);
+          }
+        } catch (error) {
+          console.warn('删除月历任务失败:', error);
+        }
+      }
+      
+      // 刷新月历显示
+      if (typeof renderCalendar === 'function' && typeof currentCalendarDate !== 'undefined') {
+        await renderCalendar(currentCalendarDate);
+      }
+    }
+    
+    // 清除保存的进度
+    clearTaskProgress(activeTaskSplitterCharId);
+    
+    // 重置状态
+    currentTaskData = null;
+    const chat = state.chats[activeTaskSplitterCharId];
+    if (chat) {
+      renderTaskSplitterInitialView(chat);
+    }
+    hideDialogBubble();
+    
+    // 任务已取消，不需要提示
+  } catch (error) {
+    console.error('取消任务失败:', error);
+    await showCustomAlert('错误', '取消任务失败，请重试');
   }
 }
 
@@ -1050,5 +1547,267 @@ function clearTaskProgress(charId) {
     localStorage.removeItem(`task-splitter-progress-${charId}`);
   } catch (error) {
     console.error('清除任务进度失败:', error);
+  }
+}
+
+/**
+ * 检查角色是否有进行中的任务
+ * @param {string} charId - 角色ID
+ * @returns {boolean} 是否有进行中的任务
+ */
+function checkCharHasActiveTask(charId) {
+  try {
+    const savedProgress = loadTaskProgress(charId);
+    if (!savedProgress || !savedProgress.taskGroups || savedProgress.taskGroups.length === 0) {
+      return false;
+    }
+    
+    // 检查是否所有任务都已完成
+    const completedTasks = new Set(savedProgress.completedTasks || []);
+    const allTasksCompleted = savedProgress.taskGroups.every(group =>
+      group.tasks.every(task => completedTasks.has(task.id))
+    );
+    
+    return !allTasksCompleted;
+  } catch (error) {
+    console.error('检查任务状态失败:', error);
+    return false;
+  }
+}
+
+// 将函数暴露到全局作用域，供其他模块使用
+if (typeof window !== 'undefined') {
+  window.checkCharHasActiveTask = checkCharHasActiveTask;
+  window.syncCalendarTaskCompletion = syncCalendarTaskCompletion;
+  window.loadTaskProgress = loadTaskProgress;
+}
+
+/**
+ * 将长线目标的任务添加到月历
+ * @param {Array} taskGroups - 任务分组数组
+ * @param {string} charId - 角色ID
+ */
+async function addTasksToCalendar(taskGroups, charId) {
+  if (!db || !db.calendarEvents || !db.calendarTodos) {
+    console.warn('数据库未初始化，无法添加到月历');
+    return;
+  }
+
+  const calendarTaskIds = [];
+  let addedCount = 0;
+  
+  try {
+    console.log('开始添加任务到月历，角色ID:', charId);
+    console.log('任务分组数量:', taskGroups.length);
+    
+    for (const group of taskGroups) {
+      for (const task of group.tasks) {
+        // 确保任务有日期信息
+        if (!task.scheduledDate) {
+          console.warn(`任务 ${task.id} 没有 scheduledDate，跳过添加到月历`);
+          continue;
+        }
+        
+        const dateStr = task.scheduledDate;
+        const timeStr = task.scheduledTime || '09:00';
+        const isEvent = task.isEvent === true; // 明确转换为布尔值
+        const taskContent = task.content;
+        
+        console.log(`处理任务: ${task.id}, 日期: ${dateStr}, 时间: ${timeStr}, 类型: ${isEvent ? '行程' : '待办'}, 内容: ${taskContent}`);
+        
+        // 检查是否已经存在（优化：只检查当前任务ID，避免加载所有数据）
+        let existingTask = null;
+        try {
+          // 先检查calendarTaskIds中是否已有记录
+          if (currentTaskData && currentTaskData.calendarTaskIds) {
+            const existingCalendarTask = currentTaskData.calendarTaskIds.find(
+              ct => ct.taskId === task.id
+            );
+            if (existingCalendarTask) {
+              // 验证这个ID是否还存在
+              if (isEvent) {
+                existingTask = await db.calendarEvents.get(existingCalendarTask.id);
+              } else {
+                existingTask = await db.calendarTodos.get(existingCalendarTask.id);
+              }
+            }
+          }
+          
+          // 如果calendarTaskIds中没有，尝试通过日期范围查找（更高效）
+          if (!existingTask) {
+            // 只查找该日期范围内的任务，而不是所有任务
+            const taskDate = new Date(dateStr);
+            const monthStart = new Date(taskDate.getFullYear(), taskDate.getMonth(), 1);
+            const monthEnd = new Date(taskDate.getFullYear(), taskDate.getMonth() + 1, 0);
+            const monthStartStr = `${monthStart.getFullYear()}-${String(monthStart.getMonth() + 1).padStart(2, '0')}-${String(monthStart.getDate()).padStart(2, '0')}`;
+            const monthEndStr = `${monthEnd.getFullYear()}-${String(monthEnd.getMonth() + 1).padStart(2, '0')}-${String(monthEnd.getDate()).padStart(2, '0')}`;
+            
+            if (isEvent) {
+              const monthEvents = await db.calendarEvents
+                .where('date')
+                .between(monthStartStr, monthEndStr, true, true)
+                .toArray();
+              existingTask = monthEvents.find(e => 
+                e.taskSplitterId === task.id && e.taskSplitterCharId === charId
+              );
+            } else {
+              const monthTodos = await db.calendarTodos
+                .where('date')
+                .between(monthStartStr, monthEndStr, true, true)
+                .toArray();
+              existingTask = monthTodos.find(t => 
+                t.taskSplitterId === task.id && t.taskSplitterCharId === charId
+              );
+            }
+          }
+        } catch (error) {
+          console.warn('检查任务是否存在时出错:', error);
+          // 继续执行，假设不存在
+        }
+        
+        if (existingTask) {
+          // 如果已存在，使用现有的ID
+          console.log(`任务 ${task.id} 已存在于月历，ID: ${existingTask.id}`);
+          calendarTaskIds.push({ 
+            type: isEvent ? 'event' : 'todo', 
+            id: existingTask.id, 
+            taskId: task.id 
+          });
+          continue;
+        }
+        
+        if (isEvent) {
+          // 添加到行程
+          const eventData = {
+            date: dateStr,
+            startTime: timeStr,
+            endTime: '',
+            time: timeStr,
+            content: taskContent,
+            categoryId: null,
+            type: 'event',
+            taskSplitterId: task.id, // 关联到任务拆分器的任务ID
+            taskSplitterCharId: charId,
+          };
+          console.log('添加行程到月历:', eventData);
+          const eventId = await db.calendarEvents.add(eventData);
+          console.log('行程添加成功，ID:', eventId);
+          calendarTaskIds.push({ type: 'event', id: eventId, taskId: task.id });
+          addedCount++;
+        } else {
+          // 添加到待办
+          const todoData = {
+            date: dateStr,
+            content: taskContent,
+            completed: false,
+            taskSplitterId: task.id, // 关联到任务拆分器的任务ID
+            taskSplitterCharId: charId,
+          };
+          console.log('添加待办到月历:', todoData);
+          const todoId = await db.calendarTodos.add(todoData);
+          console.log('待办添加成功，ID:', todoId);
+          calendarTaskIds.push({ type: 'todo', id: todoId, taskId: task.id });
+          addedCount++;
+        }
+      }
+    }
+    
+    console.log(`总共添加了 ${addedCount} 个任务到月历`);
+    console.log('calendarTaskIds:', calendarTaskIds);
+    
+    // 保存到currentTaskData
+    if (currentTaskData) {
+      currentTaskData.calendarTaskIds = calendarTaskIds;
+      console.log('已保存calendarTaskIds到currentTaskData');
+    }
+    
+    // 刷新月历显示
+    if (typeof renderCalendar === 'function' && typeof currentCalendarDate !== 'undefined') {
+      console.log('刷新月历显示...');
+      await renderCalendar(currentCalendarDate);
+    } else {
+      console.warn('renderCalendar函数不可用或currentCalendarDate未定义');
+    }
+  } catch (error) {
+    console.error('添加任务到月历失败:', error);
+    console.error('错误堆栈:', error.stack);
+  }
+}
+
+/**
+ * 从月历同步任务完成状态到拆分器
+ * @param {string} taskId - 任务拆分器的任务ID
+ * @param {boolean} completed - 是否完成
+ */
+async function syncCalendarTaskCompletion(taskId, completed) {
+  if (!currentTaskData || !activeTaskSplitterCharId) return;
+  
+  // 设置标志，防止循环同步
+  isSyncingFromCalendar = true;
+  
+  try {
+    // 更新拆分器的完成状态
+    if (completed) {
+      currentTaskData.completedTasks.add(taskId);
+      
+      // 找到对应的任务，显示预生成的完成消息
+      for (const group of currentTaskData.taskGroups) {
+        const task = group.tasks.find(t => t.id === taskId);
+        if (task && task.completionMessage) {
+          showDialogBubble(task.completionMessage);
+          break;
+        }
+      }
+    } else {
+      currentTaskData.completedTasks.delete(taskId);
+    }
+    
+    // 保存进度
+    saveTaskProgress();
+    
+    // 更新UI
+    renderTaskList();
+    
+    // 检查是否所有任务完成
+    const allTasksCompleted = currentTaskData.taskGroups.every(group =>
+      group.tasks.every(task => currentTaskData.completedTasks.has(task.id))
+    );
+    
+    if (allTasksCompleted) {
+      await showTaskCompletion();
+    }
+  } finally {
+    // 重置标志
+    isSyncingFromCalendar = false;
+  }
+}
+
+/**
+ * 从拆分器同步任务完成状态到月历
+ * @param {string} taskId - 任务拆分器的任务ID
+ * @param {boolean} completed - 是否完成
+ */
+async function syncTaskSplitterCompletionToCalendar(taskId, completed) {
+  if (!currentTaskData || !currentTaskData.calendarTaskIds) return;
+  
+  try {
+    // 找到对应的月历任务
+    const calendarTask = currentTaskData.calendarTaskIds.find(ct => ct.taskId === taskId);
+    if (!calendarTask) return;
+    
+    if (calendarTask.type === 'todo') {
+      // 更新待办状态
+      await db.calendarTodos.update(calendarTask.id, { completed });
+      // 刷新月历显示
+      if (typeof renderCalendar === 'function' && typeof currentCalendarDate !== 'undefined') {
+        await renderCalendar(currentCalendarDate);
+      }
+      if (selectedDate && typeof loadTodos === 'function') {
+        await loadTodos(selectedDate);
+      }
+    }
+    // 行程不需要更新完成状态，因为行程是时间点事件
+  } catch (error) {
+    console.error('同步任务完成状态到月历失败:', error);
   }
 }

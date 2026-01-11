@@ -886,6 +886,11 @@ async function loadTodos(dateStr) {
       await loadTodos(dateStr);
       // 更新月历显示，以反映待办状态的变化
       await renderCalendar(currentCalendarDate);
+      
+      // 如果这个待办是从任务拆分器来的，同步到拆分器
+      if (todo.taskSplitterId && typeof syncCalendarTaskCompletion === 'function') {
+        await syncCalendarTaskCompletion(todo.taskSplitterId, checkbox.checked);
+      }
     });
 
     const contentDiv = document.createElement('div');

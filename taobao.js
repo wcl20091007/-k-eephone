@@ -536,6 +536,22 @@ function createChatListItem(chat) {
     ? chat.settings.remarkName
     : chat.name;
 
+  // 检查是否有进行中的任务，并获取任务目标
+  const hasActiveTask = checkCharHasActiveTask(chat.id);
+  let taskBadgeHtml = '';
+  
+  if (hasActiveTask && typeof loadTaskProgress === 'function') {
+    const taskProgress = loadTaskProgress(chat.id);
+    if (taskProgress && taskProgress.goal) {
+      const goalText = taskProgress.goal;
+      // 限制显示长度
+      const displayGoal = goalText.length > 15 ? goalText.substring(0, 15) + '...' : goalText;
+      taskBadgeHtml = `<span class="task-badge" style="background: #4CAF50; color: white; font-size: 10px; padding: 2px 6px; border-radius: 10px; margin-left: 5px;" title="${goalText}">任务中: ${displayGoal}</span>`;
+    } else {
+      taskBadgeHtml = '<span class="task-badge" style="background: #4CAF50; color: white; font-size: 10px; padding: 2px 6px; border-radius: 10px; margin-left: 5px;">任务中</span>';
+    }
+  }
+
   content.innerHTML = `
         <div class="chat-list-item" data-chat-id="${chat.id}">
             <img src="${avatar || defaultAvatar}" class="avatar">
@@ -544,6 +560,7 @@ function createChatListItem(chat) {
                     <span class="name">${displayName}</span>
                     ${chat.isGroup ? '<span class="group-tag">群聊</span>' : ''}
                     ${streakHtml}
+                    ${taskBadgeHtml}
                 </div>
                 <div class="last-msg" style="color: ${
                   chat.isGroup ? 'var(--text-secondary)' : '#b5b5b5'
@@ -578,7 +595,16 @@ function createChatListItem(chat) {
 
   const infoEl = content.querySelector('.info');
   if (infoEl) {
-    infoEl.addEventListener('click', () => openChat(chat.id));
+    infoEl.addEventListener('click', () => {
+      // 如果有进行中的任务，跳转到任务进度
+      if (!chat.isGroup && typeof checkCharHasActiveTask === 'function' && checkCharHasActiveTask(chat.id)) {
+        if (typeof openTaskSplitterWithChar === 'function') {
+          openTaskSplitterWithChar(chat.id);
+          return;
+        }
+      }
+      openChat(chat.id);
+    });
   }
   const avatarEl = content.querySelector('.avatar, .avatar-with-frame');
   if (avatarEl) {
