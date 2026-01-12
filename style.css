@@ -832,6 +832,31 @@ body {
   justify-content: center;
   align-items: center;
   z-index: 100;
+  pointer-events: auto;
+}
+
+#message-actions-modal {
+  z-index: 1000 !important;
+  pointer-events: auto !important;
+}
+
+#message-actions-modal #custom-modal {
+  pointer-events: auto !important;
+  position: relative;
+  z-index: 1001;
+}
+
+#message-actions-modal .custom-modal-footer {
+  pointer-events: auto !important;
+  position: relative;
+  z-index: 1002;
+}
+
+#message-actions-modal .custom-modal-footer button {
+  pointer-events: auto !important;
+  position: relative;
+  z-index: 1003;
+  cursor: pointer !important;
 }
 
 .modal.visible {
@@ -1238,6 +1263,9 @@ body {
   font-size: 17px;
   cursor: pointer;
   color: var(--accent-color);
+  pointer-events: auto !important;
+  position: relative;
+  z-index: 10;
 }
 .custom-modal-footer button:first-child {
   border-right: 1px solid #dbdbdb;
@@ -16410,9 +16438,41 @@ body {
 
 #inner-voice-edit-btn svg,
 #change-inner-voice-bg-btn svg,
-#inner-voice-history-btn svg {
+#inner-voice-history-btn svg,
+#inner-voice-reroll-btn svg {
   /* 核心：将图标的线条颜色设置为我们定义的变量 */
   stroke: var(--iv-icon-color);
+  transition: all 0.2s ease-in-out;
+}
+
+/* 为心声面板按钮添加hover效果，统一美化 */
+#inner-voice-edit-btn:hover svg,
+#change-inner-voice-bg-btn:hover svg,
+#inner-voice-history-btn:hover svg,
+#inner-voice-reroll-btn:hover svg {
+  stroke: var(--iv-icon-color, #ff8a80);
+  opacity: 0.8;
+  transform: scale(1.1);
+}
+
+/* 为按钮容器添加hover效果 */
+#inner-voice-edit-btn,
+#change-inner-voice-bg-btn,
+#inner-voice-history-btn,
+#inner-voice-reroll-btn {
+  transition: all 0.2s ease-in-out;
+  padding: 4px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#inner-voice-edit-btn:hover,
+#change-inner-voice-bg-btn:hover,
+#inner-voice-history-btn:hover,
+#inner-voice-reroll-btn:hover {
+  background-color: rgba(255, 138, 128, 0.1);
 }
 /* ▲▲▲ 新增样式结束 ▲▲▲ */
 /* ▼▼▼ 【全新】AI生成群成员按钮样式 ▼▼▼ */

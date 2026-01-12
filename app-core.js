@@ -4148,6 +4148,7 @@ document.addEventListener("DOMContentLoaded", () => {
           enabled: false,
           interval: 120, // 默认120秒
           lastActivityTimestamp: 0,
+          recentMessages: [], // 【修复重复消息问题】记录最近发送的后台活动消息
         };
       }
 
@@ -8383,14 +8384,29 @@ document.addEventListener("DOMContentLoaded", () => {
       // 创建内容容器，不使用气泡样式
       const contentContainer = document.createElement("div");
       contentContainer.className = "html-message-content";
-      contentContainer.style.cssText = "width: 100%; max-width: 100%; padding: 10px 0;";
+      contentContainer.style.cssText = "width: 100%; max-width: 100%; padding: 10px 0; position: relative;";
       contentContainer.innerHTML = quoteHtml + contentHtml;
       
       // 在contentContainer上也添加长按监听器，确保长按HTML内容也能触发
       // 这样即使HTML内容中有iframe等元素，也能通过长按容器来触发菜单
+      // 使用捕获阶段来确保事件能够被处理，即使HTML内容中有交互元素
       addLongPressListener(contentContainer, () =>
         showMessageActions(msg.timestamp)
       );
+      
+      // 为HTML内容中的交互元素添加事件处理，确保它们不会阻止长按事件
+      // 延迟执行，等待innerHTML渲染完成
+      setTimeout(() => {
+        const interactiveElements = contentContainer.querySelectorAll('a, button, input, select, textarea, [onclick]');
+        interactiveElements.forEach(el => {
+          // 为交互元素添加pointer-events样式，但保留长按功能
+          el.style.pointerEvents = 'auto';
+          // 确保点击事件不会阻止长按菜单的显示
+          el.addEventListener('click', (e) => {
+            // 不阻止事件冒泡，让长按功能正常工作
+          }, { passive: true });
+        });
+      }, 0);
       
       // 将内容容器和时间戳直接添加到wrapper，不添加气泡
       wrapper.appendChild(contentContainer);
@@ -15020,12 +15036,32 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function addLongPressListener(element, callback) {
     let pressTimer;
+    let isLongPressTriggered = false;
     const startPress = (e) => {
       if (isSelectionMode) return;
+      // 如果点击的是交互元素（如按钮、链接），不阻止默认行为，但也不触发长按
+      const target = e.target;
+      if (target.tagName === 'A' || target.tagName === 'BUTTON' || 
+          target.tagName === 'INPUT' || target.closest('a, button, [onclick]')) {
+        // 对于交互元素，不触发长按，让它们正常处理点击事件
+        return;
+      }
+      isLongPressTriggered = false;
       e.preventDefault();
-      pressTimer = window.setTimeout(() => callback(e), 500);
+      pressTimer = window.setTimeout(() => {
+        isLongPressTriggered = true;
+        callback(e);
+      }, 500);
     };
-    const cancelPress = () => clearTimeout(pressTimer);
+    const cancelPress = (e) => {
+      clearTimeout(pressTimer);
+      // 如果长按已经触发，阻止后续的点击事件
+      if (isLongPressTriggered) {
+        e.preventDefault();
+        e.stopPropagation();
+        isLongPressTriggered = false;
+      }
+    };
     element.addEventListener("mousedown", startPress);
     element.addEventListener("mouseup", cancelPress);
     element.addEventListener("mouseleave", cancelPress);
@@ -16563,6 +16599,28 @@ document.addEventListener("DOMContentLoaded", () => {
     return Array.from(audience);
   }
 
+  // 【修复重复消息问题】辅助函数：提取消息中的关键词
+  function extractKeywords(text) {
+    if (!text || typeof text !== 'string') return [];
+    // 移除标点符号，转换为小写，按空格分割
+    const words = text
+      .replace(/[，。！？、；：""''（）【】《》\s]/g, ' ')
+      .toLowerCase()
+      .split(/\s+/)
+      .filter(word => word.length > 1); // 过滤单字符
+    return words;
+  }
+
+  // 【修复重复消息问题】辅助函数：计算两个消息的相似度（基于关键词重叠）
+  function calculateSimilarity(keywords1, keywords2) {
+    if (!keywords1.length || !keywords2.length) return 0;
+    const set1 = new Set(keywords1);
+    const set2 = new Set(keywords2);
+    const intersection = [...set1].filter(x => set2.has(x)).length;
+    const union = new Set([...keywords1, ...keywords2]).size;
+    return union > 0 ? intersection / union : 0;
+  }
+
   async function triggerInactiveAiAction(chatId) {
     const chat = state.chats[chatId];
     if (!chat) return;
@@ -16874,6 +16932,48 @@ document.addEventListener("DOMContentLoaded", () => {
     const timeSinceLastMessage = lastMessage
       ? Math.floor((Date.now() - lastMessage.timestamp) / 60000)
       : Infinity;
+    
+    // 【修复重复消息问题】确保 recentMessages 数组存在
+    if (!chat.settings) chat.settings = {};
+    if (!chat.settings.backgroundActivity) chat.settings.backgroundActivity = {};
+    if (!Array.isArray(chat.settings.backgroundActivity.recentMessages)) {
+      chat.settings.backgroundActivity.recentMessages = [];
+    }
+    
+    // 【修复重复消息问题】获取最近发送的后台活动消息，避免AI重复发送相同内容
+    let recentBackgroundMessages = "";
+    if (chat.settings.backgroundActivity.recentMessages.length > 0) {
+      // 只保留最近10条后台活动消息，避免prompt过长
+      const recentBgMessages = chat.settings.backgroundActivity.recentMessages
+        .slice(-10)
+        .map((msg, index) => {
+          const msgTime = new Date(msg.timestamp);
+          const timeAgo = Math.floor((Date.now() - msg.timestamp) / 60000);
+          return `  ${index + 1}. [${timeAgo}分钟前] "${msg.content}"`;
+        })
+        .join("\n");
+      
+      // 检测最近的消息是否都是相同话题
+      const recentMessages = chat.settings.backgroundActivity.recentMessages.slice(-5);
+      const isRepeatingTopic = recentMessages.length >= 2 && 
+        recentMessages.every((msg, idx) => {
+          if (idx === 0) return true;
+          const prevMsg = recentMessages[idx - 1];
+          // 简单的相似度检测：检查关键词是否重复
+          const currentKeywords = extractKeywords(msg.content);
+          const prevKeywords = extractKeywords(prevMsg.content);
+          const similarity = calculateSimilarity(currentKeywords, prevKeywords);
+          return similarity > 0.5; // 如果相似度超过50%，认为是相同话题
+        });
+      
+      let topicWarning = "";
+      if (isRepeatingTopic) {
+        topicWarning = `\n\n【【【⚠️ 严重警告：话题重复检测】】】\n检测到你最近发送的消息都是关于相同或相似的话题。**你必须立即停止这个话题，开启一个全新的、完全不同的对话主题或事件。**\n`;
+      }
+      
+      recentBackgroundMessages = `\n\n# 【【【重要：避免重复】】】你最近发送的后台活动消息记录\n以下是你最近主动发送给用户的消息，**绝对不要重复发送相同或相似的内容**。请确保本次发送的消息与以下任何一条都不同：\n${recentBgMessages}${topicWarning}\n\n【核心规则 - 必须严格遵守】\n1. **话题延伸限制**：同一个话题最多只能延伸一次（即连续发送2次关于同一话题的消息）。如果已经发送过2次相同话题的消息，**必须立即开启全新的、完全不同的话题或事件**。\n2. **禁止重复内容**：你的新消息必须与上述任何一条消息在内容和话题上都不同。**绝对禁止连续发送一模一样的内容**。\n3. **话题切换要求**：如果最近的消息都是关于同一个话题（如"第一晚适应"、"认床"、"画布"等），请**完全避开这个话题**，选择其他话题。\n4. **优先顺序**：\n   - 优先延续聊天记录中的未完成话题（但必须是新话题，不能是最近已经说过的）\n   - 如果聊天记录中没有新话题，必须开启一个全新的、与之前完全不同的对话主题或事件\n   - 可以基于当前时间、角色人设、世界书设定等开启新话题\n5. **内容多样性**：确保每次发送的消息都有新的信息、新的角度或新的事件，而不是重复之前的内容。\n`;
+    }
+    
     const systemPrompt = `
 			# 任务
 			你现在【就是】角色 "${
@@ -16886,6 +16986,19 @@ document.addEventListener("DOMContentLoaded", () => {
     )}分钟没有互动了。你的任务是回顾你们最近的对话，并根据你的人设，【自然地延续对话】或【开启一个新的、相关的话题】来主动联系用户。
 			# 【对话节奏铁律 (至关重要！)】
 			你的回复【必须】模拟真人的打字和思考习惯。你应该将你想说的话，拆分成【多条、简短的】消息气泡来发送，绝对不要一次性发送一大段文字。每条消息最好不要超过30个字，这会让对话看起来更自然、更真实。
+			
+			# 【【【话题延伸限制 - 最高优先级规则】】】
+			1. **单次响应中的话题限制**：在本次响应中，关于同一话题的消息**最多只能有2条**。发送2条关于同一话题的消息后，**必须立即切换到全新的、完全不同的话题或事件**。
+			2. **禁止重复内容**：**绝对禁止在单次响应中发送一模一样或几乎相同的内容**。即使话题不同，内容也必须完全不同。系统会自动过滤重复消息。
+			3. **话题延伸总限制**：如果你在之前的后台活动中已经连续发送了2次关于同一话题的消息，**本次响应必须开启全新的、完全不同的话题**，不能再延续该话题。
+			4. **强制话题切换**：如果检测到你最近的消息都是关于相同话题，系统会发出警告。此时你必须：
+			   - 立即停止当前话题
+			   - 开启一个全新的、与之前完全不同的对话主题
+			   - 可以基于当前时间、角色人设、世界书设定、最近的动态等开启新话题
+			5. **内容多样性要求**：每次发送的消息都必须包含新的信息、新的角度或新的事件，不能只是重复或微调之前的内容。
+			6. **示例**：
+			   - ❌ 错误：发送3条关于"睡觉"的消息（"赶紧睡觉"、"放下手机睡觉"、"快去睡觉"）
+			   - ✅ 正确：发送2条关于"睡觉"的消息后，切换到新话题（如"明天有什么安排"、"今天天气不错"等）
 			# 【【【输出铁律：这是最高指令】】】
 			你的回复【必须且只能】是一个严格的JSON数组格式的字符串，必须多发几条，禁止全部杂糅在一条，是在线上，例如 \`[{"type": "text", "content": "你好呀"}]\`。
 			【绝对禁止】返回任何JSON以外的文本、解释、分析或你自己的思考过程。你不是分析师，你就是角色本人。
@@ -16973,6 +17086,7 @@ document.addEventListener("DOMContentLoaded", () => {
 			${countdownContext}
 			${worldBookContext}
 			-   **当前时间**: ${currentTime}
+			${recentBackgroundMessages}
 			-   **你们最近的对话摘要**:
 			${recentContextSummary}
       ${summaryContext}
@@ -17149,7 +17263,89 @@ document.addEventListener("DOMContentLoaded", () => {
       );
 
       const responseArray = parseAiResponse(aiResponseContent);
+      
+      // 【修复重复消息问题】在处理消息前，先过滤掉重复和高度相似的消息
+      const filteredActions = [];
+      const processedContents = new Set(); // 用于检测完全相同的消息
+      const topicMessages = []; // 用于跟踪同一话题的消息数量
+      
       for (const action of responseArray) {
+        if (!action) continue;
+        
+        // 只处理文本消息的重复检测
+        if (action.type === "text" && action.content) {
+          const messageContent = String(action.content).trim();
+          
+          // 检查1：完全相同的消息（忽略大小写和空格）
+          const normalizedContent = messageContent.toLowerCase().replace(/\s+/g, '');
+          if (processedContents.has(normalizedContent)) {
+            console.warn(
+              `[重复消息过滤] 角色 "${chat.name}" 在单次响应中发送了完全相同的消息，已过滤: "${messageContent}"`
+            );
+            continue; // 跳过这条完全相同的消息
+          }
+          
+          // 检查2：与当前批次中已处理的消息高度相似
+          let isDuplicate = false;
+          for (const processed of processedContents) {
+            // 简单的相似度检测：如果规范化后的内容相似度超过90%，认为是重复
+            const similarity = calculateSimilarity(
+              extractKeywords(normalizedContent),
+              extractKeywords(processed)
+            );
+            if (similarity > 0.9) {
+              console.warn(
+                `[重复消息过滤] 角色 "${chat.name}" 在单次响应中发送了高度相似的消息，已过滤: "${messageContent}"`
+              );
+              isDuplicate = true;
+              break;
+            }
+          }
+          if (isDuplicate) continue;
+          
+          // 检查3：限制同一话题的消息数量（最多2条）
+          if (topicMessages.length > 0) {
+            const currentKeywords = extractKeywords(messageContent);
+            let sameTopicCount = 0;
+            for (const topicMsg of topicMessages) {
+              const topicKeywords = extractKeywords(topicMsg.content);
+              const similarity = calculateSimilarity(currentKeywords, topicKeywords);
+              if (similarity > 0.5) { // 相似度超过50%，认为是同一话题
+                sameTopicCount++;
+              }
+            }
+            // 如果已经有2条关于同一话题的消息，跳过这条
+            if (sameTopicCount >= 2) {
+              console.warn(
+                `[话题限制] 角色 "${chat.name}" 在单次响应中关于同一话题的消息已达到上限(2条)，已过滤: "${messageContent}"`
+              );
+              continue;
+            }
+          }
+          
+          // 通过所有检查，添加到处理列表
+          processedContents.add(normalizedContent);
+          topicMessages.push({ content: messageContent, keywords: extractKeywords(messageContent) });
+          filteredActions.push(action);
+        } else {
+          // 非文本消息直接通过
+          filteredActions.push(action);
+        }
+      }
+      
+      // 使用过滤后的消息数组
+      const finalActions = filteredActions.length > 0 ? filteredActions : responseArray.slice(0, 1); // 如果全部被过滤，至少保留第一条
+      
+      if (responseArray.length !== finalActions.length) {
+        console.log(
+          `[消息过滤] 角色 "${chat.name}" 原始消息数: ${responseArray.length}, 过滤后: ${finalActions.length} (已过滤 ${responseArray.length - finalActions.length} 条重复或超限消息)`
+        );
+      }
+      
+      // 在处理消息时，维护一个临时列表来检测当前批次中的重复
+      const currentBatchMessages = [];
+      
+      for (const action of finalActions) {
         if (!action) continue;
         if (action.type === "update_status" && action.status_text) {
           chat.status.text = action.status_text;
@@ -17159,13 +17355,70 @@ document.addEventListener("DOMContentLoaded", () => {
           renderChatList();
         }
         if (action.type === "text" && action.content) {
+          const messageContent = String(action.content).trim();
+          
+          // 【修复重复消息问题】检查是否与最近的消息重复（包括历史记录和当前批次）
+          const recentMessages = chat.settings?.backgroundActivity?.recentMessages || [];
+          const allRecentMessages = [...recentMessages, ...currentBatchMessages];
+          
+          if (allRecentMessages.length > 0) {
+            let isDuplicate = false;
+            for (const recentMsg of allRecentMessages) {
+              const currentKeywords = extractKeywords(messageContent);
+              const recentKeywords = extractKeywords(recentMsg.content);
+              const similarity = calculateSimilarity(currentKeywords, recentKeywords);
+              
+              // 如果相似度超过85%，认为是重复消息，跳过发送
+              if (similarity > 0.85) {
+                console.warn(
+                  `[重复消息阻止] 角色 "${chat.name}" 尝试发送与已有消息高度相似的内容 (相似度: ${(similarity * 100).toFixed(1)}%)，已阻止发送\n`,
+                  `已有消息: "${recentMsg.content}"\n`,
+                  `尝试发送: "${messageContent}"`
+                );
+                isDuplicate = true;
+                break;
+              }
+            }
+            
+            // 如果检测到重复，跳过这条消息
+            if (isDuplicate) {
+              continue;
+            }
+          }
+          
           const aiMessage = {
             role: "assistant",
-            content: String(action.content),
+            content: messageContent,
             timestamp: Date.now(),
           };
           chat.unreadCount = (chat.unreadCount || 0) + 1;
           chat.history.push(aiMessage);
+          
+          // 【修复重复消息问题】记录最近发送的后台活动消息，用于避免重复
+          if (!chat.settings) chat.settings = {};
+          if (!chat.settings.backgroundActivity) chat.settings.backgroundActivity = {};
+          if (!chat.settings.backgroundActivity.recentMessages) {
+            chat.settings.backgroundActivity.recentMessages = [];
+          }
+          // 添加新消息到记录中
+          chat.settings.backgroundActivity.recentMessages.push({
+            content: messageContent,
+            timestamp: Date.now(),
+          });
+          // 只保留最近20条记录，避免数组过大
+          if (chat.settings.backgroundActivity.recentMessages.length > 20) {
+            chat.settings.backgroundActivity.recentMessages = 
+              chat.settings.backgroundActivity.recentMessages.slice(-20);
+          }
+          // 更新最后活动时间戳
+          chat.settings.backgroundActivity.lastActivityTimestamp = Date.now();
+          
+          // 【修复重复消息问题】将当前消息添加到当前批次列表，以便后续消息检测
+          currentBatchMessages.push({
+            content: messageContent,
+            timestamp: Date.now(),
+          });
+          
           await db.chats.put(chat);
           
           // 【优化】智能通知逻辑：只在需要时显示浏览器通知
@@ -22773,15 +23026,27 @@ document.addEventListener("DOMContentLoaded", () => {
    * 处理用户点击“撤回”按钮的入口函数
    */
   async function handleRecallClick() {
-    if (!activeMessageTimestamp) return;
+    console.log("handleRecallClick 被调用，activeMessageTimestamp:", activeMessageTimestamp);
+    
+    if (!activeMessageTimestamp) {
+      console.warn("没有activeMessageTimestamp，无法删除消息");
+      await showCustomAlert("错误", "无法找到要删除的消息");
+      return;
+    }
+
+    // 先保存时间戳，因为hideMessageActions会清空它
+    const messageTime = activeMessageTimestamp;
+    console.log("保存的时间戳:", messageTime);
+    
+    // 先隐藏菜单，避免重复点击
+    hideMessageActions();
 
     const RECALL_TIME_LIMIT_MS = 2 * 60 * 1000; // 设置2分钟的撤回时限
-    const messageTime = activeMessageTimestamp;
     const now = Date.now();
 
     // 检查是否超过了撤回时限
     if (now - messageTime > RECALL_TIME_LIMIT_MS) {
-      hideMessageActions();
+      console.log("消息超过2分钟，无法撤回");
       await showCustomAlert(
         "操作失败",
         "该消息发送已超过2分钟，无法撤回。"
@@ -22789,9 +23054,15 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
+    console.log("开始撤回消息，时间戳:", messageTime);
     // 如果在时限内，执行真正的撤回逻辑
-    await recallMessage(messageTime, true);
-    hideMessageActions();
+    try {
+      await recallMessage(messageTime, true);
+      console.log("消息撤回成功");
+    } catch (error) {
+      console.error("撤回消息时出错:", error);
+      throw error;
+    }
   }
 
   /**
@@ -27446,6 +27717,16 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("inner-voice-naughty-thoughts").textContent =
       data.naughtyThoughts || "...";
 
+    // --- 控制重roll按钮显示：只显示最新心声的重roll按钮 ---
+    const rerollBtn = document.getElementById("inner-voice-reroll-btn");
+    if (rerollBtn) {
+      // 检查当前显示的心声是否是最新的（通过时间戳匹配）
+      const isLatestVoice = chat.latestInnerVoice && 
+                            chat.latestInnerVoice.timestamp === data.timestamp;
+      // 只在主面板显示且是最新心声时才显示重roll按钮
+      rerollBtn.style.display = isLatestVoice ? "inline-block" : "none";
+    }
+
     // --- 显示面板 ---
     modal.classList.add("visible");
     document.getElementById("inner-voice-history-panel").style.display =
@@ -27453,6 +27734,310 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("inner-voice-main-panel").style.display =
       "flex";
     isInnerVoiceHistoryOpen = false;
+  }
+
+  /**
+   * 处理心声重Roll功能
+   * 只重新生成心声，不影响角色的其他回复内容
+   */
+  async function handleInnerVoiceReroll() {
+    if (!state.activeChatId) return;
+    const chat = state.chats[state.activeChatId];
+    if (!chat) return;
+
+    // 检查是否有当前心声
+    if (!chat.latestInnerVoice) {
+      await showCustomAlert('提示', '还没有可以重Roll的心声哦！');
+      return;
+    }
+
+    // 【重要】只允许重roll最新生成的心声
+    // 检查当前心声是否是最新的（通过时间戳匹配）
+    const currentInnerVoiceTimestamp = chat.latestInnerVoice.timestamp;
+    const isLatestVoice = chat.latestInnerVoice && 
+                          chat.latestInnerVoice.timestamp === currentInnerVoiceTimestamp;
+    
+    if (!isLatestVoice) {
+      await showCustomAlert('提示', '只能重Roll刚刚生成的最新心声哦！');
+      return;
+    }
+
+    // 进一步验证：确保这是最新的一轮AI回复对应的心声
+    // 找到最后一次AI回复的时间戳
+    let lastAiMessageTimestamp = null;
+    for (let i = chat.history.length - 1; i >= 0; i--) {
+      if (chat.history[i].role === 'assistant' && chat.history[i].timestamp) {
+        lastAiMessageTimestamp = chat.history[i].timestamp;
+        break;
+      }
+    }
+
+    // 如果找到了AI消息，检查心声时间戳是否与AI消息时间戳接近（10秒内）
+    if (lastAiMessageTimestamp) {
+      const timeDiff = Math.abs(currentInnerVoiceTimestamp - lastAiMessageTimestamp);
+      if (timeDiff > 10000) {
+        await showCustomAlert('提示', '只能重Roll刚刚生成的最新心声哦！');
+        return;
+      }
+    }
+
+    // 找到与当前心声同时生成的AI回复消息
+    // 心声是在AI回复时生成的，所以应该找到时间戳最接近心声时间戳的AI消息
+    let matchedAiMessages = [];
+    let matchedUserMessage = null;
+    let matchedAiMessageIndex = -1;
+    let closestTimeDiff = Infinity;
+
+    // 遍历聊天历史，找到时间戳最接近心声时间戳的AI消息
+    // 心声时间戳应该稍晚于或等于消息时间戳（因为心声是在消息生成后立即创建的）
+    for (let i = chat.history.length - 1; i >= 0; i--) {
+      const msg = chat.history[i];
+      
+      if (msg.role === 'assistant' && msg.timestamp) {
+        // 计算时间差（心声时间戳应该稍晚于或等于消息时间戳）
+        const timeDiff = currentInnerVoiceTimestamp - msg.timestamp;
+        
+        // 心声应该在消息之后生成，所以timeDiff应该>=0，且应该在合理范围内（比如10秒内）
+        if (timeDiff >= 0 && timeDiff <= 10000 && timeDiff < closestTimeDiff) {
+          closestTimeDiff = timeDiff;
+          matchedAiMessageIndex = i;
+        }
+      }
+    }
+
+    // 如果找到了匹配的AI消息
+    if (matchedAiMessageIndex !== -1) {
+      // 找到对应的用户消息（在匹配的AI消息之前最近的一条用户消息）
+      for (let j = matchedAiMessageIndex - 1; j >= 0; j--) {
+        if (chat.history[j].role === 'user') {
+          matchedUserMessage = chat.history[j];
+          break;
+        }
+      }
+      
+      // 收集这一轮的所有AI消息（从匹配的消息开始，向后收集所有连续的assistant消息）
+      matchedAiMessages = [];
+      for (let k = matchedAiMessageIndex; k < chat.history.length; k++) {
+        const aiMsg = chat.history[k];
+        if (aiMsg.role === 'assistant') {
+          // 只收集时间戳接近的消息（同一轮生成的）
+          const msgTimeDiff = Math.abs(aiMsg.timestamp - currentInnerVoiceTimestamp);
+          if (msgTimeDiff <= 10000) {
+            matchedAiMessages.push(aiMsg.content || '');
+          } else {
+            break;
+          }
+        } else {
+          break; // 遇到非assistant消息就停止
+        }
+      }
+    }
+
+    // 如果没找到匹配的消息，使用备用方案：找到最后一次用户消息和对应的AI回复
+    if (!matchedUserMessage || matchedAiMessages.length === 0) {
+      let lastUserMessageIndex = -1;
+      for (let i = chat.history.length - 1; i >= 0; i--) {
+        if (chat.history[i].role === 'user') {
+          matchedUserMessage = chat.history[i];
+          lastUserMessageIndex = i;
+          break;
+        }
+      }
+
+      if (lastUserMessageIndex === -1 || !matchedUserMessage) {
+        await showCustomAlert('提示', '需要先有对话才能重Roll心声哦！');
+        return;
+      }
+
+      // 收集最后一次用户消息之后的所有AI回复
+      matchedAiMessages = [];
+      for (let i = lastUserMessageIndex + 1; i < chat.history.length; i++) {
+        if (chat.history[i].role === 'assistant') {
+          matchedAiMessages.push(chat.history[i].content || '');
+        } else {
+          break; // 遇到用户消息就停止
+        }
+      }
+    }
+
+    const userMessage = matchedUserMessage.content || '';
+    const aiResponse = matchedAiMessages.join('\n');
+
+    if (!userMessage || !aiResponse) {
+      await showCustomAlert('提示', '无法找到对应的对话内容，无法重Roll心声。');
+      return;
+    }
+
+    // 显示加载提示
+    const modal = document.getElementById('inner-voice-modal');
+    if (modal) {
+      // 更新心声内容显示为加载状态
+      document.getElementById('inner-voice-clothing').textContent = '正在重新生成...';
+      document.getElementById('inner-voice-behavior').textContent = '正在重新生成...';
+      document.getElementById('inner-voice-thoughts').textContent = '正在重新生成...';
+      document.getElementById('inner-voice-naughty-thoughts').textContent = '正在重新生成...';
+    }
+
+    try {
+      // 调用专门的函数只生成心声，使用与心声同时生成的回复数据
+      const newInnerVoice = await regenerateInnerVoiceOnly(chat, userMessage, aiResponse);
+
+      if (newInnerVoice) {
+        // 更新当前心声
+        newInnerVoice.timestamp = Date.now();
+        
+        // 从心声历史中删除旧的心声记录
+        if (chat.innerVoiceHistory && chat.innerVoiceHistory.length > 0) {
+          const indexToRemove = chat.innerVoiceHistory.findIndex(
+            (iv) => iv.timestamp === currentInnerVoiceTimestamp
+          );
+          if (indexToRemove !== -1) {
+            chat.innerVoiceHistory.splice(indexToRemove, 1);
+          }
+        }
+
+        // 更新当前心声和历史
+        chat.latestInnerVoice = newInnerVoice;
+        if (!chat.innerVoiceHistory) chat.innerVoiceHistory = [];
+        chat.innerVoiceHistory.push(newInnerVoice);
+
+        // 保存到数据库
+        await db.chats.put(chat);
+
+        // 更新心声面板显示
+        if (modal && modal.classList.contains('visible')) {
+          document.getElementById('inner-voice-clothing').textContent = newInnerVoice.clothing || '...';
+          document.getElementById('inner-voice-behavior').textContent = newInnerVoice.behavior || '...';
+          document.getElementById('inner-voice-thoughts').textContent = newInnerVoice.thoughts || '...';
+          document.getElementById('inner-voice-naughty-thoughts').textContent = newInnerVoice.naughtyThoughts || '...';
+        }
+
+        await showCustomAlert('重Roll成功', '心声已重新生成！');
+      } else {
+        throw new Error('未能生成新的心声');
+      }
+    } catch (error) {
+      console.error('重Roll心声失败:', error);
+      await showCustomAlert('重Roll失败', `发生错误：${error.message}`);
+      
+      // 恢复原来的心声显示
+      if (modal && modal.classList.contains('visible') && chat.latestInnerVoice) {
+        const oldVoice = chat.latestInnerVoice;
+        document.getElementById('inner-voice-clothing').textContent = oldVoice.clothing || '...';
+        document.getElementById('inner-voice-behavior').textContent = oldVoice.behavior || '...';
+        document.getElementById('inner-voice-thoughts').textContent = oldVoice.thoughts || '...';
+        document.getElementById('inner-voice-naughty-thoughts').textContent = oldVoice.naughtyThoughts || '...';
+      }
+    }
+  }
+
+  /**
+   * 只生成心声，不影响回复内容
+   * @param {Object} chat - 聊天对象
+   * @param {string} userMessage - 用户的消息
+   * @param {string} aiResponse - AI的回复内容（用于上下文）
+   * @returns {Promise<Object|null>} - 新的心声对象
+   */
+  async function regenerateInnerVoiceOnly(chat, userMessage, aiResponse) {
+    const { proxyUrl, apiKey, model } = state.apiConfig;
+    if (!proxyUrl || !apiKey || !model) {
+      throw new Error('API未配置');
+    }
+
+    // 构建只生成心声的prompt
+    const systemPrompt = `# 核心任务：只生成心声
+
+你现在是角色"${chat.name}"。
+
+# 你的角色设定
+${chat.settings.aiPersona}
+
+# 重要说明
+用户刚才说了："${userMessage}"
+你已经回复了："${aiResponse}"
+
+**你的任务**：根据上述对话内容，只生成你的内心活动（心声），不需要生成新的回复内容。
+
+# 输出要求
+你【必须】返回一个JSON对象，格式如下：
+{
+  "innerVoice": {
+    "clothing": "详细描述你当前从头到脚的全身服装",
+    "behavior": "描述你当前符合聊天情景的细微动作或表情",
+    "thoughts": "描述你此刻丰富、细腻的内心真实想法（50字左右）",
+    "naughtyThoughts": "描述你此刻与情境相关的腹黑或色色的坏心思，必须符合人设"
+  }
+}
+
+**注意**：你只需要返回innerVoice部分，不需要chatResponse。`;
+
+    try {
+      let isGemini = proxyUrl === GEMINI_API_URL;
+      let messagesForApi = [{ role: 'user', content: systemPrompt }];
+      
+      let geminiConfig = null;
+      if (isGemini) {
+        geminiConfig = toGeminiRequestData(
+          model,
+          apiKey,
+          systemPrompt,
+          messagesForApi,
+          isGemini
+        );
+      }
+
+      const response = await fetch(
+        isGemini ? geminiConfig.url : `${proxyUrl}/v1/chat/completions`,
+        isGemini
+          ? geminiConfig.data
+          : {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+              body: JSON.stringify({
+                model,
+                messages: messagesForApi,
+                temperature: parseFloat(state.apiConfig.temperature) || 0.8,
+                response_format: { type: 'json_object' },
+              }),
+            },
+      );
+
+      if (!response.ok) throw new Error(`API请求失败: ${response.status} - ${await response.text()}`);
+
+      const data = await response.json();
+      const aiResponseContent = isGemini
+        ? data.candidates?.[0]?.content?.parts?.[0]?.text
+        : data.choices?.[0]?.message?.content;
+
+      if (!aiResponseContent) {
+        throw new Error('API返回了空内容');
+      }
+
+      // 解析JSON
+      const sanitizedContent = aiResponseContent.replace(/^```json\s*|```$/g, '').trim();
+      const firstBrace = sanitizedContent.indexOf('{');
+      const lastBrace = sanitizedContent.lastIndexOf('}');
+      const jsonContent = firstBrace !== -1 && lastBrace > firstBrace
+        ? sanitizedContent.substring(firstBrace, lastBrace + 1)
+        : sanitizedContent;
+
+      const responseData = JSON.parse(jsonContent);
+      
+      if (responseData.innerVoice) {
+        // 确保所有字段都存在
+        return {
+          clothing: responseData.innerVoice.clothing || '...',
+          behavior: responseData.innerVoice.behavior || '...',
+          thoughts: responseData.innerVoice.thoughts || '...',
+          naughtyThoughts: responseData.innerVoice.naughtyThoughts || '...',
+        };
+      } else {
+        throw new Error('响应中未找到innerVoice字段');
+      }
+    } catch (error) {
+      console.error('生成心声失败:', error);
+      throw error;
+    }
   }
 
   /**
@@ -27618,8 +28203,21 @@ document.addEventListener("DOMContentLoaded", () => {
       // 如果是打开的，就关闭它，显示主面板
       mainPanel.style.display = "flex";
       historyPanel.style.display = "none";
+
+      // 切换回主面板时，更新重roll按钮的显示状态
+      const chat = state.chats[state.activeChatId];
+      const rerollBtn = document.getElementById("inner-voice-reroll-btn");
+      if (rerollBtn && chat && chat.latestInnerVoice) {
+        // 检查当前显示的心声是否是最新的（通过时间戳匹配）
+        const currentData = chat.latestInnerVoice;
+        const isLatestVoice = chat.latestInnerVoice && 
+                              chat.latestInnerVoice.timestamp === currentData.timestamp;
+        // 重roll按钮只在主面板显示，且只显示最新心声的按钮
+        rerollBtn.style.display = isLatestVoice ? "inline-block" : "none";
+      }
     } else {
       // 如果是关闭的，就打开它，隐藏主面板
+      // 历史面板不显示重roll按钮（重roll按钮在主面板的header中，主面板隐藏时按钮也会隐藏）
       renderInnerVoiceHistory(); // 渲染历史记录
       mainPanel.style.display = "none";
       historyPanel.style.display = "flex";
@@ -43082,9 +43680,27 @@ document.addEventListener("DOMContentLoaded", () => {
       .getElementById("copy-message-btn")
       .addEventListener("click", copyMessageContent);
 
-    document
-      .getElementById("recall-message-btn")
-      .addEventListener("click", handleRecallClick);
+    const recallBtn = document.getElementById("recall-message-btn");
+    if (recallBtn) {
+      recallBtn.addEventListener("click", async (e) => {
+        console.log("删除按钮被点击了！", e);
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        try {
+          await handleRecallClick();
+        } catch (error) {
+          console.error("删除消息时出错：", error);
+          await showCustomAlert("错误", "删除消息时发生错误：" + error.message);
+        }
+      }, { capture: true });
+      
+      // 也添加mousedown事件作为备用
+      recallBtn.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      });
+    }
 
     document
       .getElementById("select-message-btn")
@@ -47836,6 +48452,10 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
     document
       .getElementById("change-inner-voice-bg-btn")
       .addEventListener("click", handleInnerVoiceBgChange);
+
+    document
+      .getElementById("inner-voice-reroll-btn")
+      .addEventListener("click", handleInnerVoiceReroll);
 
     document
       .getElementById("inner-voice-bg-input")
