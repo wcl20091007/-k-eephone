@@ -45168,6 +45168,98 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     });
+
+    // 重置桌宠位置按钮
+    document.getElementById("desktop-pet-reset-position-btn")?.addEventListener("click", async () => {
+      const petContainer = document.getElementById("desktop-pet-container");
+      if (!petContainer) return;
+
+      // 获取当前编辑的角色或当前激活的角色
+      const chatId = window.currentEditingChatId || state.activeChatId;
+      if (!chatId) return;
+
+      const chat = state.chats[chatId];
+      if (!chat || chat.isGroup) return;
+
+      // 如果桌宠未启用，先启用它
+      if (!chat.settings.desktopPetEnabled) {
+        // 先关闭其他角色的桌宠
+        for (const otherChatId in state.chats) {
+          const otherChat = state.chats[otherChatId];
+          if (otherChatId !== chatId && !otherChat.isGroup && otherChat.settings?.desktopPetEnabled) {
+            otherChat.settings.desktopPetEnabled = false;
+            await db.chats.put(otherChat);
+          }
+        }
+        // 启用当前角色的桌宠
+        chat.settings.desktopPetEnabled = true;
+        await db.chats.put(chat);
+        // 更新开关状态
+        const switchEl = document.getElementById("desktop-pet-switch");
+        if (switchEl) {
+          switchEl.checked = true;
+        }
+      }
+
+      // 获取屏幕尺寸
+      const phoneScreen = document.getElementById("phone-screen");
+      if (!phoneScreen) return;
+
+      const screenRect = phoneScreen.getBoundingClientRect();
+      const screenWidth = screenRect.width;
+      const screenHeight = screenRect.height;
+
+      // 获取桌宠尺寸
+      const petSize = chat.settings?.desktopPetSize || 80;
+      const petWidth = petSize;
+      const petHeight = petSize;
+
+      // 计算中心位置
+      const centerLeft = (screenWidth - petWidth) / 2;
+      const centerTop = (screenHeight - petHeight) / 2;
+
+      // 清除保存的位置信息（设置为null，这样会使用默认位置逻辑）
+      if (chat.settings) {
+        chat.settings.desktopPetPosition = null;
+        await db.chats.put(chat);
+      }
+
+      // 更新桌宠显示（这会应用新的位置）
+      if (typeof updateDesktopPet === 'function') {
+        await updateDesktopPet();
+      }
+
+      // 立即更新桌宠位置到中心（确保可见）
+      petContainer.style.left = centerLeft + "px";
+      petContainer.style.top = centerTop + "px";
+      petContainer.style.right = "auto";
+      petContainer.style.bottom = "auto";
+      petContainer.style.display = "block";
+      
+      // 清除吸附状态
+      petContainer.classList.remove("snapped", "snapped-left", "snapped-right", "snapped-top", "snapped-bottom");
+
+      // 保存重置后的中心位置，确保下次打开时也在中心
+      if (chat.settings) {
+        chat.settings.desktopPetPosition = {
+          top: centerTop,
+          left: centerLeft,
+          isSnapped: false,
+          snapSide: null
+        };
+        await db.chats.put(chat);
+      }
+
+      // 显示提示
+      const btn = document.getElementById("desktop-pet-reset-position-btn");
+      const originalText = btn.textContent;
+      btn.textContent = "✓ 已重置";
+      btn.style.backgroundColor = "#4caf50";
+      setTimeout(() => {
+        btn.textContent = originalText;
+        btn.style.backgroundColor = "";
+      }, 1500);
+    });
     // ========== 桌宠设置事件监听结束 ==========
 
     // ========== 桌宠智能反应功能 ==========
