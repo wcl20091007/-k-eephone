@@ -1467,6 +1467,53 @@ body {
   color: #3e6224;
 }
 
+/* 角色音频消息样式 */
+.character-audio-body {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  padding: 8px 12px;
+  min-width: 80px;
+  max-width: 200px;
+}
+
+.message-bubble.ai .character-audio-body {
+  color: var(--text-primary);
+}
+
+.audio-waveform {
+  display: flex;
+  align-items: center;
+  height: 20px;
+  gap: 2px;
+  flex-grow: 1;
+  margin: 0 10px;
+}
+
+.audio-waveform div {
+  width: 3px;
+  background-color: currentColor;
+  border-radius: 2px;
+  animation: wave-quiet 1.5s ease-in-out infinite;
+}
+
+.message-bubble.is-character-audio.playing .audio-waveform div {
+  animation: wave-play 1s ease-in-out infinite;
+}
+
+.audio-duration {
+  font-size: var(--chat-font-size, 13px);
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.audio-description {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+  padding: 0 12px 8px 12px;
+}
+
 /* ▼▼▼ 用这块代码替换掉你原来的 .message-bubble .content 样式 ▼▼▼ */
 /* 通用内容区样式，为时间戳和字体大小做准备 */
 .message-bubble .content {

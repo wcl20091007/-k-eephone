@@ -5539,6 +5539,49 @@
           </div>
 
           <!-- ============================== -->
+          <!-- 2.5. 角色音频卡片 -->
+          <!-- ============================== -->
+          <div class="settings-group-card moe-card" id="character-audio-card" style="display: none;">
+            <div class="settings-section-title">🎵 角色音频</div>
+            <div class="form-group">
+              <label>上传角色音频</label>
+              <p style="font-size: 12px; color: #888; margin: 5px 0;">
+                上传音频文件或输入音频URL（如角色唱歌录音），并添加说明词。当聊天内容匹配说明词时，会自动播放对应音频。
+              </p>
+              <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                <button
+                  id="upload-character-audio-btn"
+                  class="moe-btn-secondary"
+                  style="flex: 1;"
+                >
+                  📤 上传文件
+                </button>
+                <button
+                  id="add-audio-url-btn"
+                  class="moe-btn-secondary"
+                  style="flex: 1;"
+                >
+                  🔗 添加URL
+                </button>
+              </div>
+              <input
+                type="file"
+                id="character-audio-upload-input"
+                accept="audio/*"
+                hidden
+              />
+            </div>
+            <div class="form-group">
+              <label>音频列表</label>
+              <div id="character-audio-list" class="moe-list-box" style="max-height: 300px; overflow-y: auto;">
+                <p style="text-align: center; color: #888; padding: 20px; font-size: 13px;">
+                  暂无音频，请先上传
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- ============================== -->
           <!-- 3. 玩法模式卡片 -->
           <!-- ============================== -->
           <div class="settings-group-card moe-card">
