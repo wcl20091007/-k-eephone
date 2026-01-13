@@ -15025,6 +15025,9 @@ document.addEventListener("DOMContentLoaded", () => {
   /**
    * 【V3.0 | 布局修复版】处理长截图功能
    */
+  /**
+   * 【V3.0 | 布局修复版】处理长截图功能
+   */
   async function handleLongScreenshot() {
     if (selectedMessages.size === 0) return;
     const chat = state.chats[state.activeChatId];
@@ -15054,6 +15057,60 @@ document.addEventListener("DOMContentLoaded", () => {
       .message-bubble.selected::after { display: none !important; }
       .cloned-header .default-controls { display: flex !important; justify-content: space-between; align-items: center; width: 100%; }
       .cloned-header .selection-controls { display: none !important; }
+      
+      /* 修复长截图中绝对定位导致的布局错位 */
+      .screenshot-container {
+        position: relative !important;
+        overflow: visible !important;
+      }
+      
+      /* 确保header有正确的高度和布局 */
+      .screenshot-container .cloned-header {
+        position: relative !important;
+        height: auto !important;
+        min-height: 190px !important;
+        overflow: visible !important;
+      }
+      
+      /* 修复header内绝对定位的元素 */
+      .screenshot-container .cloned-header .back-btn,
+      .screenshot-container .cloned-header #chat-settings-btn,
+      .screenshot-container .cloned-header #chat-header-title-wrapper {
+        position: relative !important;
+        top: auto !important;
+        bottom: auto !important;
+        left: auto !important;
+        right: auto !important;
+      }
+      
+      /* 确保消息容器有正确的上边距，避免与header重叠 */
+      .screenshot-container > div:nth-child(2) {
+        margin-top: 0 !important;
+        padding-top: 20px !important;
+        position: relative !important;
+        z-index: 1 !important;
+      }
+      
+      /* 确保header的伪元素不会影响消息容器 */
+      .screenshot-container .cloned-header::after {
+        z-index: 0 !important;
+      }
+      
+      /* 修复消息气泡的负边距可能导致的重叠 */
+      .screenshot-container .message-wrapper {
+        margin-top: 0 !important;
+        margin-bottom: 2px !important;
+      }
+      
+      .screenshot-container .message-wrapper + .message-wrapper {
+        margin-top: 0 !important;
+      }
+      
+      /* 确保伪元素正确显示 */
+      .screenshot-container .cloned-header::before,
+      .screenshot-container .cloned-header::after {
+        position: absolute !important;
+      }
     `;
     document.head.appendChild(tempStyle);
 
@@ -15067,9 +15124,12 @@ document.addEventListener("DOMContentLoaded", () => {
       messagesContainer.style.display = 'flex';
       messagesContainer.style.flexDirection = 'column';
       messagesContainer.style.gap = '20px'; 
-      messagesContainer.style.padding = '10px 15px 20px 15px'; 
+      messagesContainer.style.padding = '20px 15px 20px 15px'; 
       messagesContainer.style.width = '100%';
       messagesContainer.style.boxSizing = 'border-box';
+      messagesContainer.style.marginTop = '0';
+      messagesContainer.style.position = 'relative';
+      messagesContainer.style.zIndex = '1';
 
       messagesContainer.dataset.theme = originalMessagesContainer.dataset.theme;
       messagesContainer.style.setProperty('--chat-font-size', originalMessagesContainer.style.getPropertyValue('--chat-font-size'));
@@ -15114,10 +15174,6 @@ document.addEventListener("DOMContentLoaded", () => {
       
       await Promise.all(imageLoadPromises);
 
-      if (typeof html2canvas === 'undefined') {
-        throw new Error('html2canvas 库未加载，请检查网络连接或刷新页面重试。');
-      }
-
       const canvas = await html2canvas(screenshotContainer, {
         allowTaint: true,
         useCORS: true,
@@ -15140,12 +15196,8 @@ document.addEventListener("DOMContentLoaded", () => {
       console.error('长截图生成失败:', error);
       await showCustomAlert('生成失败', '生成截图时发生错误，请检查控制台获取详情。');
     } finally {
-      if (screenshotContainer.parentNode) {
-        document.body.removeChild(screenshotContainer);
-      }
-      if (tempStyle.parentNode) {
-        document.head.removeChild(tempStyle);
-      }
+      document.body.removeChild(screenshotContainer);
+      document.head.removeChild(tempStyle);
       screenshotBtn.textContent = originalBtnText;
       screenshotBtn.disabled = false;
       exitSelectionMode(); 
