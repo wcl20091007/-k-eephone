@@ -13860,6 +13860,318 @@ body {
 }
 
 /* ▲▲▲ 新样式粘贴结束 ▲▲▲ */
+/* ▼▼▼ 新增长期记忆输入区域样式 - 美化版 ▼▼▼ */
+
+/* 新增长期记忆卡片 - 现代化设计 */
+.add-memory-card {
+  background: linear-gradient(135deg, #ffffff 0%, #f8f9ff 100%);
+  border-radius: 16px;
+  padding: 20px;
+  border: 1px solid rgba(138, 43, 226, 0.1);
+  margin-bottom: 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.add-memory-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #8a2be2 0%, #9370db 50%, #ba55d3 100%);
+}
+
+#phone-screen.dark-mode .add-memory-card {
+  background: linear-gradient(135deg, #2c2c2e 0%, #252530 100%);
+  border-color: rgba(138, 43, 226, 0.2);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.add-memory-card:hover {
+  box-shadow: 0 6px 20px rgba(138, 43, 226, 0.15);
+  transform: translateY(-2px);
+}
+
+/* 头部区域 */
+.add-memory-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.add-memory-icon {
+  font-size: 32px;
+  line-height: 1;
+  flex-shrink: 0;
+  filter: drop-shadow(0 2px 4px rgba(138, 43, 226, 0.2));
+}
+
+.add-memory-title-group {
+  flex: 1;
+}
+
+.add-memory-title {
+  margin: 0 0 4px 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  background: linear-gradient(135deg, #8a2be2 0%, #9370db 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+#phone-screen.dark-mode .add-memory-title {
+  background: linear-gradient(135deg, #ba55d3 0%, #dda0dd 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.add-memory-subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+/* 输入框包装器 */
+.add-memory-input-wrapper {
+  position: relative;
+  margin-bottom: 16px;
+}
+
+.add-memory-textarea {
+  width: 100%;
+  padding: 14px 16px;
+  border: 2px solid rgba(138, 43, 226, 0.15);
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 1.7;
+  font-family: inherit;
+  resize: vertical;
+  background-color: var(--secondary-bg);
+  color: var(--text-primary);
+  box-sizing: border-box;
+  transition: all 0.3s ease;
+  min-height: 120px;
+}
+
+.add-memory-textarea:focus {
+  outline: none;
+  border-color: #8a2be2;
+  box-shadow: 0 0 0 4px rgba(138, 43, 226, 0.1);
+  background-color: var(--primary-bg);
+}
+
+.add-memory-textarea::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.7;
+}
+
+#phone-screen.dark-mode .add-memory-textarea {
+  background-color: #1e1e24;
+  border-color: rgba(138, 43, 226, 0.3);
+}
+
+#phone-screen.dark-mode .add-memory-textarea:focus {
+  background-color: #252530;
+  border-color: #ba55d3;
+  box-shadow: 0 0 0 4px rgba(186, 85, 211, 0.15);
+}
+
+/* 字符计数 */
+.add-memory-char-count {
+  position: absolute;
+  bottom: 8px;
+  right: 12px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.8);
+  padding: 2px 6px;
+  border-radius: 8px;
+  pointer-events: none;
+}
+
+#phone-screen.dark-mode .add-memory-char-count {
+  background: rgba(30, 30, 36, 0.8);
+}
+
+/* 按钮区域 */
+.add-memory-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.save-memory-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 20px;
+  border: none;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #8a2be2 0%, #9370db 100%);
+  color: white;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(138, 43, 226, 0.3);
+  position: relative;
+  overflow: hidden;
+}
+
+.save-memory-btn::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+  transform: translate(-50%, -50%);
+  transition: width 0.6s, height 0.6s;
+}
+
+.save-memory-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(138, 43, 226, 0.4);
+}
+
+.save-memory-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(138, 43, 226, 0.3);
+}
+
+.save-memory-btn:active::before {
+  width: 300px;
+  height: 300px;
+}
+
+.save-btn-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.save-memory-btn span:not(.save-btn-icon) {
+  position: relative;
+  z-index: 1;
+}
+
+.save-memory-btn .save-btn-icon {
+  position: relative;
+  z-index: 1;
+}
+
+/* ▲▲▲ 新增长期记忆输入区域样式结束 ▲▲▲ */
+/* ▼▼▼ Header新增按钮样式 ▼▼▼ */
+
+.add-memory-header-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #8a2be2 0%, #9370db 100%);
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(138, 43, 226, 0.3);
+}
+
+.add-memory-header-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(138, 43, 226, 0.4);
+}
+
+.add-memory-header-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px rgba(138, 43, 226, 0.3);
+}
+
+.add-btn-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.add-btn-text {
+  line-height: 1;
+}
+
+/* 用户记忆卡片样式 */
+.user-memory-card {
+  border-left: 4px solid #8a2be2;
+  background: linear-gradient(135deg, #f8f9ff 0%, #ffffff 100%);
+}
+
+#phone-screen.dark-mode .user-memory-card {
+  background: linear-gradient(135deg, #2a1f3d 0%, #2c2c2e 100%);
+  border-left-color: #ba55d3;
+}
+
+.user-memory-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  margin-bottom: 8px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #8a2be2 0%, #9370db 100%);
+  color: white;
+  font-size: 11px;
+  font-weight: 600;
+  box-shadow: 0 2px 4px rgba(138, 43, 226, 0.2);
+}
+
+/* 修复showCustomPrompt的textarea样式 - 使用ID选择器确保优先级 */
+#custom-prompt-input[type="textarea"],
+#custom-prompt-input {
+  width: 100% !important;
+  min-width: 100% !important;
+  max-width: 100% !important;
+  padding: 14px 16px !important;
+  border: 2px solid rgba(138, 43, 226, 0.15) !important;
+  border-radius: 12px !important;
+  font-size: 14px !important;
+  line-height: 1.7 !important;
+  font-family: inherit !important;
+  resize: vertical !important;
+  background-color: var(--secondary-bg) !important;
+  color: var(--text-primary) !important;
+  box-sizing: border-box !important;
+  margin: 0 auto !important;
+  display: block !important;
+  text-align: left !important;
+}
+
+#custom-prompt-input:focus {
+  outline: none !important;
+  border-color: #8a2be2 !important;
+  box-shadow: 0 0 0 4px rgba(138, 43, 226, 0.1) !important;
+  background-color: var(--primary-bg) !important;
+}
+
+#phone-screen.dark-mode #custom-prompt-input {
+  background-color: #1e1e24 !important;
+  border-color: rgba(138, 43, 226, 0.3) !important;
+}
+
+#phone-screen.dark-mode #custom-prompt-input:focus {
+  background-color: #252530 !important;
+  border-color: #ba55d3 !important;
+  box-shadow: 0 0 0 4px rgba(186, 85, 211, 0.15) !important;
+}
+
+/* ▲▲▲ Header新增按钮样式结束 ▲▲▲ */
 /* ▼▼▼ 把这一整块全新的CSS，粘贴到 <style> 标签的最末尾 ▼▼▼ */
 
 /* --- “桃宝”App 整体布局 --- */

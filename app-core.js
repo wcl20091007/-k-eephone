@@ -1263,7 +1263,8 @@ document.addEventListener("DOMContentLoaded", () => {
     placeholder,
     initialValue = "",
     type = "text",
-    extraHtml = ""
+    extraHtml = "",
+    rows = 4
   ) {
     return new Promise((resolve) => {
       modalResolve = resolve;
@@ -1272,7 +1273,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const inputHtml =
         type === "textarea"
-          ? `<textarea id="${inputId}" placeholder="${placeholder}" rows="4" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #ccc; font-size: 14px; box-sizing: border-box; resize: vertical;">${initialValue}</textarea>`
+          ? `<textarea id="${inputId}" placeholder="${placeholder}" rows="${rows}" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #ccc; font-size: 14px; box-sizing: border-box; resize: vertical;">${initialValue}</textarea>`
           : `<input type="${type}" id="${inputId}" placeholder="${placeholder}" value="${initialValue}">`;
 
       modalBody.innerHTML = extraHtml + inputHtml;
@@ -31979,46 +31980,44 @@ ${chat.settings.aiPersona}
     const listEl = document.getElementById("summary-list");
     listEl.innerHTML = "";
 
+    // 绑定header新增按钮事件
+    const addBtn = document.getElementById("add-memory-header-btn");
+    const newAddBtn = addBtn.cloneNode(true);
+    addBtn.parentNode.replaceChild(newAddBtn, addBtn);
+    newAddBtn.addEventListener("click", () => {
+      showAddMemoryModal();
+    });
+
     const summaries = chat.history.filter(
       (msg) => msg.type === "summary"
     );
 
-    if (summaries.length === 0) {
-      listEl.innerHTML =
-        '<p style="text-align:center; color: #8a8a8a;">还没有生成过任何总结。</p>';
-    } else {
-      [...summaries].reverse().forEach((summary) => {
-        const card = document.createElement("div");
-        card.className = "summary-item-card";
+    // 分离用户添加的记忆和AI生成的总结
+    const userMemories = summaries.filter((msg) => msg.isUserAdded === true);
+    const aiSummaries = summaries.filter((msg) => !msg.isUserAdded);
 
-        card.innerHTML = `
-			                <div class="summary-actions">
-			                    <button class="concise-summary-btn" data-timestamp="${
-                      summary.timestamp
-                    }" title="精简总结">✨</button>
-			                    <button class="edit-summary-btn" data-timestamp="${
-                      summary.timestamp
-                    }" title="编辑">✏️</button>
-			                    <button class="delete-summary-btn" data-timestamp="${
-                      summary.timestamp
-                    }" title="删除">🗑️</button>
-			                </div>
-			                <div class="summary-content">${summary.content.replace(
-                  /\n/g,
-                  "<br>"
-                )}</div>
-			                <div class="summary-meta">
-			                    <span>生成于: ${new Date(summary.timestamp).toLocaleString(
-                      "zh-CN",
-                      {
-                        dateStyle: "short",
-                        timeStyle: "short",
-                      }
-                    )}</span>
-			                </div>
-			            `;
+    // 先显示用户添加的记忆（按时间倒序，最新的在上面）
+    if (userMemories.length > 0) {
+      [...userMemories].reverse().forEach((summary) => {
+        const card = createSummaryCard(summary, true);
         listEl.appendChild(card);
       });
+    }
+
+    // 再显示AI生成的总结（按时间倒序）
+    if (aiSummaries.length > 0) {
+      [...aiSummaries].reverse().forEach((summary) => {
+        const card = createSummaryCard(summary, false);
+        listEl.appendChild(card);
+      });
+    }
+
+    // 如果没有任何记忆
+    if (summaries.length === 0) {
+      const emptyMsg = document.createElement("p");
+      emptyMsg.style.cssText = "text-align:center; color: #8a8a8a; margin-top: 20px;";
+      emptyMsg.textContent = "还没有生成过任何总结。";
+      listEl.appendChild(emptyMsg);
     }
 
     document
@@ -32027,6 +32026,97 @@ ${chat.settings.aiPersona}
     document
       .getElementById("summary-viewer-modal")
       .classList.add("visible");
+  }
+
+  /**
+   * 创建总结卡片
+   */
+  function createSummaryCard(summary, isUserAdded) {
+    const card = document.createElement("div");
+    card.className = "summary-item-card";
+    if (isUserAdded) {
+      card.classList.add("user-memory-card");
+    }
+
+    const badge = isUserAdded 
+      ? '<span class="user-memory-badge">用户添加</span>' 
+      : '';
+
+    card.innerHTML = `
+      <div class="summary-actions">
+        ${isUserAdded ? '' : `<button class="concise-summary-btn" data-timestamp="${
+          summary.timestamp
+        }" title="精简总结">✨</button>`}
+        <button class="edit-summary-btn" data-timestamp="${
+          summary.timestamp
+        }" title="编辑">✏️</button>
+        <button class="delete-summary-btn" data-timestamp="${
+          summary.timestamp
+        }" title="删除">🗑️</button>
+      </div>
+      ${badge}
+      <div class="summary-content">${summary.content.replace(
+        /\n/g,
+        "<br>"
+      )}</div>
+      <div class="summary-meta">
+        <span>${isUserAdded ? '添加' : '生成'}于: ${new Date(summary.timestamp).toLocaleString(
+        "zh-CN",
+        {
+          dateStyle: "short",
+          timeStyle: "short",
+        }
+      )}</span>
+      </div>
+    `;
+    return card;
+  }
+
+  /**
+   * 显示新增记忆的模态框
+   */
+  async function showAddMemoryModal() {
+    const content = await showCustomPrompt(
+      "新增长期记忆",
+      "例如：\n• 你的生日是X月X日\n• 你最喜欢的颜色是蓝色\n• 你们第一次见面的地点是...",
+      "",
+      "textarea",
+      "",
+      6
+    );
+
+    if (content !== null && content.trim()) {
+      await saveNewMemory(content.trim());
+    }
+  }
+
+  /**
+   * 保存用户新添加的长期记忆
+   */
+  async function saveNewMemory(content) {
+    if (!content || !content.trim()) {
+      await showCustomAlert("提示", "请输入要保存的记忆内容。");
+      return;
+    }
+
+    const chat = state.chats[state.activeChatId];
+    
+    const summaryMessage = {
+      role: "system",
+      type: "summary",
+      content: content.trim(),
+      timestamp: Date.now(),
+      isHidden: true, // 这条消息对AI可见，但对用户隐藏
+      isUserAdded: true, // 标记为用户添加的记忆
+    };
+
+    chat.history.push(summaryMessage);
+    await db.chats.put(chat);
+
+    // 重新渲染列表
+    await openSummaryViewer();
+    
+    await showCustomAlert("成功", "长期记忆已保存！AI现在会记住这条信息。");
   }
 
   /**
