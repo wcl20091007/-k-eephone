@@ -28468,6 +28468,19 @@ ${chat.settings.aiPersona}
           
           if (confirmed) {
             try {
+              // 获取要删除的记录信息
+              const recordToDelete = history.find(r => r.id === historyId);
+              
+              // 删除相关记忆
+              if (recordToDelete) {
+                await deleteRelatedMemories(
+                  chat.id,
+                  recordToDelete.timestamp,
+                  'peeking',
+                  recordToDelete.response || recordToDelete.screenContent || ''
+                );
+              }
+              
               await db.desktopPetPeekingHistory.delete(historyId);
               // 重新渲染列表
               openDesktopPetPeekingHistory();
@@ -28592,6 +28605,69 @@ ${chat.settings.aiPersona}
     });
   }
   /**
+   * 删除与指定记录相关的记忆
+   * @param {string} chatId - 聊天ID
+   * @param {number} recordTimestamp - 记录的时间戳
+   * @param {string} recordType - 记录类型：'innerVoice', 'peeking', 'qzonePost'
+   * @param {string} recordContent - 记录的内容（用于匹配记忆描述）
+   */
+  async function deleteRelatedMemories(chatId, recordTimestamp, recordType, recordContent = '') {
+    try {
+      // 获取该聊天的所有记忆
+      const allMemories = await db.memories
+        .where("chatId")
+        .equals(chatId)
+        .toArray();
+      
+      if (allMemories.length === 0) return;
+      
+      // 定义时间窗口（前后10分钟）
+      const timeWindow = 10 * 60 * 1000; // 10分钟
+      const minTime = recordTimestamp - timeWindow;
+      const maxTime = recordTimestamp + timeWindow;
+      
+      // 定义关键词（根据记录类型）
+      const keywords = {
+        'innerVoice': ['心声', '内心', '想法', 'thoughts', 'naughtyThoughts'],
+        'peeking': ['窥屏', '窥视', '查看', 'peeking', '屏幕'],
+        'qzonePost': ['动态', '说说', '发布', 'qzone', 'post']
+      };
+      
+      const relevantKeywords = keywords[recordType] || [];
+      
+      // 查找相关记忆
+      const memoriesToDelete = allMemories.filter(memory => {
+        // 检查时间戳是否在时间窗口内
+        const isInTimeWindow = memory.timestamp >= minTime && memory.timestamp <= maxTime;
+        
+        if (!isInTimeWindow) return false;
+        
+        // 检查描述是否包含关键词或记录内容
+        const description = (memory.description || '').toLowerCase();
+        const hasKeyword = relevantKeywords.some(keyword => 
+          description.includes(keyword.toLowerCase())
+        );
+        
+        // 如果记录内容不为空，也检查是否包含记录内容的关键部分
+        const hasContent = recordContent && description.includes(
+          recordContent.substring(0, 20).toLowerCase()
+        );
+        
+        return hasKeyword || hasContent;
+      });
+      
+      // 删除相关记忆
+      if (memoriesToDelete.length > 0) {
+        const memoryIds = memoriesToDelete.map(m => m.id);
+        await db.memories.bulkDelete(memoryIds);
+        console.log(`已删除 ${memoriesToDelete.length} 条相关记忆`);
+      }
+    } catch (error) {
+      console.error('删除相关记忆时出错:', error);
+    }
+  }
+
+  /**
    * 删除单条心声记录
    * @param {number} timestamp - 要删除的心声的时间戳
    */
@@ -28599,19 +28675,46 @@ ${chat.settings.aiPersona}
     const chat = state.chats[state.activeChatId];
     if (!chat || !chat.innerVoiceHistory) return;
 
+    // 找到要删除的心声记录
+    const voiceToDelete = chat.innerVoiceHistory.find(
+      (item) => item.timestamp === timestamp
+    );
+    
     // 弹出确认框
     const confirmed = await showCustomConfirm(
       "确认删除",
-      "确定要删除这条心声记录吗？",
+      "确定要删除这条心声记录吗？相关的记忆也会被删除。",
       {
         confirmButtonClass: "btn-danger",
       }
     );
     if (confirmed) {
+      // 删除相关记忆
+      if (voiceToDelete) {
+        const voiceContent = [
+          voiceToDelete.thoughts || '',
+          voiceToDelete.naughtyThoughts || '',
+          voiceToDelete.behavior || '',
+          voiceToDelete.clothing || ''
+        ].join(' ');
+        await deleteRelatedMemories(
+          chat.id,
+          timestamp,
+          'innerVoice',
+          voiceContent
+        );
+      }
+      
       // 从数组中过滤掉匹配的项
       chat.innerVoiceHistory = chat.innerVoiceHistory.filter(
         (item) => item.timestamp !== timestamp
       );
+      
+      // 如果删除的是当前心声，也要清空
+      if (chat.latestInnerVoice && chat.latestInnerVoice.timestamp === timestamp) {
+        chat.latestInnerVoice = null;
+      }
+      
       // 保存回数据库
       await db.chats.put(chat);
       // 重新渲染列表
@@ -28636,12 +28739,34 @@ ${chat.settings.aiPersona}
 
     const confirmed = await showCustomConfirm(
       "确认清空",
-      "确定要清空所有心声历史记录吗？此操作不可恢复。",
+      "确定要清空所有心声历史记录吗？相关的记忆也会被删除。此操作不可恢复。",
       {
         confirmButtonClass: "btn-danger",
       }
     );
     if (confirmed) {
+      // 删除所有心声相关的记忆
+      try {
+        const allMemories = await db.memories
+          .where("chatId")
+          .equals(chat.id)
+          .toArray();
+        
+        const memoriesToDelete = allMemories.filter(memory => {
+          const description = (memory.description || '').toLowerCase();
+          const keywords = ['心声', '内心', '想法', 'thoughts', 'naughtyThoughts'];
+          return keywords.some(keyword => description.includes(keyword.toLowerCase()));
+        });
+        
+        if (memoriesToDelete.length > 0) {
+          const memoryIds = memoriesToDelete.map(m => m.id);
+          await db.memories.bulkDelete(memoryIds);
+          console.log(`已删除 ${memoriesToDelete.length} 条心声相关记忆`);
+        }
+      } catch (error) {
+        console.error('删除心声相关记忆时出错:', error);
+      }
+      
       // 不仅清空历史数组，也要清空当前的心声对象
       chat.innerVoiceHistory = [];
       chat.latestInnerVoice = null; // 将当前心声设为null
@@ -31654,8 +31779,89 @@ ${chat.settings.aiPersona}
       return null;
     }
 
+    // --- 过滤掉已删除的内容 ---
+    // 1. 获取当前存在的心声记录时间戳
+    const existingInnerVoiceTimestamps = new Set(
+      (chat.innerVoiceHistory || []).map(iv => iv.timestamp)
+    );
+    
+    // 2. 获取当前存在的动态ID（异步获取）
+    let existingPostIds = new Set();
+    try {
+      const allPosts = await db.qzonePosts.toArray();
+      existingPostIds = new Set(allPosts.map(p => p.id));
+    } catch (error) {
+      console.error('获取动态列表失败:', error);
+    }
+    
+    // 3. 获取当前存在的窥屏记录时间戳（用于匹配peeking_history类型的消息）
+    let existingPeekingTimestamps = new Set();
+    try {
+      const allPeekingRecords = await db.desktopPetPeekingHistory
+        .where("chatId")
+        .equals(chat.id)
+        .toArray();
+      existingPeekingTimestamps = new Set(allPeekingRecords.map(p => p.timestamp));
+    } catch (error) {
+      console.error('获取窥屏记录列表失败:', error);
+    }
+    
+    // 4. 过滤消息：排除引用已删除内容的系统消息
+    const validMessagesForSummary = filteredMessagesForSummary.filter(msg => {
+      // 如果消息类型是窥屏历史，检查对应的窥屏记录是否还存在（通过时间戳匹配）
+      if (msg.type === "peeking_history") {
+        if (msg.timestamp && !existingPeekingTimestamps.has(msg.timestamp)) {
+          return false; // 对应的窥屏记录已删除，跳过这条消息
+        }
+      }
+      
+      // 如果消息引用了已删除的心声
+      if (msg.content && typeof msg.content === 'string') {
+        // 检查是否引用了已删除的心声（通过时间戳匹配）
+        const innerVoiceMatch = msg.content.match(/心声.*?(\d{13})/);
+        if (innerVoiceMatch) {
+          const voiceTimestamp = parseInt(innerVoiceMatch[1]);
+          if (voiceTimestamp && !existingInnerVoiceTimestamps.has(voiceTimestamp)) {
+            return false; // 引用的心声已删除，跳过这条消息
+          }
+        }
+        
+        // 检查是否引用了已删除的动态
+        const postIdMatch = msg.content.match(/动态.*?\(ID:\s*(\d+)\)/);
+        if (postIdMatch) {
+          const postId = parseInt(postIdMatch[1]);
+          if (postId && !existingPostIds.has(postId)) {
+            return false; // 引用的动态已删除，跳过这条消息
+          }
+        }
+        
+        // 检查是否包含"发布了"等动态相关的系统消息，并验证动态是否还存在
+        if (msg.role === "system" && msg.content.includes("发布了")) {
+          const postIdMatch = msg.content.match(/\(ID:\s*(\d+)\)/);
+          if (postIdMatch) {
+            const postId = parseInt(postIdMatch[1]);
+            if (postId && !existingPostIds.has(postId)) {
+              return false; // 引用的动态已删除，跳过这条系统消息
+            }
+          }
+        }
+      }
+      
+      return true;
+    });
+
+    if (validMessagesForSummary.length === 0) {
+      if (!specificMessages) {
+        await showCustomAlert(
+          "无需总结",
+          "自上次总结以来没有新的对话内容（或所有内容已被删除）。"
+        );
+      }
+      return null;
+    }
+
     // --- 在构建对话文本时，加入时间戳 ---
-    const conversationText = filteredMessagesForSummary
+    const conversationText = validMessagesForSummary
       .map((msg) => {
         const sender =
           msg.role === "user"
@@ -31849,17 +32055,19 @@ ${chat.settings.aiPersona}
 
   /**
    * 删除一条总结，并智能更新总结索引
+   * 注意：删除总结时不会删除记忆记录，只是从聊天历史中移除总结，使其不再被读取到上下文中
    */
   async function deleteSummary(timestamp) {
     const confirmed = await showCustomConfirm(
       "确认删除",
-      "确定要删除这条总结记忆吗？这可能会影响AI的长期记忆。",
+      "确定要删除这条总结记忆吗？删除后，该总结将不再被读取到聊天上下文中。",
       { confirmButtonClass: "btn-danger" }
     );
     if (confirmed) {
       const chat = state.chats[state.activeChatId];
 
       // 1. 从历史记录中过滤掉被删除的总结
+      // 这样总结就不会再被读取到聊天上下文中了
       chat.history = chat.history.filter(
         (msg) => msg.timestamp !== timestamp
       );
@@ -43508,7 +43716,7 @@ ${chat.settings.aiPersona}
         if (isNaN(postIdToDelete)) return;
         const confirmed = await showCustomConfirm(
           "删除动态",
-          "确定要永久删除这条动态吗？",
+          "确定要永久删除这条动态吗？相关的记忆也会被删除。",
           {
             confirmButtonClass: "btn-danger",
           }
@@ -43518,6 +43726,22 @@ ${chat.settings.aiPersona}
           container.style.transform = "scale(0.8)";
           container.style.opacity = "0";
           setTimeout(async () => {
+            // 获取要删除的动态信息
+            const postToDelete = await db.qzonePosts.get(postIdToDelete);
+            
+            // 删除所有相关角色的相关记忆
+            if (postToDelete) {
+              for (const chatId in state.chats) {
+                const chat = state.chats[chatId];
+                await deleteRelatedMemories(
+                  chat.id,
+                  postToDelete.timestamp,
+                  'qzonePost',
+                  postToDelete.content || postToDelete.text || ''
+                );
+              }
+            }
+            
             await db.qzonePosts.delete(postIdToDelete);
             const notificationIdentifier = `(ID: ${postIdToDelete})`;
             for (const chatId in state.chats) {
