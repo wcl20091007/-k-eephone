@@ -91,6 +91,7 @@
     <script src="app-core.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 
     <style></style>
 
@@ -2127,6 +2128,7 @@
             <div class="header-actions">
               <span id="selection-favorite-btn" class="action-btn">收藏</span>
               <span id="selection-share-btn" class="action-btn">分享</span>
+              <span id="selection-screenshot-btn" class="action-btn">长截图</span>
               <span
                 id="selection-delete-btn"
                 class="action-btn"
@@ -7441,6 +7443,7 @@ lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer
           <!-- 新增这行 -->
           <button id="edit-message-btn">编辑消息</button>
           <button id="copy-message-btn">复制文本</button>
+          <button id="delete-message-btn" style="color: #ff3b30; font-weight: 600;">🗑️ 删除</button>
           <button id="recall-message-btn">撤回</button>
           <button id="quote-message-btn">引用</button>
           <button id="select-message-btn">进入多选</button>

@@ -7308,17 +7308,20 @@ document.addEventListener("DOMContentLoaded", () => {
       if (vizEl && textEl) {
         let showingViz = true;
         contentContainer.addEventListener('click', (e) => {
-          // 只响应点击奖励区域
+          // 只响应点击奖励区域，但在选择模式下不阻止事件冒泡
           if (e.target.closest('.reward-visualization') || e.target.closest('.reward-text')) {
-            e.stopPropagation();
-            if (showingViz) {
-              vizEl.style.display = 'none';
-              textEl.style.display = 'block';
-              showingViz = false;
-            } else {
-              vizEl.style.display = 'block';
-              textEl.style.display = 'none';
-              showingViz = true;
+            // 如果在选择模式下，不阻止事件冒泡，让选择功能正常工作
+            if (!isSelectionMode) {
+              e.stopPropagation();
+              if (showingViz) {
+                vizEl.style.display = 'none';
+                textEl.style.display = 'block';
+                showingViz = false;
+              } else {
+                vizEl.style.display = 'block';
+                textEl.style.display = 'none';
+                showingViz = true;
+              }
             }
           }
         });
@@ -7335,11 +7338,10 @@ document.addEventListener("DOMContentLoaded", () => {
       
       addLongPressListener(wrapper, () => showMessageActions(msg.timestamp));
       wrapper.addEventListener("click", (e) => {
-        // 如果点击的是奖励区域，不触发选择模式
-        if (e.target.closest('.reward-visualization') || e.target.closest('.reward-text')) {
-          return;
+        // 在选择模式下，点击任何地方都可以触发选择
+        if (isSelectionMode) {
+          toggleMessageSelection(msg.timestamp);
         }
-        if (isSelectionMode) toggleMessageSelection(msg.timestamp);
       });
       return wrapper;
     }
@@ -15002,18 +15004,178 @@ document.addEventListener("DOMContentLoaded", () => {
       .getElementById("chat-interface-screen")
       .classList.remove("selection-mode");
     selectedMessages.forEach((ts) => {
-      const bubble = document.querySelector(
+      // 首先尝试查找 message-bubble
+      let bubble = document.querySelector(
         `.message-bubble[data-timestamp="${ts}"]`
       );
+      // 如果找不到，尝试通过 wrapper 查找虚拟 bubble
+      if (!bubble) {
+        const wrapper = document.querySelector(
+          `.message-wrapper[data-timestamp="${ts}"]`
+        );
+        if (wrapper) {
+          bubble = wrapper.querySelector('.virtual-message-bubble');
+        }
+      }
       if (bubble) bubble.classList.remove("selected");
     });
     selectedMessages.clear();
   }
 
+  /**
+   * 【V3.0 | 布局修复版】处理长截图功能
+   */
+  async function handleLongScreenshot() {
+    if (selectedMessages.size === 0) return;
+    const chat = state.chats[state.activeChatId];
+    if (!chat) return;
+
+    const screenshotBtn = document.getElementById('selection-screenshot-btn');
+    const originalBtnText = screenshotBtn.textContent;
+    screenshotBtn.textContent = '生成中...';
+    screenshotBtn.disabled = true;
+
+    const screenshotContainer = document.createElement('div');
+    const phoneScreen = document.getElementById('phone-screen');
+    screenshotContainer.style.width = phoneScreen.offsetWidth + 'px';
+    screenshotContainer.style.position = 'absolute';
+    screenshotContainer.style.top = '-9999px';
+    screenshotContainer.style.left = '-9999px';
+    screenshotContainer.style.display = 'flex';
+    screenshotContainer.style.flexDirection = 'column';
+    screenshotContainer.style.height = 'auto';
+    
+    const chatScreen = document.getElementById('chat-interface-screen');
+    screenshotContainer.style.backgroundImage = chatScreen.style.backgroundImage;
+    screenshotContainer.style.backgroundColor = chatScreen.style.backgroundColor || (document.getElementById('phone-screen').classList.contains('dark-mode') ? '#000000' : '#f0f2f5');
+
+    const tempStyle = document.createElement('style');
+    tempStyle.innerHTML = `
+      .message-bubble.selected::after { display: none !important; }
+      .cloned-header .default-controls { display: flex !important; justify-content: space-between; align-items: center; width: 100%; }
+      .cloned-header .selection-controls { display: none !important; }
+    `;
+    document.head.appendChild(tempStyle);
+
+    try {
+      const header = chatScreen.querySelector('.header').cloneNode(true);
+      header.classList.add('cloned-header');
+      
+      const messagesContainer = document.createElement('div');
+      const originalMessagesContainer = document.getElementById('chat-messages');
+
+      messagesContainer.style.display = 'flex';
+      messagesContainer.style.flexDirection = 'column';
+      messagesContainer.style.gap = '20px'; 
+      messagesContainer.style.padding = '10px 15px 20px 15px'; 
+      messagesContainer.style.width = '100%';
+      messagesContainer.style.boxSizing = 'border-box';
+
+      messagesContainer.dataset.theme = originalMessagesContainer.dataset.theme;
+      messagesContainer.style.setProperty('--chat-font-size', originalMessagesContainer.style.getPropertyValue('--chat-font-size'));
+
+      const inputArea = chatScreen.querySelector('#chat-input-area').cloneNode(true);
+
+      const sortedTimestamps = [...selectedMessages].sort((a, b) => a - b);
+      sortedTimestamps.forEach(timestamp => {
+        // 首先尝试查找 message-bubble
+        let originalBubble = document.querySelector(`.message-bubble[data-timestamp="${timestamp}"]`);
+        let originalWrapper = null;
+        
+        if (originalBubble) {
+          originalWrapper = originalBubble.closest('.message-wrapper');
+        } else {
+          // 如果找不到 message-bubble，直接通过 wrapper 查找（用于HTML消息和奖励消息）
+          originalWrapper = document.querySelector(`.message-wrapper[data-timestamp="${timestamp}"]`);
+        }
+        
+        if (originalWrapper) {
+          messagesContainer.appendChild(originalWrapper.cloneNode(true));
+        }
+      });
+
+      screenshotContainer.appendChild(header);
+      screenshotContainer.appendChild(messagesContainer);
+      screenshotContainer.appendChild(inputArea);
+      document.body.appendChild(screenshotContainer);
+      
+      const images = Array.from(screenshotContainer.getElementsByTagName('img'));
+      const imageLoadPromises = images.map(img => new Promise((resolve, reject) => {
+        if (img.src.startsWith('data:')) {
+          resolve();
+          return;
+        }
+        const newImg = new Image();
+        newImg.crossOrigin = 'anonymous';
+        newImg.onload = resolve;
+        newImg.onerror = resolve; 
+        newImg.src = img.src;
+      }));
+      
+      await Promise.all(imageLoadPromises);
+
+      if (typeof html2canvas === 'undefined') {
+        throw new Error('html2canvas 库未加载，请检查网络连接或刷新页面重试。');
+      }
+
+      const canvas = await html2canvas(screenshotContainer, {
+        allowTaint: true,
+        useCORS: true,
+        backgroundColor: null,
+        scale: window.devicePixelRatio || 2,
+      });
+
+      canvas.toBlob(function(blob) {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.download = `EPhone-长截图-${chat.name}-${Date.now()}.png`;
+        link.href = url;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }, 'image/png');
+
+    } catch (error) {
+      console.error('长截图生成失败:', error);
+      await showCustomAlert('生成失败', '生成截图时发生错误，请检查控制台获取详情。');
+    } finally {
+      if (screenshotContainer.parentNode) {
+        document.body.removeChild(screenshotContainer);
+      }
+      if (tempStyle.parentNode) {
+        document.head.removeChild(tempStyle);
+      }
+      screenshotBtn.textContent = originalBtnText;
+      screenshotBtn.disabled = false;
+      exitSelectionMode(); 
+    }
+  }
+
   function toggleMessageSelection(timestamp) {
-    const elementToSelect = document.querySelector(
+    // 首先尝试查找 message-bubble 元素
+    let elementToSelect = document.querySelector(
       `.message-bubble[data-timestamp="${timestamp}"]`
     );
+
+    // 如果找不到 message-bubble，尝试通过 wrapper 查找（用于HTML消息和奖励消息）
+    if (!elementToSelect) {
+      const wrapper = document.querySelector(
+        `.message-wrapper[data-timestamp="${timestamp}"]`
+      );
+      if (wrapper) {
+        // 为没有 message-bubble 的消息创建一个虚拟的 bubble 用于选择状态
+        let virtualBubble = wrapper.querySelector('.virtual-message-bubble');
+        if (!virtualBubble) {
+          virtualBubble = document.createElement('div');
+          virtualBubble.className = 'message-bubble virtual-message-bubble';
+          virtualBubble.dataset.timestamp = timestamp;
+          virtualBubble.style.display = 'none'; // 隐藏，仅用于选择状态
+          wrapper.insertBefore(virtualBubble, wrapper.firstChild);
+        }
+        elementToSelect = virtualBubble;
+      }
+    }
 
     if (!elementToSelect) return;
 
@@ -23063,6 +23225,112 @@ document.addEventListener("DOMContentLoaded", () => {
       console.error("撤回消息时出错:", error);
       throw error;
     }
+  }
+
+  /**
+   * 处理用户点击"删除"按钮的入口函数
+   * 直接删除消息，不需要时间限制
+   */
+  async function handleDeleteMessageClick() {
+    console.log("handleDeleteMessageClick 被调用，activeMessageTimestamp:", activeMessageTimestamp);
+    
+    if (!activeMessageTimestamp) {
+      console.warn("没有activeMessageTimestamp，无法删除消息");
+      await showCustomAlert("错误", "无法找到要删除的消息");
+      return;
+    }
+
+    // 先保存时间戳，因为hideMessageActions会清空它
+    const messageTime = activeMessageTimestamp;
+    console.log("保存的时间戳:", messageTime);
+    
+    const chat = state.chats[state.activeChatId];
+    if (!chat) {
+      await showCustomAlert("错误", "无法找到当前聊天");
+      return;
+    }
+
+    const message = chat.history.find((m) => m.timestamp === messageTime);
+    if (!message) {
+      await showCustomAlert("错误", "无法找到要删除的消息");
+      return;
+    }
+
+    // 显示确认对话框
+    const messagePreview = typeof message.content === 'string' 
+      ? message.content.substring(0, 50) 
+      : '该消息';
+    const confirmed = await showCustomConfirm(
+      "删除消息",
+      `确定要删除这条消息吗？\n\n"${messagePreview}${messagePreview.length >= 50 ? '...' : ''}"\n\n删除后将改变AI的记忆。`,
+      { confirmButtonClass: "btn-danger" }
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    // 先隐藏菜单，避免重复点击
+    hideMessageActions();
+
+    try {
+      await deleteMessage(messageTime);
+      console.log("消息删除成功");
+      await showCustomAlert("成功", "消息已删除");
+    } catch (error) {
+      console.error("删除消息时出错:", error);
+      await showCustomAlert("错误", `删除消息时发生错误：${error.message}`);
+    }
+  }
+
+  /**
+   * 删除消息的核心逻辑
+   * @param {number} timestamp - 要删除的消息的时间戳
+   */
+  async function deleteMessage(timestamp) {
+    const chat = state.chats[state.activeChatId];
+    if (!chat) return;
+
+    const messageIndex = chat.history.findIndex(
+      (m) => m.timestamp === timestamp
+    );
+    if (messageIndex === -1) {
+      throw new Error("找不到要删除的消息");
+    }
+
+    const messageToDelete = chat.history[messageIndex];
+    
+    // 检查被删除的消息中是否包含投票
+    let deletedPollsInfo = [];
+    if (messageToDelete.type === "poll") {
+      deletedPollsInfo.push(
+        `关于"${messageToDelete.question}"的投票`
+      );
+    }
+
+    // 从历史记录中删除消息
+    chat.history.splice(messageIndex, 1);
+
+    // 构建"遗忘指令"
+    let forgetReason = "一条之前的消息已被用户删除。";
+    if (deletedPollsInfo.length > 0) {
+      forgetReason += ` 其中包括以下投票：${deletedPollsInfo.join("；")}。`;
+    }
+    forgetReason +=
+      " 你应该像它从未存在过一样继续对话，并相应地调整你的记忆和行为，不要再提及这条被删除的内容。";
+
+    const forgetInstruction = {
+      role: "system",
+      content: `[系统提示：${forgetReason}]`,
+      timestamp: Date.now(),
+      isHidden: true,
+    };
+    chat.history.push(forgetInstruction);
+
+    // 保存到数据库并刷新UI
+    await db.chats.put(chat);
+    renderChatInterface(state.activeChatId);
+    renderChatList(); // 刷新列表，因为最后一条消息可能变了
   }
 
   /**
@@ -43683,23 +43951,33 @@ ${chat.settings.aiPersona}
     const recallBtn = document.getElementById("recall-message-btn");
     if (recallBtn) {
       recallBtn.addEventListener("click", async (e) => {
-        console.log("删除按钮被点击了！", e);
+        console.log("撤回按钮被点击了！", e);
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
         try {
           await handleRecallClick();
         } catch (error) {
+          console.error("撤回消息时出错：", error);
+          await showCustomAlert("错误", "撤回消息时发生错误：" + error.message);
+        }
+      }, { capture: true });
+    }
+
+    const deleteBtn = document.getElementById("delete-message-btn");
+    if (deleteBtn) {
+      deleteBtn.addEventListener("click", async (e) => {
+        console.log("删除按钮被点击了！", e);
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        try {
+          await handleDeleteMessageClick();
+        } catch (error) {
           console.error("删除消息时出错：", error);
           await showCustomAlert("错误", "删除消息时发生错误：" + error.message);
         }
       }, { capture: true });
-      
-      // 也添加mousedown事件作为备用
-      recallBtn.addEventListener("mousedown", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-      });
     }
 
     document
@@ -44496,6 +44774,11 @@ ${chat.settings.aiPersona}
           openShareTargetPicker(); // 打开我们即将创建的目标选择器
         }
       });
+
+    // 长截图功能
+    document
+      .getElementById("selection-screenshot-btn")
+      .addEventListener("click", handleLongScreenshot);
 
     // 在 init() 的事件监听器区域添加
     document
