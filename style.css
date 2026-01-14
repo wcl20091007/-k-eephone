@@ -1498,6 +1498,15 @@ body {
   margin-left: 10px;
 }
 
+.audio-description {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 6px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+  word-break: break-word;
+}
+
 .message-bubble.is-character-audio {
   /* 复用语音消息的样式 */
 }

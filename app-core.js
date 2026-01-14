@@ -7851,18 +7851,17 @@ document.addEventListener("DOMContentLoaded", () => {
 			    `;
     } else if (msg.type === "character_audio") {
       bubble.classList.add("is-character-audio");
-      
-      // 存储音频URL
       bubble.dataset.audioUrl = msg.audioUrl;
-      bubble.dataset.audioDescription = msg.description || "";
+      bubble.dataset.audioId = msg.audioId || "";
+
+      // 尝试获取音频时长（如果无法获取则显示默认值）
+      const audioElement = document.createElement("audio");
+      audioElement.src = msg.audioUrl;
+      audioElement.preload = "metadata";
       
-      // 创建音频元素来获取时长
-      const audioForDuration = new Audio(msg.audioUrl);
       let durationFormatted = "0:00''";
-      
-      // 尝试获取音频时长
-      audioForDuration.addEventListener('loadedmetadata', () => {
-        const duration = Math.floor(audioForDuration.duration);
+      audioElement.addEventListener("loadedmetadata", () => {
+        const duration = Math.floor(audioElement.duration);
         const minutes = Math.floor(duration / 60);
         const seconds = duration % 60;
         durationFormatted = `${minutes}:${String(seconds).padStart(2, "0")}''`;
@@ -7871,17 +7870,20 @@ document.addEventListener("DOMContentLoaded", () => {
           durationEl.textContent = durationFormatted;
         }
       });
-      
+
       const waveformHTML =
         "<div></div><div></div><div></div><div></div><div></div>";
 
-      // 构建音频消息HTML（类似语音消息）
+      // 构建音频消息的 HTML（类似语音消息）
       contentHtml = `
-        <div class="character-audio-body">
-          <div class="voice-waveform">${waveformHTML}</div>
-          <span class="character-audio-duration">${durationFormatted}</span>
-        </div>
-      `;
+			        <div class="character-audio-body">
+			            <div class="voice-waveform">${waveformHTML}</div>
+			            <span class="character-audio-duration">${durationFormatted}</span>
+			        </div>
+			        <div class="audio-description" style="font-size: 11px; color: var(--text-secondary); margin-top: 6px; padding-top: 4px; border-top: 1px solid rgba(0,0,0,0.1);">
+			            💬 ${msg.audioDescription || "角色音频"}
+			        </div>
+			    `;
     } else if (msg.type === "transfer") {
       bubble.classList.add("is-transfer");
 
@@ -8952,6 +8954,19 @@ document.addEventListener("DOMContentLoaded", () => {
           state.activeChatId === chatId;
         let messageTimestamp = Date.now();
 
+        // 2.0 检查用户消息是否匹配音频（用于后续在合适位置发送）
+        let matchedAudio = null;
+        if (chat._lastUserMessage) {
+          matchedAudio = checkAndMatchCharacterAudio(chat._lastUserMessage, chat);
+        }
+        let audioAlreadySent = false;
+        
+        // 计算文本消息的数量（用于兜底逻辑）
+        const textMessages = messagesArray.filter(msg => !msg.type || msg.type === "text" || msg.type === "naiimag");
+        const textMessageCount = textMessages.length;
+        const middleIndex = Math.floor(textMessageCount / 2);
+        let currentTextIndex = 0;
+
         for (const msgData of messagesArray) {
           // 2.1 如果是 naiimag 类型，执行生图逻辑 (复用线上代码)
           if (msgData.type === "naiimag") {
@@ -9206,8 +9221,31 @@ document.addEventListener("DOMContentLoaded", () => {
           await incrementMessageCount(chatId);
           if (isViewingThisChat) {
             appendMessage(aiMessage, chat);
-            // 检查AI回复是否匹配音频说明词，如果匹配则创建音频消息
-            await checkAndCreateCharacterAudioMessage(msgData.content || "", chat, 'assistant');
+            
+            // 检查是否应该在当前位置发送音频
+            if (matchedAudio && !audioAlreadySent) {
+              const shouldSend = 
+                shouldTriggerAudioAtThisPosition(msgData.content || "") || // 包含触发关键词
+                currentTextIndex === middleIndex || // 中间位置
+                currentTextIndex === textMessageCount - 1; // 最后一个文本段
+              
+              if (shouldSend) {
+                const audioMessage = {
+                  role: "assistant",
+                  senderName: chat.name,
+                  timestamp: Date.now(),
+                  type: "character_audio",
+                  audioUrl: matchedAudio.url,
+                  audioDescription: matchedAudio.description,
+                  audioId: matchedAudio.id,
+                };
+                chat.history.push(audioMessage);
+                await db.chats.put(chat);
+                appendMessage(audioMessage, chat);
+                audioAlreadySent = true;
+              }
+            }
+            currentTextIndex++;
           }
         }
 
@@ -10586,6 +10624,24 @@ document.addEventListener("DOMContentLoaded", () => {
           elemeContext += "【注意：饿了么菜单加载失败。】";
         }
 
+        // 检查用户消息是否会匹配音频，如果会匹配则添加指令避免生成描述性语音消息
+        let audioMatchInstruction = "";
+        const lastUserMsg = chat.history
+          .filter((m) => m.role === "user" && !m.isHidden)
+          .slice(-1)[0];
+        if (lastUserMsg && lastUserMsg.content) {
+          const matchedAudio = checkAndMatchCharacterAudio(lastUserMsg.content, chat);
+          if (matchedAudio) {
+            audioMatchInstruction = `
+			### **【【【重要：音频消息规则】】】**
+			- 系统检测到用户的消息内容与你的音频库匹配，系统**已经自动为你发送了真实的音频文件**。
+			- **【绝对禁止】**：你**绝对不能**再生成描述性的语音消息（如使用 \`{"type": "voice_message", "content": "..."}\` 来描述唱歌过程）。
+			- **正确做法**：你只需要发送普通的文本消息来回应，例如表达你的感受、询问用户的反馈等，但**不要**用文字描述唱歌的过程或内容。
+			- 真实的音频已经通过系统自动发送，用户可以直接听到，你不需要再用文字描述。
+			`;
+          }
+        }
+
         systemPrompt = `### **【第一部分：角色核心设定】**
 
 			你现在将扮演一个名为“**${chat.name}**”的角色，与用户（你的聊天对象）进行一场自然的、生活化的在线聊天。
@@ -10600,6 +10656,7 @@ document.addEventListener("DOMContentLoaded", () => {
 			- **情侣头像**: ${coupleAvatarContext}
 			- **世界观/NPC**: ${npcContext}
 			${petContext}
+			${audioMatchInstruction}
 			**2. 你的当前状态:**
 			- **状态描述**: 【${chat.status.text}】
 			- **情侣空间**: ${chat.loversSpaceData ? "已开启" : "未开启"}
@@ -11453,6 +11510,23 @@ document.addEventListener("DOMContentLoaded", () => {
       let newMessagesToRender = [];
 
       let notificationShown = false;
+
+      // 检查用户消息是否匹配音频（用于后续在合适位置发送）
+      let matchedAudio = null;
+      if (chat._lastUserMessage) {
+        matchedAudio = checkAndMatchCharacterAudio(chat._lastUserMessage, chat);
+      }
+      let audioAlreadySent = false;
+      
+      // 计算文本消息的数量（用于兜底逻辑）
+      const textMessages = messagesArray.filter(msg => {
+        if (!msg || typeof msg !== "object") return false;
+        const msgType = msg.type || (msg.content ? "text" : null);
+        return msgType === "text" || !msgType;
+      });
+      const textMessageCount = textMessages.length;
+      const middleIndex = Math.floor(textMessageCount / 2);
+      let currentTextIndex = 0;
 
       for (const msgData of messagesArray) {
         if (!msgData || typeof msgData !== "object") {
@@ -14759,22 +14833,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // 将渲染逻辑移出循环
         if (aiMessage) {
-          // 在添加消息前，检查是否匹配音频（如果是语音消息类型）
-          let shouldSkipVoiceMessage = false;
-          if (aiMessage.type === "voice_message" && aiMessage.content) {
-            const matchedAudio = await checkAndCreateCharacterAudioMessage(aiMessage.content, chat, 'assistant');
-            if (matchedAudio) {
-              console.log("🎵 已匹配到真实音频，跳过保存AI生成的语音消息");
-              shouldSkipVoiceMessage = true;
-            }
-          }
-          
-          // 如果应该跳过语音消息，就不保存
-          if (shouldSkipVoiceMessage) {
-            // 不保存这条语音消息，因为已经有真实音频了
-            continue; // 跳过这条消息的处理
-          }
-          
           // 1. 将新消息存入历史记录
           chat.history.push(aiMessage);
 
@@ -14883,18 +14941,35 @@ document.addEventListener("DOMContentLoaded", () => {
 
           // 2. 只有在当前聊天界面时，才执行带动画的添加
           if (isViewingThisChat) {
-            // 在添加消息前，先检查是否匹配音频
-            let matchedAudio = null;
-            if (aiMessage.content && aiMessage.role === 'assistant') {
-              matchedAudio = await checkAndCreateCharacterAudioMessage(aiMessage.content, chat, 'assistant');
+            appendMessage(aiMessage, chat);
+            
+            // 检查是否应该在当前位置发送音频
+            if (matchedAudio && !audioAlreadySent && aiMessage.content) {
+              const shouldSend = 
+                shouldTriggerAudioAtThisPosition(aiMessage.content) || // 包含触发关键词
+                currentTextIndex === middleIndex || // 中间位置
+                currentTextIndex === textMessageCount - 1; // 最后一个文本段
+              
+              if (shouldSend) {
+                const audioMessage = {
+                  role: "assistant",
+                  senderName: chat.name,
+                  timestamp: Date.now(),
+                  type: "character_audio",
+                  audioUrl: matchedAudio.url,
+                  audioDescription: matchedAudio.description,
+                  audioId: matchedAudio.id,
+                };
+                chat.history.push(audioMessage);
+                await db.chats.put(chat);
+                appendMessage(audioMessage, chat);
+                audioAlreadySent = true;
+              }
             }
             
-            // 如果匹配到音频，且AI回复是语音消息类型，则跳过显示语音消息（避免重复）
-            if (matchedAudio && aiMessage.type === "voice_message") {
-              console.log("🎵 已匹配到真实音频，跳过显示AI生成的语音消息");
-              // 不显示这条语音消息，因为已经有真实音频了
-            } else {
-              appendMessage(aiMessage, chat);
+            // 如果是文本消息，增加索引
+            if (aiMessage.content && (!aiMessage.type || aiMessage.type === "text")) {
+              currentTextIndex++;
             }
 
             await new Promise((resolve) =>
@@ -30611,75 +30686,106 @@ ${chat.settings.aiPersona}
   }
 
   /**
-   * 检查消息内容是否匹配音频说明词，如果匹配则创建音频消息
+   * 检查文本是否包含音频触发关键词（如"听到了"、"准备好了"等）
+   * @param {string} text - 要检查的文本
+   * @returns {boolean} - 如果包含触发关键词则返回true
+   */
+  function shouldTriggerAudioAtThisPosition(text) {
+    if (!text || typeof text !== 'string') return false;
+    const lowerText = text.toLowerCase();
+    // 音频触发关键词列表（支持中英文）
+    const triggerKeywords = [
+      // 听到了相关
+      '听到了', '听到了吗', '听到了吗？', '听到了？', '你听到了', '你听到了吗', '你听到了吗？',
+      // 准备好了相关
+      '准备好了', '准备好了吗', '准备好了吗？', '已经准备好了', '已经准备好了吗',
+      // 听相关
+      '听', '听吧', '听一下', '听听', '听我', '听我唱', '听我唱', '听这首', '听这首歌',
+      // 唱相关
+      '唱', '唱了', '唱吧', '唱一下', '唱给你', '唱给你听', '唱完了', '唱好了',
+      // 给你相关
+      '给你', '给你听', '给你唱', '给你准备了', '给你唱了',
+      // 现在相关
+      '现在', '现在听', '现在唱', '现在可以', '现在可以听', '现在可以唱',
+      // 怎么样相关
+      '怎么样', '怎么样？', '如何', '如何？', '觉得怎么样', '觉得如何',
+      // 可以相关
+      '可以', '可以了', '可以听', '可以唱', '可以开始', '可以开始了',
+      // 其他触发词
+      '好了', '好了吗', '好了吗？', '完成', '完成了', '完成了吗',
+      '开始', '开始了', '开始吧', '开始听', '开始唱'
+    ];
+    return triggerKeywords.some(keyword => lowerText.includes(keyword));
+  }
+
+  /**
+   * 检查消息内容是否匹配音频说明词，返回匹配的音频对象
    * @param {string} messageContent - 消息内容
    * @param {object} chat - 聊天对象
-   * @param {string} role - 消息角色 ('user' 或 'assistant')
-   * @returns {object|null} - 匹配的音频对象，如果匹配则创建消息
+   * @returns {object|null} - 匹配的音频对象，如果没有匹配则返回null
    */
-  async function checkAndCreateCharacterAudioMessage(messageContent, chat, role) {
+  function checkAndMatchCharacterAudio(messageContent, chat) {
     if (!chat || !chat.settings || !chat.settings.characterAudios) return null;
-    if (role !== 'assistant') return null; // 只对AI回复触发
 
     const audios = chat.settings.characterAudios;
     const content = String(messageContent || "").toLowerCase();
 
-    // 提取关键词的增强函数
-    function extractKeywords(description) {
-      const keywords = new Set();
-      
-      // 1. 先按分隔符分割（逗号、分号、换行等）
-      const segments = description
-        .split(/[,，;；\n\r]+/)
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0);
-      
-      // 如果没有分隔符，整个说明词作为一个片段
-      if (segments.length === 0) {
-        segments.push(description.trim());
-      }
-      
-      segments.forEach((segment) => {
-        // 添加完整片段（转小写）
-        if (segment.length > 0) {
-          keywords.add(segment.toLowerCase());
-        }
-        
-        // 2. 提取英文单词（连续的字母，不区分大小写）
-        const englishWords = segment.match(/[a-zA-Z]+/g);
-        if (englishWords) {
-          englishWords.forEach((word) => {
-            const lowerWord = word.toLowerCase();
-            // 添加所有英文单词（长度>=2），重要单词如"Whiplash"会被提取
-            if (lowerWord.length >= 2) {
-              keywords.add(lowerWord);
-            }
-          });
-        }
-        
-        // 3. 提取中文词汇
-        const chineseText = segment.replace(/[a-zA-Z0-9\s]+/g, ''); // 移除英文和数字，保留中文
-        if (chineseText.length > 0) {
-          // 添加完整的中文短语
-          keywords.add(chineseText.toLowerCase());
-          // 提取2-3字的中文组合（如"翻唱"、"砂金"等）
-          for (let i = 0; i <= chineseText.length - 2; i++) {
-            for (let len = 2; len <= 3 && i + len <= chineseText.length; len++) {
-              const sub = chineseText.substring(i, i + len);
-              if (sub.length >= 2) {
-                keywords.add(sub.toLowerCase());
-              }
-            }
-          }
-        }
-      });
-      
-      return Array.from(keywords).filter(k => k.length >= 2); // 过滤掉太短的关键词
-    }
-
     // 检查是否有匹配的音频
     for (const audio of audios) {
       if (!audio.description) continue;
+
+      // 提取关键词的增强函数
+      function extractKeywords(description) {
+        const keywords = new Set();
+        
+        // 1. 先按分隔符分割（逗号、分号、换行等）
+        const segments = description
+          .split(/[,，;；\n\r]+/)
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0);
+        
+        // 如果没有分隔符，整个说明词作为一个片段
+        if (segments.length === 0) {
+          segments.push(description.trim());
+        }
+        
+        segments.forEach((segment) => {
+          // 添加完整片段（转小写）
+          if (segment.length > 0) {
+            keywords.add(segment.toLowerCase());
+          }
+          
+          // 2. 提取英文单词（连续的字母，不区分大小写）
+          const englishWords = segment.match(/[a-zA-Z]+/g);
+          if (englishWords) {
+            englishWords.forEach((word) => {
+              const lowerWord = word.toLowerCase();
+              // 添加所有英文单词（长度>=2），重要单词如"Whiplash"会被提取
+              if (lowerWord.length >= 2) {
+                keywords.add(lowerWord);
+              }
+            });
+          }
+          
+          // 3. 提取中文词汇
+          const chineseText = segment.replace(/[a-zA-Z0-9\s]+/g, ''); // 移除英文和数字，保留中文
+          if (chineseText.length > 0) {
+            // 添加完整的中文短语
+            keywords.add(chineseText.toLowerCase());
+            // 提取2-3字的中文组合（如"翻唱"、"砂金"等）
+            for (let i = 0; i <= chineseText.length - 2; i++) {
+              for (let len = 2; len <= 3 && i + len <= chineseText.length; len++) {
+                const sub = chineseText.substring(i, i + len);
+                if (sub.length >= 2) {
+                  keywords.add(sub.toLowerCase());
+                }
+              }
+            }
+          }
+        });
+        
+        return Array.from(keywords).filter(k => k.length >= 2); // 过滤掉太短的关键词
+      }
 
       const keywords = extractKeywords(audio.description);
       
@@ -30690,42 +30796,7 @@ ${chat.settings.aiPersona}
       });
 
       if (matched) {
-        console.log("🎵 匹配到音频:", audio.description, "关键词:", keywords);
-        
-        // 检查是否已经存在相同的音频消息（防止重复）
-        const recentAudioMessages = chat.history
-          .slice(-10) // 只检查最近10条消息
-          .filter(m => m.type === "character_audio" && m.audioUrl === audio.url);
-        
-        if (recentAudioMessages.length > 0) {
-          console.log("⚠️ 检测到重复音频，跳过创建");
-          return audio; // 返回匹配的音频对象，但不创建新消息
-        }
-        
-        // 创建音频消息（类似语音消息）
-        const audioMessage = {
-          role: "assistant",
-          senderName: chat.name,
-          timestamp: Date.now(),
-          type: "character_audio",
-          audioUrl: audio.url,
-          description: audio.description,
-          content: `[${audio.description}]`, // 显示说明词作为内容
-        };
-        
-        // 添加到聊天历史
-        chat.history.push(audioMessage);
-        await db.chats.put(chat);
-        
-        // 如果正在查看当前聊天，立即显示
-        const isViewingThisChat = 
-          document.getElementById("chat-interface-screen")?.classList.contains("active") &&
-          state.activeChatId === chat.id;
-        
-        if (isViewingThisChat) {
-          appendMessage(audioMessage, chat);
-        }
-        
+        console.log("🎵 匹配到音频:", audio.description, "关键词:", keywords, "消息内容:", content);
         return audio; // 返回匹配的音频对象
       }
     }
@@ -40503,6 +40574,10 @@ ${chat.settings.aiPersona}
         appendMessage(msg, chat);
         renderChatList();
         
+        // 检查用户消息是否匹配音频说明词（用户消息不发送音频，只在AI回复时发送）
+        // 但我们需要在AI回复时检查用户消息，所以将用户消息内容存储到临时变量
+        chat._lastUserMessage = content;
+        
         chatInput.value = "";
         chatInput.style.height = "40px"; // 重置为空状态的高度
         chatInput.focus();
@@ -41348,6 +41423,110 @@ ${chat.settings.aiPersona}
     document
       .getElementById("chat-messages")
       .addEventListener("click", async (e) => {
+        // 处理角色音频消息点击
+        const characterAudioBody = e.target.closest(".character-audio-body");
+        if (characterAudioBody) {
+          const bubble = characterAudioBody.closest(".message-bubble");
+          if (!bubble) return;
+          
+          const audioUrl = bubble.dataset.audioUrl;
+          if (!audioUrl) {
+            console.warn("角色音频URL为空");
+            return;
+          }
+          
+          // 检查是否正在播放
+          if (characterAudioBody.dataset.playing === "true") {
+            // 停止播放
+            if (bubble._audioElement) {
+              bubble._audioElement.pause();
+              bubble._audioElement.currentTime = 0;
+              // 如果是blob URL，释放资源
+              if (bubble._audioElement.src && bubble._audioElement.src.startsWith("blob:")) {
+                URL.revokeObjectURL(bubble._audioElement.src);
+              }
+              delete bubble._audioElement;
+            }
+            characterAudioBody.dataset.playing = "false";
+            characterAudioBody.classList.remove("playing");
+            return;
+          }
+          
+          // 开始播放 - 支持 data URL、blob URL 和普通 URL
+          let finalAudioUrl = audioUrl;
+          
+          // 如果是 data URL 或 blob URL，直接使用
+          // 如果是普通 URL，也直接使用
+          // Audio 元素可以处理所有这些类型
+          const audioElement = new Audio(finalAudioUrl);
+          bubble._audioElement = audioElement;
+          characterAudioBody.dataset.playing = "true";
+          characterAudioBody.classList.add("playing");
+          
+          // 设置音量
+          audioElement.volume = 1.0;
+          
+          audioElement.addEventListener("loadeddata", () => {
+            console.log("角色音频加载成功:", audioUrl.substring(0, 50) + "...");
+          });
+          
+          audioElement.addEventListener("ended", () => {
+            characterAudioBody.dataset.playing = "false";
+            characterAudioBody.classList.remove("playing");
+            // 如果是blob URL，释放资源
+            if (audioElement.src && audioElement.src.startsWith("blob:")) {
+              URL.revokeObjectURL(audioElement.src);
+            }
+            delete bubble._audioElement;
+          });
+          
+          audioElement.addEventListener("error", (err) => {
+            console.error("角色音频播放失败:", err, "URL:", audioUrl.substring(0, 100));
+            characterAudioBody.dataset.playing = "false";
+            characterAudioBody.classList.remove("playing");
+            // 如果是blob URL，释放资源
+            if (audioElement.src && audioElement.src.startsWith("blob:")) {
+              URL.revokeObjectURL(audioElement.src);
+            }
+            delete bubble._audioElement;
+            // 显示错误提示
+            const descriptionEl = bubble.querySelector(".audio-description");
+            if (descriptionEl) {
+              const originalText = descriptionEl.textContent;
+              descriptionEl.style.color = "#ff3b30";
+              descriptionEl.textContent = "❌ 播放失败，请检查音频链接";
+              setTimeout(() => {
+                descriptionEl.style.color = "";
+                descriptionEl.textContent = originalText;
+              }, 3000);
+            }
+          });
+          
+          audioElement.play().catch((err) => {
+            console.error("角色音频播放失败:", err, "URL:", audioUrl.substring(0, 100));
+            characterAudioBody.dataset.playing = "false";
+            characterAudioBody.classList.remove("playing");
+            // 如果是blob URL，释放资源
+            if (audioElement.src && audioElement.src.startsWith("blob:")) {
+              URL.revokeObjectURL(audioElement.src);
+            }
+            delete bubble._audioElement;
+            // 显示错误提示
+            const descriptionEl = bubble.querySelector(".audio-description");
+            if (descriptionEl) {
+              const originalText = descriptionEl.textContent;
+              descriptionEl.style.color = "#ff3b30";
+              descriptionEl.textContent = "❌ 播放失败，请检查音频链接";
+              setTimeout(() => {
+                descriptionEl.style.color = "";
+                descriptionEl.textContent = originalText;
+              }, 3000);
+            }
+          });
+          
+          return;
+        }
+        
         const voiceBody = e.target.closest(".voice-message-body");
         if (voiceBody) {
           const bubble = voiceBody.closest(".message-bubble");
@@ -41424,58 +41603,6 @@ ${chat.settings.aiPersona}
           }
 
           return; // 处理完语音后退出
-        }
-
-        // 处理角色音频消息点击
-        const characterAudioBody = e.target.closest(".character-audio-body");
-        if (characterAudioBody) {
-          const bubble = characterAudioBody.closest(".message-bubble");
-          if (!bubble) return;
-          
-          const audioUrl = bubble.dataset.audioUrl;
-          if (!audioUrl) return;
-          
-          // 检查是否正在播放
-          if (bubble.dataset.isPlaying === "true") {
-            // 停止播放
-            if (bubble.dataset.audioElement) {
-              const audioEl = document.getElementById(bubble.dataset.audioElement);
-              if (audioEl) {
-                audioEl.pause();
-                audioEl.currentTime = 0;
-                audioEl.remove();
-              }
-            }
-            bubble.dataset.isPlaying = "false";
-            characterAudioBody.classList.remove("playing");
-            return;
-          }
-          
-          // 开始播放
-          const audioId = "character-audio-" + Date.now();
-          const audioElement = document.createElement("audio");
-          audioElement.id = audioId;
-          audioElement.src = audioUrl;
-          audioElement.style.display = "none";
-          document.body.appendChild(audioElement);
-          
-          bubble.dataset.audioElement = audioId;
-          bubble.dataset.isPlaying = "true";
-          characterAudioBody.classList.add("playing");
-          
-          audioElement.play().catch((err) => {
-            console.warn("音频播放失败:", err);
-            bubble.dataset.isPlaying = "false";
-            characterAudioBody.classList.remove("playing");
-          });
-          
-          audioElement.addEventListener("ended", () => {
-            bubble.dataset.isPlaying = "false";
-            characterAudioBody.classList.remove("playing");
-            audioElement.remove();
-          });
-          
-          return;
         }
 
         // --- 你原来的其他点击事件逻辑 ---
