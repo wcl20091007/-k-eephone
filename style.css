@@ -13194,6 +13194,7 @@ body {
   padding: 15px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   text-align: center;
+  margin-top: 30px; /* 与上面的月历保持间距 */
 }
 
 .ls-mood-jar-wrapper h3 {
@@ -13201,26 +13202,171 @@ body {
   font-size: 16px;
 }
 
-/* ▼▼▼ 用这块【修复后】的代码替换旧的 .ls-mood-jar 样式 ▼▼▼ */
-.ls-mood-jar {
-  width: 100%;
-  max-width: 100%; /* ★ 核心修改1: 使用max-width防止溢出 */
-  box-sizing: border-box; /* ★ 核心修改2: 确保padding不会导致宽度计算错误 */
-  min-height: 80px;
-  background-color: #f0f2f5;
-  border-radius: 8px;
-  padding: 10px;
+/* 玻璃罐子容器 */
+.ls-mood-jar-container {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-content: flex-start;
   justify-content: center;
-  overflow: auto; /* ★ 核心修改3 (保险): 如果内容实在太多，就用滚动条兜底 */
+  align-items: center;
+  padding: 20px;
+  position: relative;
 }
-/* ▲▲▲ 替换结束 ▲▲▲ */
 
-.ls-mood-jar .mood-emoji-item {
+/* 玻璃罐子主体 - 参考图二：方形圆角，浅蓝色玻璃 */
+.ls-mood-jar-glass {
+  position: relative;
+  width: 200px;
+  height: 240px;
+  background: linear-gradient(135deg, 
+    rgba(180, 220, 245, 0.85) 0%, 
+    rgba(200, 230, 250, 0.8) 50%,
+    rgba(160, 210, 240, 0.9) 100%);
+  border-radius: 20px;
+  border: 3px solid rgba(255, 255, 255, 0.7);
+  box-shadow: 
+    inset -2px -2px 8px rgba(0, 0, 0, 0.1),
+    inset 2px 2px 8px rgba(255, 255, 255, 0.6),
+    0 4px 12px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+}
+
+/* 玻璃高光效果 - 左上角和顶部边缘 */
+.ls-mood-jar-glass::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 40%;
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.5) 0%, 
+    rgba(255, 255, 255, 0.3) 30%,
+    rgba(255, 255, 255, 0) 70%);
+  border-radius: 20px 20px 0 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* 底部边缘加深效果 */
+.ls-mood-jar-glass::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 15px;
+  background: linear-gradient(to top, 
+    rgba(140, 190, 220, 0.6) 0%, 
+    rgba(160, 210, 240, 0.3) 100%);
+  border-radius: 0 0 20px 20px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* 罐子盖子 - 凸起效果，浅橙色木质 */
+.ls-mood-jar-lid {
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 190px;
+  height: 24px;
+  background: linear-gradient(135deg, 
+    #E6A05A 0%, 
+    #E8A862 30%,
+    #D49550 70%,
+    #C88A45 100%);
+  border-radius: 50px 50px 20px 20px;
+  box-shadow: 
+    0 4px 10px rgba(0, 0, 0, 0.25),
+    inset 0 2px 4px rgba(255, 255, 255, 0.4),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.2),
+    0 2px 0 rgba(255, 255, 255, 0.2);
+  z-index: 10;
+  border: 2px solid rgba(200, 140, 80, 0.5);
+  border-bottom: 1px solid rgba(180, 120, 70, 0.6);
+}
+
+/* 盖子顶部高光 */
+.ls-mood-jar-lid::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 60%;
+  height: 8px;
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.4) 0%, 
+    rgba(255, 255, 255, 0.1) 50%,
+    rgba(255, 255, 255, 0) 100%);
+  border-radius: 50px;
+  pointer-events: none;
+}
+
+/* 盖子中心装饰 */
+.ls-mood-jar-lid::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 55px;
+  height: 8px;
+  background: rgba(180, 100, 50, 0.35);
+  border-radius: 4px;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* 罐子内容区域 */
+.ls-mood-jar-content {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  padding: 20px 12px 12px 12px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.ls-mood-jar-empty {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--text-secondary);
+  font-size: 13px;
+  margin: 0;
+}
+
+/* emoji项目样式 */
+.ls-mood-jar-content .mood-emoji-item {
+  position: absolute;
   font-size: 22px;
+  display: inline-block;
+  user-select: none;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+  z-index: 1;
+}
+
+
+/* emoji浮动动画 */
+@keyframes emojiFloat {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+  }
+  25% {
+    transform: translate(var(--random-offset, 1px), -2px) scale(1.05);
+  }
+  50% {
+    transform: translate(calc(var(--random-offset, 1px) * -1), 0) scale(1);
+  }
+  75% {
+    transform: translate(var(--random-offset, 1px), 2px) scale(0.98);
+  }
+}
+
+.ls-mood-jar-content .mood-emoji-item {
+  will-change: transform;
 }
 
 /* 日记编辑弹窗 */

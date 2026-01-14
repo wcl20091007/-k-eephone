@@ -1677,17 +1677,158 @@ function renderMoodJar(year, month, diaryData) {
   let jarHtml = `
         <div class="ls-mood-jar-wrapper">
             <h3>本月心情罐子</h3>
-            <div class="ls-mood-jar">
+            <div class="ls-mood-jar-container">
+                <div class="ls-mood-jar-glass">
+                    <div class="ls-mood-jar-lid"></div>
+                    <div class="ls-mood-jar-content" id="ls-mood-jar-content-${year}-${month}">
     `;
 
   if (allEmojis.length > 0) {
-    jarHtml += allEmojis.map(emoji => `<span class="mood-emoji-item">${emoji}</span>`).join('');
+    // 为每个emoji创建带唯一ID的元素
+    jarHtml += allEmojis.map((emoji, index) => 
+      `<span class="mood-emoji-item" data-emoji-index="${index}">${emoji}</span>`
+    ).join('');
   } else {
-    jarHtml += '<p style="color: var(--text-secondary); font-size: 13px;">这个月还没有记录心情哦</p>';
+    jarHtml += '<p class="ls-mood-jar-empty">这个月还没有记录心情哦</p>';
   }
 
-  jarHtml += '</div></div>';
+  jarHtml += `
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+  
+  // 在下一帧执行布局算法
+  setTimeout(() => {
+    layoutEmojisInJar(`ls-mood-jar-content-${year}-${month}`, allEmojis.length);
+  }, 50);
+  
   return jarHtml;
+}
+
+/**
+ * 在罐子中布局emoji，实现推挤但不重叠的效果
+ * @param {string} containerId - 容器ID
+ * @param {number} emojiCount - emoji数量
+ */
+function layoutEmojisInJar(containerId, emojiCount) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  
+  const emojiItems = container.querySelectorAll('.mood-emoji-item');
+  if (emojiItems.length === 0) return;
+  
+  const containerRect = container.getBoundingClientRect();
+  const containerWidth = containerRect.width;
+  const containerHeight = containerRect.height;
+  
+  // emoji的尺寸
+  const emojiSize = 28;
+  const radius = emojiSize / 2;
+  const minDistance = emojiSize * 0.85; // 最小距离，确保不重叠但紧密推挤
+  
+  // 使用改进的圆形打包算法
+  const positions = [];
+  
+  emojiItems.forEach((item, index) => {
+    let x, y;
+    
+      if (index === 0) {
+        // 第一个emoji放在底部中心
+        x = containerWidth / 2;
+        y = containerHeight - radius - 12;
+    } else {
+      // 找到最佳位置：尝试在已有emoji周围放置
+      let bestPosition = null;
+      let bestScore = Infinity;
+      
+      // 尝试多个候选位置
+      for (let attempt = 0; attempt < 50; attempt++) {
+        // 随机选择一个已有的emoji作为参考点
+        const refIndex = Math.floor(Math.random() * positions.length);
+        const refPos = positions[refIndex];
+        
+        // 在参考点周围生成候选位置
+        const angle = (Math.PI * 2 * attempt) / 50; // 均匀分布角度
+        const distance = minDistance + (Math.random() * 5); // 稍微随机化距离
+        let candidateX = refPos.x + Math.cos(angle) * distance;
+        let candidateY = refPos.y + Math.sin(angle) * distance;
+        
+        // 确保在容器内（方形圆角罐子）
+        candidateX = Math.max(radius + 8, Math.min(containerWidth - radius - 8, candidateX));
+        candidateY = Math.max(radius + 8, Math.min(containerHeight - radius - 8, candidateY));
+        
+        // 检查是否与已有位置重叠
+        let overlaps = false;
+        let minDistToOthers = Infinity;
+        
+        for (const pos of positions) {
+          const dx = candidateX - pos.x;
+          const dy = candidateY - pos.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          
+          if (distance < minDistance) {
+            overlaps = true;
+            break;
+          }
+          
+          minDistToOthers = Math.min(minDistToOthers, distance);
+        }
+        
+        if (!overlaps) {
+          // 计算分数：优先选择靠近底部且距离其他emoji适中的位置
+          const distanceFromBottom = containerHeight - candidateY;
+          const distanceFromCenter = Math.abs(candidateX - containerWidth / 2);
+          const score = distanceFromBottom * 0.3 + distanceFromCenter * 0.2 - minDistToOthers * 0.5;
+          
+          if (score < bestScore) {
+            bestScore = score;
+            bestPosition = { x: candidateX, y: candidateY };
+          }
+        }
+      }
+      
+      // 如果找到了合适位置，使用它；否则使用网格布局作为后备
+      if (bestPosition) {
+        x = bestPosition.x;
+        y = bestPosition.y;
+      } else {
+        // 后备：使用简单的网格布局
+        const cols = Math.floor(containerWidth / emojiSize);
+        const col = index % cols;
+        const row = Math.floor(index / cols);
+        x = col * emojiSize + radius + 10;
+        y = containerHeight - (row + 1) * emojiSize - radius - 15;
+      }
+    }
+    
+    positions.push({ x, y });
+    
+    // 设置位置，添加掉落动画
+    item.style.position = 'absolute';
+    item.style.left = `${x - radius}px`;
+    item.style.top = `${y - radius}px`;
+    item.style.opacity = '0';
+    item.style.transform = 'translateY(-30px) scale(0.3) rotate(-10deg)';
+    item.style.transition = `all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) ${index * 0.08}s`;
+    
+    // 触发动画
+    setTimeout(() => {
+      item.style.opacity = '1';
+      item.style.transform = 'translateY(0) scale(1) rotate(0deg)';
+    }, 50);
+  });
+  
+  // 添加轻微的随机摆动效果
+  setTimeout(() => {
+    emojiItems.forEach((item, index) => {
+      const delay = index * 0.1;
+      const randomOffset = (Math.random() - 0.5) * 2;
+      item.style.animation = `emojiFloat 3s ease-in-out ${delay}s infinite`;
+      item.style.setProperty('--random-offset', `${randomOffset}px`);
+    });
+  }, 1000);
 }
 
 /**
