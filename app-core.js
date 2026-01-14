@@ -8103,13 +8103,21 @@ document.addEventListener("DOMContentLoaded", () => {
       bubble.classList.add("is-ls-diary-notification"); // 应用透明气泡样式
       const cardData = msg.content;
 
+      // 根据备注类型显示不同的标题
+      let cardTitle = "一封来自心情日记的提醒";
+      if (cardData.annotationType === "user_on_char") {
+        cardTitle = "一封来自日记备注的提醒";
+      } else if (cardData.annotationType === "char_on_user") {
+        cardTitle = "一封来自日记备注的提醒";
+      }
+
       contentHtml = `
 			        <div class="ls-diary-notification-card" onclick="openLoversSpaceFromCard('${
           chat.id
         }', 'ls-diary-view')">
 			            <div class="ls-diary-card-header">
 			                <span>${cardData.userEmoji || "💌"}</span>
-			                <span>一封来自心情日记的提醒</span>
+			                <span>${cardTitle}</span>
 			            </div>
 			            <div class="ls-diary-card-body">
 			                <p>${cardData.text}</p>
@@ -9223,11 +9231,17 @@ document.addEventListener("DOMContentLoaded", () => {
             appendMessage(aiMessage, chat);
             
             // 检查是否应该在当前位置发送音频
+            // 只有当用户明确请求音频时才发送
             if (matchedAudio && !audioAlreadySent) {
-              const shouldSend = 
+              // 检查用户是否明确请求了音频
+              const userRequestedAudio = chat._lastUserMessage && 
+                userExplicitlyRequestedAudio(chat._lastUserMessage.content || chat._lastUserMessage);
+              
+              const shouldSend = userRequestedAudio && (
                 shouldTriggerAudioAtThisPosition(msgData.content || "") || // 包含触发关键词
                 currentTextIndex === middleIndex || // 中间位置
-                currentTextIndex === textMessageCount - 1; // 最后一个文本段
+                currentTextIndex === textMessageCount - 1 // 最后一个文本段
+              );
               
               if (shouldSend) {
                 const audioMessage = {
@@ -10919,6 +10933,7 @@ document.addEventListener("DOMContentLoaded", () => {
 			-   **分享书籍**: \`{"type": "ls_share", "shareType": "book", "title": "书名", "summary": "在这里写下这本书的简介...", "thoughts": "在这里写下你分享这本书的感想..."}\`
 			-   **分享游戏**:\`{"type": "ls_share", "shareType": "game", "title": "游戏名", "summary": "游戏简介...", "thoughts": "在这里写下你分享这款游戏的感想/感谢..."}\`
 			-   **写日记**: \`{"type": "ls_diary_entry", "emoji": "emoji表情", "diary": "今天发生了什么..."}\`
+			-   **添加日记备注**: \`{"type": "ls_diary_annotation", "annotation": "你的备注内容...", "dateStr": "YYYY-MM-DD"}\` (可选dateStr，不提供则使用今天日期)
 			### **【第六部分：当前上下文信息】**
 
 			- **对话者(用户)角色设定**:
@@ -12891,6 +12906,41 @@ document.addEventListener("DOMContentLoaded", () => {
                 diary;
 
               console.log(`AI 在情侣空间记录了日记: ${emoji} ${diary}`);
+            }
+            continue; // 这只是一个后台操作，不需要在聊天界面生成消息，所以用 continue 跳过
+          }
+
+          case "ls_diary_annotation": {
+            const { annotation, dateStr } = msgData;
+            if (annotation) {
+              const targetDate = dateStr || new Date().toISOString().split("T")[0]; // 如果没有指定日期，使用今天
+
+              // 确保数据结构存在
+              if (!chat.loversSpaceData.emotionDiaries) {
+                chat.loversSpaceData.emotionDiaries = {};
+              }
+              if (!chat.loversSpaceData.emotionDiaries[targetDate]) {
+                chat.loversSpaceData.emotionDiaries[targetDate] = {};
+              }
+
+              // 保存AI对用户日记的备注
+              chat.loversSpaceData.emotionDiaries[targetDate].charAnnotationOnUser = annotation;
+
+              // 发送通知消息
+              const notificationMessage = {
+                role: 'assistant',
+                type: 'ls_diary_notification',
+                content: {
+                  userEmoji: '💬',
+                  text: `我为你的日记添加了备注：${annotation.substring(0, 30)}${annotation.length > 30 ? '...' : ''}`,
+                  dateStr: targetDate,
+                  annotationType: 'char_on_user'
+                },
+                timestamp: Date.now(),
+              };
+              chat.history.push(notificationMessage);
+
+              console.log(`AI 在情侣空间添加了备注: ${annotation}`);
             }
             continue; // 这只是一个后台操作，不需要在聊天界面生成消息，所以用 continue 跳过
           }
@@ -14944,11 +14994,17 @@ document.addEventListener("DOMContentLoaded", () => {
             appendMessage(aiMessage, chat);
             
             // 检查是否应该在当前位置发送音频
+            // 只有当用户明确请求音频时才发送
             if (matchedAudio && !audioAlreadySent && aiMessage.content) {
-              const shouldSend = 
+              // 检查用户是否明确请求了音频
+              const userRequestedAudio = chat._lastUserMessage && 
+                userExplicitlyRequestedAudio(chat._lastUserMessage.content || chat._lastUserMessage);
+              
+              const shouldSend = userRequestedAudio && (
                 shouldTriggerAudioAtThisPosition(aiMessage.content) || // 包含触发关键词
                 currentTextIndex === middleIndex || // 中间位置
-                currentTextIndex === textMessageCount - 1; // 最后一个文本段
+                currentTextIndex === textMessageCount - 1 // 最后一个文本段
+              );
               
               if (shouldSend) {
                 const audioMessage = {
@@ -30690,6 +30746,36 @@ ${chat.settings.aiPersona}
    * @param {string} text - 要检查的文本
    * @returns {boolean} - 如果包含触发关键词则返回true
    */
+  /**
+   * 检查用户消息是否明确请求了音频
+   * @param {string} userMessage - 用户消息内容
+   * @returns {boolean} - 如果用户明确请求音频则返回true
+   */
+  function userExplicitlyRequestedAudio(userMessage) {
+    if (!userMessage || typeof userMessage !== 'string') return false;
+    const lowerText = userMessage.toLowerCase();
+    // 用户明确请求音频的关键词列表
+    const requestKeywords = [
+      // 想听相关
+      '想听', '想听你', '想听你唱', '想听一下', '想听听',
+      // 我要听相关
+      '我要听', '我想听', '我要听你', '我想听你', '我要听你唱', '我想听你唱',
+      // 听你相关
+      '听你', '听你唱', '听你唱歌', '听你一下',
+      // 唱给我相关
+      '唱给我', '唱给我听', '给我唱', '给我唱一下',
+      // 播放相关
+      '播放', '播放一下', '放一下', '放给我',
+      // 来一首相关
+      '来一首', '来一首歌', '来唱一首', '来唱一下',
+      // 可以唱相关
+      '可以唱', '可以唱吗', '能唱', '能唱吗', '能唱一下吗',
+      // 其他明确请求
+      '唱吧', '唱一下', '听吧', '听一下'
+    ];
+    return requestKeywords.some(keyword => lowerText.includes(keyword));
+  }
+
   function shouldTriggerAudioAtThisPosition(text) {
     if (!text || typeof text !== 'string') return false;
     const lowerText = text.toLowerCase();

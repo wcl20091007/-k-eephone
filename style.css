@@ -13259,6 +13259,111 @@ body {
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+/* 日记备注样式 */
+.ls-diary-annotation-block {
+  background-color: #f0f8ff;
+  border-radius: 8px;
+  padding: 12px;
+  margin-top: 10px;
+  border-left: 3px solid #87ceeb;
+}
+.ls-diary-annotation-block .annotation-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.ls-diary-annotation-block .annotation-author {
+  font-weight: 600;
+  font-size: 14px;
+  color: #4682b4;
+}
+.ls-diary-annotation-block .annotation-content {
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #333;
+  font-size: 14px;
+}
+
+/* 备注输入框样式 */
+.ls-diary-annotation-input-block {
+  margin-top: 10px;
+  padding: 12px;
+  background-color: #fff9e6;
+  border-radius: 8px;
+  border: 1px dashed #ffd700;
+}
+.ls-diary-annotation-input-block .annotation-input {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 60px;
+  box-sizing: border-box;
+}
+.ls-diary-annotation-input-block .annotation-input:focus {
+  outline: none;
+  border-color: var(--accent-color);
+}
+
+/* 备注按钮样式 */
+.ls-diary-annotation-button-block {
+  margin-top: 10px;
+}
+
+/* 添加日记按钮样式 */
+.ls-diary-add-block {
+  background-color: #f9f9f9;
+  border-radius: 8px;
+  padding: 20px;
+  border: 2px dashed #ddd;
+  margin-bottom: 20px;
+}
+.ls-diary-add-block button {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+}
+.ls-diary-add-block button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+.ls-diary-add-block button:active {
+  transform: translateY(0);
+}
+
+/* 添加备注按钮样式 */
+#ls-add-annotation-char-btn {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 6px rgba(245, 87, 108, 0.3);
+}
+#ls-add-annotation-char-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(245, 87, 108, 0.4);
+}
+#ls-add-annotation-char-btn:active {
+  transform: translateY(0);
+}
 /* ▲▲▲ 新增CSS结束 ▲▲▲ */
 /* ▼▼▼ 把这一整块全新的CSS，粘贴到 <style> 标签的最末尾 ▼▼▼ */
 
