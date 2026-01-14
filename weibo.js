@@ -20,6 +20,72 @@ let currentViewingDmsFor = null; // Used to track which character's DMs are bein
 // ===================================================================
 
 /**
+ * 【分组隔离】判断两个角色是否在同一分组
+ * @param {string} charId1 - 第一个角色的ID（'user' 或角色ID）
+ * @param {string} charId2 - 第二个角色的ID（'user' 或角色ID）
+ * @returns {boolean} - 是否在同一分组
+ */
+function isInSameGroup(charId1, charId2) {
+  // 用户（'user'）没有分组限制，可以看到所有内容
+  if (charId1 === 'user' || charId2 === 'user') {
+    return true;
+  }
+  
+  // 获取两个角色的聊天对象
+  const chat1 = state.chats[charId1];
+  const chat2 = state.chats[charId2];
+  
+  // 如果任一角色不存在，返回 false
+  if (!chat1 || !chat2) {
+    return false;
+  }
+  
+  // 获取两个角色的 groupId（如果不存在则为 undefined）
+  const groupId1 = chat1.groupId;
+  const groupId2 = chat2.groupId;
+  
+  // 如果两个角色都没有分组（groupId 为 undefined 或 null），则视为同一分组（默认可见）
+  if (!groupId1 && !groupId2) {
+    return true;
+  }
+  
+  // 如果只有一个有分组，另一个没有，则不在同一分组
+  if (!groupId1 || !groupId2) {
+    return false;
+  }
+  
+  // 两个角色都有分组，比较是否相同
+  return groupId1 === groupId2;
+}
+
+/**
+ * 【分组隔离】根据角色昵称查找角色ID并判断是否在同一分组
+ * @param {string} viewerCharId - 查看者的角色ID（'user' 或角色ID）
+ * @param {string} authorNickname - 作者昵称
+ * @returns {boolean} - 是否在同一分组
+ */
+function canSeeByNickname(viewerCharId, authorNickname) {
+  // 用户可以看到所有内容
+  if (viewerCharId === 'user') {
+    return true;
+  }
+  
+  // 查找昵称对应的角色
+  const authorChat = Object.values(state.chats).find(
+    chat => !chat.isGroup && 
+    (chat.settings.weiboNickname === authorNickname || chat.name === authorNickname)
+  );
+  
+  // 如果找不到对应角色，返回 false
+  if (!authorChat) {
+    return false;
+  }
+  
+  // 判断是否在同一分组
+  return isInSameGroup(viewerCharId, authorChat.id);
+}
+
+/**
  * 【微博】总入口：根据当前激活的视图，渲染对应的微博Feed
  */
 async function renderWeiboFeeds(viewId) {
@@ -69,7 +135,10 @@ async function renderFollowingWeiboFeed() {
     return;
   }
   posts.forEach(post => {
-    feedEl.appendChild(createWeiboPostElement(post));
+    const postElement = createWeiboPostElement(post, 'user');
+    if (postElement) {
+      feedEl.appendChild(postElement);
+    }
   });
 }
 /**
@@ -83,9 +152,23 @@ async function saveQzoneSettings() {
   }
 }
 
-function createWeiboPostElement(post) {
+/**
+ * 【微博】创建微博帖子元素（支持分组隔离）
+ * @param {Object} post - 微博帖子对象
+ * @param {string} viewerCharId - 查看者的角色ID（'user' 或角色ID），默认为 'user'
+ */
+function createWeiboPostElement(post, viewerCharId = 'user') {
   const postEl = document.createElement('div');
   postEl.className = 'weibo-post-item';
+
+  // 【分组隔离】检查查看者是否可以看到这个帖子
+  // 如果帖子的作者是角色，需要检查是否在同一分组
+  if (post.authorId !== 'user' && viewerCharId !== 'user') {
+    if (!isInSameGroup(viewerCharId, post.authorId)) {
+      // 不在同一分组，不显示这个帖子（但这里不应该到达，因为应该在调用前过滤）
+      return null;
+    }
+  }
 
   let contentHtml = '';
   if (post.content) {
@@ -105,7 +188,16 @@ function createWeiboPostElement(post) {
   let commentsHtml = '';
   if (post.comments && Array.isArray(post.comments) && post.comments.length > 0) {
     commentsHtml += '<div class="weibo-comments-container">';
-    post.comments.forEach(comment => {
+    // 【分组隔离】过滤评论：只显示与查看者同分组的评论
+    const visibleComments = post.comments.filter(comment => {
+      if (typeof comment !== 'object' || comment === null) return false;
+      // 用户可以看到所有评论
+      if (viewerCharId === 'user') return true;
+      // 检查评论者是否与查看者在同一分组
+      return canSeeByNickname(viewerCharId, comment.authorNickname);
+    });
+    
+    visibleComments.forEach(comment => {
       if (typeof comment !== 'object' || comment === null) return;
       let replyHtml = '';
 
@@ -1559,6 +1651,9 @@ async function generateWeiboComments(postId) {
 - **图片内容**: 这是一张文字图，上面的内容是：“${post.hiddenContent}”`;
   }
 
+  // 【分组隔离】获取帖子作者的分组ID（如果存在）
+  const authorGroupId = post.authorId === 'user' ? null : (state.chats[post.authorId]?.groupId || null);
+  
   const commenterPersonas = new Map();
   commenterPersonas.set(authorName, `[职业: ${authorProfession}] [人设: ${truncatedPersona}]`);
 
@@ -1566,14 +1661,45 @@ async function generateWeiboComments(postId) {
     post.comments.forEach(comment => {
       const commenterName = comment.authorNickname;
       if (!commenterPersonas.has(commenterName)) {
-        const commenterChat = Object.values(state.chats).find(c => c.name === commenterName);
+        const commenterChat = Object.values(state.chats).find(
+          c => !c.isGroup && (c.settings.weiboNickname === commenterName || c.name === commenterName)
+        );
         if (commenterChat && !commenterChat.isGroup) {
-          const profession = commenterChat.settings.weiboProfession || '未设定';
-          const persona = (commenterChat.settings.aiPersona || '无').substring(0, 200);
-          commenterPersonas.set(commenterName, `[职业: ${profession}] [人设: ${persona}]`);
+          // 【分组隔离】只添加与帖子作者同分组的评论者
+          const commenterGroupId = commenterChat.groupId || null;
+          // 如果帖子作者没有分组，或者评论者与作者在同一分组，则添加
+          if (!authorGroupId || commenterGroupId === authorGroupId) {
+            const profession = commenterChat.settings.weiboProfession || '未设定';
+            const persona = (commenterChat.settings.aiPersona || '无').substring(0, 200);
+            commenterPersonas.set(commenterName, `[职业: ${profession}] [人设: ${persona}]`);
+          }
         }
       }
     });
+  }
+  
+  // 【分组隔离】获取所有与帖子作者同分组的角色，用于生成评论
+  const availableCommenters = Object.values(state.chats)
+    .filter(chat => {
+      if (chat.isGroup) return false;
+      if (post.authorId === 'user') return true; // 用户帖子，所有角色都可以评论
+      const chatGroupId = chat.groupId || null;
+      return !authorGroupId || chatGroupId === authorGroupId;
+    })
+    .map(chat => ({
+      name: chat.settings.weiboNickname || chat.name,
+      profession: chat.settings.weiboProfession || '未设定',
+      persona: (chat.settings.aiPersona || '无').substring(0, 200)
+    }));
+  
+  // 将可用评论者添加到上下文中
+  let availableCommentersContext = '';
+  if (availableCommenters.length > 0) {
+    availableCommentersContext = '\n# 可参与评论的角色（与作者在同一分组）\n';
+    availableCommenters.forEach(char => {
+      availableCommentersContext += `- **${char.name}**: [职业: ${char.profession}] [人设: ${char.persona}]\n`;
+    });
+    availableCommentersContext += '\n**重要提示**: 生成的评论者昵称必须来自上述列表中的角色，确保评论者与帖子作者在同一分组。\n';
   }
 
   let commenterContext = '';
@@ -1596,6 +1722,8 @@ ${imageContext}
 ${existingComments || '(暂无评论)'}
 
 ${commenterContext}
+
+${availableCommentersContext}
 
 # 【【【评论生成核心规则】】】
 1.  **【【【回复禁令】】】**: 绝对禁止回复昵称为“**${userNickname}**”的任何评论。这是最高优先级的规则，因为用户会自己回复。你可以回复其他任何人的评论。
@@ -1744,8 +1872,9 @@ async function renderWeiboCharProfile(charId) {
 }
 
 /**
- * 【全新】渲染指定角色的微博Feed
- * @param {string} charId - 角色的ID
+ * 【全新】渲染指定角色的微博Feed（支持分组隔离）
+ * @param {string} charId - 被查看角色的ID
+ * 注意：这是从用户视角查看某个角色的主页，用户可以看到该角色的所有帖子
  */
 async function renderCharSpecificFeed(charId) {
   const feedEl = document.getElementById('char-weibo-feed-list');
@@ -1759,8 +1888,11 @@ async function renderCharSpecificFeed(charId) {
   }
 
   posts.forEach(post => {
-    // 复用我们强大的微博帖子创建函数
-    feedEl.appendChild(createWeiboPostElement(post));
+    // 从用户视角查看，传递 'user' 作为 viewerCharId（用户可以看到所有帖子和评论）
+    const postElement = createWeiboPostElement(post, 'user');
+    if (postElement) {
+      feedEl.appendChild(postElement);
+    }
   });
 }
 
