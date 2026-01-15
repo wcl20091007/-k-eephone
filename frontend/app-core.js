@@ -6051,6 +6051,210 @@ ${msg.content}
     }
   }
 
+  // 同步后台活动配置到后端
+  async function syncBackgroundActivityToBackend(enabled = true) {
+    try {
+      const workerApiUrl = state.apiConfig.workerApiUrl || DEFAULT_WORKER_API_URL;
+      const userId = state.apiConfig.scheduledUserId || getDeviceCode();
+
+      if (!workerApiUrl || !userId) {
+        console.warn('无法同步后台活动配置：缺少 Worker API URL 或 User ID');
+        return;
+      }
+
+      // 获取所有非群聊的角色
+      const characters = Object.values(state.chats).filter(chat => !chat.isGroup);
+      
+      // 构建角色信息
+      const characterInfos = characters.map(chat => ({
+        chatId: chat.id,
+        chatName: chat.name,
+        persona: chat.settings?.aiPersona || '',
+        relationshipStatus: chat.relationship?.status || '',
+        lastActivityTimestamp: chat.settings?.backgroundActivity?.lastActivityTimestamp || 0,
+      }));
+
+      // 同步角色信息
+      const syncCharsResponse = await fetch(`${workerApiUrl}/api/background-activity/characters`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId,
+          characters: characterInfos,
+        }),
+      });
+
+      if (!syncCharsResponse.ok) {
+        console.error('同步角色信息失败');
+        return;
+      }
+
+      // 同步后台活动配置
+      const syncConfigResponse = await fetch(`${workerApiUrl}/api/background-activity/config`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId,
+          enabled: enabled && state.globalSettings.enableBackgroundActivity,
+          intervalSeconds: state.globalSettings.backgroundActivityInterval || 60,
+          activityConfig: state.globalSettings.backgroundActivityConfig || {},
+          apiConfig: {
+            proxyUrl: state.apiConfig.proxyUrl || '',
+            apiKey: state.apiConfig.apiKey || '',
+            model: state.apiConfig.model || '',
+            temperature: state.apiConfig.temperature || 0.8,
+          },
+        }),
+      });
+
+      if (syncConfigResponse.ok) {
+        console.log('✅ 后台活动配置已同步到后端');
+      } else {
+        console.error('同步后台活动配置失败');
+      }
+    } catch (error) {
+      console.error('同步后台活动配置时出错:', error);
+    }
+  }
+
+  // 定期同步角色信息到后端（每5分钟）
+  let backgroundActivitySyncInterval = null;
+  function startBackgroundActivitySync() {
+    if (backgroundActivitySyncInterval) {
+      clearInterval(backgroundActivitySyncInterval);
+    }
+
+    // 立即同步一次
+    syncBackgroundActivityToBackend();
+
+    // 每5分钟同步一次
+    backgroundActivitySyncInterval = setInterval(() => {
+      if (state.globalSettings.enableBackgroundActivity) {
+        syncBackgroundActivityToBackend();
+      }
+    }, 5 * 60 * 1000); // 5分钟
+  }
+
+  function stopBackgroundActivitySync() {
+    if (backgroundActivitySyncInterval) {
+      clearInterval(backgroundActivitySyncInterval);
+      backgroundActivitySyncInterval = null;
+    }
+  }
+
+  // 检查后端生成的后台活动消息
+  let backgroundActivityMessagesPollingInterval = null;
+  let lastCheckedBgMessageIds = new Set();
+
+  function startBackgroundActivityMessagesPolling() {
+    if (backgroundActivityMessagesPollingInterval) {
+      clearInterval(backgroundActivityMessagesPollingInterval);
+    }
+
+    // 每10秒检查一次
+    backgroundActivityMessagesPollingInterval = setInterval(async () => {
+      if (!state.globalSettings.enableBackgroundActivity) {
+        clearInterval(backgroundActivityMessagesPollingInterval);
+        backgroundActivityMessagesPollingInterval = null;
+        return;
+      }
+
+      try {
+        const workerApiUrl = state.apiConfig.workerApiUrl || DEFAULT_WORKER_API_URL;
+        const userId = state.apiConfig.scheduledUserId || getDeviceCode();
+
+        if (!workerApiUrl || !userId) return;
+
+        const response = await fetch(
+          `${workerApiUrl}/api/background-activity/messages?userId=${encodeURIComponent(userId)}&checkNew=true`
+        );
+
+        if (response.ok) {
+          const result = await response.json();
+          if (result.success && result.messages && result.messages.length > 0) {
+            // 处理新消息
+            for (const msg of result.messages) {
+              if (!lastCheckedBgMessageIds.has(msg.id)) {
+                lastCheckedBgMessageIds.add(msg.id);
+                await handleBackgroundActivityMessage(msg, workerApiUrl);
+              }
+            }
+
+            // 清理旧的ID
+            if (lastCheckedBgMessageIds.size > 100) {
+              const idsArray = Array.from(lastCheckedBgMessageIds);
+              lastCheckedBgMessageIds = new Set(idsArray.slice(-100));
+            }
+          }
+        }
+      } catch (error) {
+        console.error('检查后台活动消息错误:', error);
+      }
+    }, 10000); // 每10秒检查一次
+  }
+
+  async function handleBackgroundActivityMessage(msg, workerApiUrl) {
+    try {
+      // 查找对应的聊天
+      const chat = state.chats[msg.chat_id];
+      if (!chat) {
+        console.warn(`找不到聊天 ${msg.chat_id}，跳过消息`);
+        return;
+      }
+
+      // 创建消息对象
+      const message = {
+        role: "assistant",
+        content: msg.content,
+        timestamp: Date.now(),
+      };
+
+      // 添加到聊天历史
+      chat.history.push(message);
+      await db.chats.put(chat);
+
+      // 如果用户正在查看这个聊天，实时更新界面
+      if (state.activeChatId === chat.id) {
+        appendMessage(message, chat);
+        renderChatList();
+      } else {
+        // 更新未读数
+        chat.unreadCount = (chat.unreadCount || 0) + 1;
+        await db.chats.put(chat);
+        renderChatList();
+      }
+
+      // 显示浏览器通知
+      if (window.showBrowserNotification) {
+        await window.showBrowserNotification(
+          `${msg.chat_name || chat.name} 发来消息`,
+          {
+            body: msg.content,
+            icon: chat.settings?.aiAvatar || defaultAvatar,
+            tag: `bg-activity-msg-${msg.id}`,
+          }
+        );
+      }
+
+      // 标记消息为已发送
+      try {
+        await fetch(`${workerApiUrl}/api/background-activity/messages/${msg.id}`, {
+          method: 'PUT',
+        });
+      } catch (error) {
+        console.error('标记消息为已发送失败:', error);
+      }
+
+      console.log(`✅ 后端后台活动消息已处理: ${msg.content}`);
+    } catch (error) {
+      console.error('处理后台活动消息失败:', error);
+    }
+  }
+
   // 实时时间显示器
   let timeDisplayInterval = null;
   function startTimeDisplay() {
@@ -41427,12 +41631,25 @@ ${chat.settings.aiPersona}
           startBackgroundSimulation();
           // 注册 Periodic Background Sync（如果支持）
           await registerPeriodicBackgroundSync();
+          // 同步后台活动配置到后端
+          await syncBackgroundActivityToBackend();
+          // 启动定期同步和消息轮询
+          startBackgroundActivitySync();
+          startBackgroundActivityMessagesPolling();
           console.log(
             `后台活动模拟已启动，间隔: ${state.globalSettings.backgroundActivityInterval}秒`
           );
         } else {
           // 取消注册 Periodic Background Sync
           await unregisterPeriodicBackgroundSync();
+          // 禁用后端后台活动
+          await syncBackgroundActivityToBackend(false);
+          // 停止同步和轮询
+          stopBackgroundActivitySync();
+          if (backgroundActivityMessagesPollingInterval) {
+            clearInterval(backgroundActivityMessagesPollingInterval);
+            backgroundActivityMessagesPollingInterval = null;
+          }
           console.log("后台活动模拟已停止。");
         }
 
