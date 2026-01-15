@@ -169,6 +169,7 @@ export default {
       // 获取用户的定时任务列表
       if (path === '/api/scheduled-messages' && request.method === 'GET') {
         const userId = url.searchParams.get('userId');
+        const checkNew = url.searchParams.get('checkNew'); // 检查是否有新发送的消息
         
         if (!userId) {
           return new Response(
@@ -188,6 +189,26 @@ export default {
           // 先清理已发送超过1分钟的消息（避免数据库满）
           await cleanupOldMessages(env);
 
+          // 如果只是检查新消息，返回最近发送的消息
+          if (checkNew === 'true') {
+            const now = Math.floor(Date.now() / 1000);
+            const oneMinuteAgo = now - 60;
+            // 查找最近1分钟内发送的消息
+            const { results } = await env.DB.prepare(
+              "SELECT * FROM scheduled_messages WHERE user_id = ? AND status = 'sent' AND send_at >= ? ORDER BY send_at DESC LIMIT 10"
+            )
+              .bind(userId, oneMinuteAgo)
+              .all<ScheduledMessage>();
+
+            return new Response(
+              JSON.stringify({ success: true, messages: results }),
+              { 
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+              }
+            );
+          }
+
+          // 正常获取所有消息
           const { results } = await env.DB.prepare(
             'SELECT * FROM scheduled_messages WHERE user_id = ? ORDER BY send_at ASC'
           )
