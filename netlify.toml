@@ -6,7 +6,7 @@
 [build]
   # 如果使用构建命令，在这里配置
   # command = "npm run build"
-  # publish = "dist"
+  publish = "frontend"
 
 # 重定向规则
 [[redirects]]
