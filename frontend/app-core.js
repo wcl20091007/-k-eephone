@@ -48913,29 +48913,77 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
         const specificTimeInput = document.getElementById("scheduled-specific-time").value;
 
         if (!workerApiUrl) {
-          await showCustomAlert("错误", "Worker API 地址未配置");
+          if (window.showCustomAlert) {
+            await window.showCustomAlert("错误", "Worker API 地址未配置");
+          } else {
+            alert("Worker API 地址未配置");
+          }
           return;
         }
 
         if (!content) {
-          await showCustomAlert("提示", "请先填写测试消息内容");
+          if (window.showCustomAlert) {
+            await window.showCustomAlert("提示", "请先填写测试消息内容");
+          } else {
+            alert("请先填写测试消息内容");
+          }
           return;
         }
 
         if (!specificTimeInput) {
-          await showCustomAlert("提示", "请先选择具体的发送时间");
+          if (window.showCustomAlert) {
+            await window.showCustomAlert("提示", "请先选择具体的发送时间");
+          } else {
+            alert("请先选择具体的发送时间");
+          }
           return;
         }
 
         // 将用户输入的本地时间转换为Unix timestamp（秒）
-        // datetime-local输入的是本地时间，需要转换为UTC时间戳
-        const localDate = new Date(specificTimeInput);
+        // datetime-local输入的是本地时间，格式为 "YYYY-MM-DDTHH:mm"
+        // 需要手动处理，确保正确解释为本地时间
+        let localDate;
+        try {
+          if (specificTimeInput.includes('T')) {
+            // 处理 datetime-local 格式：YYYY-MM-DDTHH:mm
+            const [datePart, timePart] = specificTimeInput.split('T');
+            const [year, month, day] = datePart.split('-').map(Number);
+            const [hour, minute] = timePart.split(':').map(Number);
+            // 创建本地时间的 Date 对象（使用本地时区）
+            localDate = new Date(year, month - 1, day, hour, minute, 0);
+          } else {
+            localDate = new Date(specificTimeInput);
+          }
+          
+          // 验证日期是否有效
+          if (isNaN(localDate.getTime())) {
+            if (window.showCustomAlert) {
+              await window.showCustomAlert("错误", "请选择有效的时间");
+            } else {
+              alert("请选择有效的时间");
+            }
+            return;
+          }
+        } catch (e) {
+          console.error("时间解析错误:", e);
+          if (window.showCustomAlert) {
+            await window.showCustomAlert("错误", "时间格式错误，请重新选择");
+          } else {
+            alert("时间格式错误，请重新选择");
+          }
+          return;
+        }
+        
         const sendAt = Math.floor(localDate.getTime() / 1000);
         const now = Math.floor(Date.now() / 1000);
 
         // 检查时间是否在未来
         if (sendAt <= now) {
-          await showCustomAlert("错误", "请选择未来的时间");
+          if (window.showCustomAlert) {
+            await window.showCustomAlert("错误", "请选择未来的时间");
+          } else {
+            alert("请选择未来的时间");
+          }
           return;
         }
 
@@ -48977,6 +49025,7 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
               day: "2-digit",
               hour: "2-digit",
               minute: "2-digit",
+              second: "2-digit",
             });
             statusText.textContent = `✅ 定时消息已设置！消息 ID: ${result.id}`;
             statusText.style.color = "#28a745";
@@ -48984,10 +49033,15 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
             document.getElementById("scheduled-test-content").value = "";
             document.getElementById("scheduled-specific-time").value = "";
             // 显示成功弹窗
-            await showCustomAlert(
-              "定时消息已设置", 
-              `✅ 定时消息已成功设置！\n\n消息 ID: ${result.id}\n内容: ${content}\n发送时间: ${sendTimeStr}\n\n消息将在指定时间自动发送。`
-            );
+            if (window.showCustomAlert) {
+              await window.showCustomAlert(
+                "定时消息已设置", 
+                `✅ 定时消息已成功设置！\n\n消息 ID: ${result.id}\n内容: ${content}\n发送时间: ${sendTimeStr}\n\n消息将在指定时间自动发送。`
+              );
+            } else {
+              // 如果 showCustomAlert 不可用，使用 alert 作为后备
+              alert(`✅ 定时消息已成功设置！\n\n消息 ID: ${result.id}\n内容: ${content}\n发送时间: ${sendTimeStr}`);
+            }
           } else {
             const errorMsg = result.error || result.message || "设置失败";
             const errorDetails = result.details ? ` (${result.details})` : '';
@@ -48999,7 +49053,12 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
           statusText.textContent = `❌ 错误: ${errorMsg}`;
           statusText.style.color = "#dc3545";
           // 显示错误弹窗
-          await showCustomAlert("设置失败", `❌ 定时消息设置失败：\n\n${errorMsg}`);
+          if (window.showCustomAlert) {
+            await window.showCustomAlert("设置失败", `❌ 定时消息设置失败：\n\n${errorMsg}`);
+          } else {
+            // 如果 showCustomAlert 不可用，使用 alert 作为后备
+            alert(`❌ 定时消息设置失败：\n\n${errorMsg}`);
+          }
           console.error("设置定时消息失败:", error);
           console.error("完整错误信息:", {
             message: error.message,
