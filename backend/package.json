@@ -1,0 +1,18 @@
+{
+  "name": "scheduled-messages-worker",
+  "version": "1.0.0",
+  "description": "Cloudflare Worker for scheduled messages",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:create": "wrangler d1 create scheduled-messages-db",
+    "db:migrate": "wrangler d1 execute scheduled-messages-db --file=./schema.sql",
+    "db:query": "wrangler d1 execute scheduled-messages-db --command"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240208.0",
+    "typescript": "^5.0.0",
+    "wrangler": "^3.0.0"
+  }
+}

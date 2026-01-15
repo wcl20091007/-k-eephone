@@ -1,0 +1,17 @@
+name = "scheduled-messages-worker"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+# D1 数据库配置
+[[d1_databases]]
+binding = "DB"
+database_name = "scheduled-messages-db"
+database_id = ""  # 部署后会自动生成，需要替换
+
+# Cron 触发器 - 每分钟执行一次
+[triggers]
+crons = ["* * * * *"]
+
+# 环境变量（可选）
+# [vars]
+# WEBHOOK_URL = "https://your-webhook-url.com"
