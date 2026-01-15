@@ -9260,17 +9260,19 @@ document.addEventListener("DOMContentLoaded", () => {
             appendMessage(aiMessage, chat);
             
             // 检查是否应该在当前位置发送音频
-            // 只有当用户明确请求音频时才发送
-            if (matchedAudio && !audioAlreadySent) {
+            // 如果匹配到了音频，说明用户消息中包含了音频相关的关键词，应该发送
+            // 音频不限定位置，只要确保在合适的前文后语，并且只发送一次
+            if (matchedAudio && !audioAlreadySent && aiMessage.content) {
               // 检查用户是否明确请求了音频
-              const userRequestedAudio = chat._lastUserMessage && 
+              const userExplicitlyRequested = chat._lastUserMessage && 
                 userExplicitlyRequestedAudio(chat._lastUserMessage.content || chat._lastUserMessage);
               
-              const shouldSend = userRequestedAudio && (
-                shouldTriggerAudioAtThisPosition(msgData.content || "") || // 包含触发关键词
-                currentTextIndex === middleIndex || // 中间位置
-                currentTextIndex === textMessageCount - 1 // 最后一个文本段
-              );
+              // 检查当前文本是否包含触发关键词（上下文合适）
+              const hasTriggerKeyword = shouldTriggerAudioAtThisPosition(aiMessage.content);
+              
+              // 只要上下文合适（包含触发关键词或用户明确请求），就发送音频
+              // 不限定位置，确保只发送一次
+              const shouldSend = hasTriggerKeyword || userExplicitlyRequested;
               
               if (shouldSend) {
                 const audioMessage = {
@@ -9288,7 +9290,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 audioAlreadySent = true;
               }
             }
-            currentTextIndex++;
           }
         }
 
@@ -15059,17 +15060,19 @@ document.addEventListener("DOMContentLoaded", () => {
             appendMessage(aiMessage, chat);
             
             // 检查是否应该在当前位置发送音频
-            // 只有当用户明确请求音频时才发送
+            // 如果匹配到了音频，说明用户消息中包含了音频相关的关键词，应该发送
+            // 音频不限定位置，只要确保在合适的前文后语，并且只发送一次
             if (matchedAudio && !audioAlreadySent && aiMessage.content) {
               // 检查用户是否明确请求了音频
-              const userRequestedAudio = chat._lastUserMessage && 
+              const userExplicitlyRequested = chat._lastUserMessage && 
                 userExplicitlyRequestedAudio(chat._lastUserMessage.content || chat._lastUserMessage);
               
-              const shouldSend = userRequestedAudio && (
-                shouldTriggerAudioAtThisPosition(aiMessage.content) || // 包含触发关键词
-                currentTextIndex === middleIndex || // 中间位置
-                currentTextIndex === textMessageCount - 1 // 最后一个文本段
-              );
+              // 检查当前文本是否包含触发关键词（上下文合适）
+              const hasTriggerKeyword = shouldTriggerAudioAtThisPosition(aiMessage.content);
+              
+              // 只要上下文合适（包含触发关键词或用户明确请求），就发送音频
+              // 不限定位置，确保只发送一次
+              const shouldSend = hasTriggerKeyword || userExplicitlyRequested;
               
               if (shouldSend) {
                 const audioMessage = {
@@ -15086,11 +15089,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 appendMessage(audioMessage, chat);
                 audioAlreadySent = true;
               }
-            }
-            
-            // 如果是文本消息，增加索引
-            if (aiMessage.content && (!aiMessage.type || aiMessage.type === "text")) {
-              currentTextIndex++;
             }
 
             await new Promise((resolve) =>
@@ -30837,7 +30835,9 @@ ${chat.settings.aiPersona}
       // 可以唱相关
       '可以唱', '可以唱吗', '能唱', '能唱吗', '能唱一下吗',
       // 其他明确请求
-      '唱吧', '唱一下', '听吧', '听一下'
+      '唱吧', '唱一下', '听吧', '听一下',
+      // 单独的唱/听（后面可能跟歌曲名）
+      '唱', '听'
     ];
     return requestKeywords.some(keyword => lowerText.includes(keyword));
   }
