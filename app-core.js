@@ -14905,6 +14905,37 @@ document.addEventListener("DOMContentLoaded", () => {
             };
             break;
 
+          case "character_audio":
+            // 处理角色音频消息
+            // 优先使用匹配到的音频（从用户消息中匹配）
+            if (matchedAudio && !audioAlreadySent) {
+              aiMessage = {
+                ...baseMessage,
+                type: "character_audio",
+                audioUrl: matchedAudio.url,
+                audioDescription: matchedAudio.description,
+                audioId: matchedAudio.id,
+              };
+              audioAlreadySent = true;
+            } else if (msgData.audioUrl) {
+              // 如果 AI 直接提供了音频 URL，使用它
+              aiMessage = {
+                ...baseMessage,
+                type: "character_audio",
+                audioUrl: msgData.audioUrl,
+                audioDescription: msgData.audioDescription || msgData.description || "角色音频",
+                audioId: msgData.audioId || "",
+              };
+            } else {
+              // 如果没有匹配的音频且 AI 也没有提供 URL，记录警告并跳过
+              console.warn(
+                "收到了 character_audio 指令，但没有匹配的音频且未提供 audioUrl，已跳过。",
+                msgData
+              );
+              continue; // 跳过这条指令，不创建消息
+            }
+            break;
+
           default:
             console.warn("收到了未知的AI指令类型:", msgData.type);
             break;
@@ -14929,6 +14960,9 @@ document.addEventListener("DOMContentLoaded", () => {
               break;
             case "voice_message":
               notificationText = `[语音]`;
+              break;
+            case "character_audio":
+              notificationText = `[角色音频]`;
               break;
             case "sticker":
               notificationText = aiMessage.meaning
