@@ -118,17 +118,34 @@ document.addEventListener("DOMContentLoaded", () => {
       try {
         const registration = await navigator.serviceWorker.ready;
         
+        // 发送配置到 Service Worker
+        if (registration.active) {
+          const workerApiUrl = state.apiConfig.workerApiUrl || DEFAULT_WORKER_API_URL;
+          const userId = state.apiConfig.scheduledUserId || getDeviceCode();
+          registration.active.postMessage({
+            type: 'SET_BACKGROUND_CONFIG',
+            workerApiUrl: workerApiUrl,
+            userId: userId
+          });
+        }
+        
         // 检查是否支持 Periodic Background Sync
         if ('periodicSync' in registration) {
           try {
             // 请求权限
             const status = await navigator.permissions.query({ name: 'periodic-background-sync' });
             if (status.state === 'granted' || status.state === 'prompt') {
-              // 注册定期同步
+              // 注册定期同步 - 后台活动
               await registration.periodicSync.register('background-activity-periodic', {
                 minInterval: (state.globalSettings.backgroundActivityInterval || 60) * 1000, // 转换为毫秒
               });
-              console.log('✅ Periodic Background Sync 已注册');
+              console.log('✅ Periodic Background Sync (后台活动) 已注册');
+              
+              // 注册定期同步 - 检查后端消息（每30秒检查一次）
+              await registration.periodicSync.register('check-backend-messages', {
+                minInterval: 30 * 1000, // 30秒
+              });
+              console.log('✅ Periodic Background Sync (检查消息) 已注册');
             } else {
               console.warn('Periodic Background Sync 权限被拒绝');
             }
@@ -137,6 +154,7 @@ document.addEventListener("DOMContentLoaded", () => {
             // 如果 Periodic Sync 不支持，使用 Background Sync 作为后备
             if ('sync' in registration) {
               await registration.sync.register('background-activity');
+              await registration.sync.register('check-backend-messages');
               console.log('✅ 使用 Background Sync 作为后备方案');
             }
           }
@@ -145,6 +163,7 @@ document.addEventListener("DOMContentLoaded", () => {
           // 使用 Background Sync 作为后备
           if ('sync' in registration) {
             await registration.sync.register('background-activity');
+            await registration.sync.register('check-backend-messages');
             console.log('✅ Background Sync 已注册');
           }
         }

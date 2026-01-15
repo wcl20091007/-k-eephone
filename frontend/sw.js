@@ -242,6 +242,13 @@ if (isSyncManagerSupported) {
           console.error('后台活动同步失败:', err);
         })
       );
+    } else if (event.tag === 'check-backend-messages') {
+      // 检查后端消息
+      event.waitUntil(
+        checkBackendMessages().catch(err => {
+          console.error('检查后端消息失败:', err);
+        })
+      );
     }
   });
 } else {
@@ -260,10 +267,136 @@ if ('periodicSync' in self.registration) {
           console.error('定期后台活动失败:', err);
         })
       );
+    } else if (event.tag === 'check-backend-messages') {
+      // 检查后端生成的消息
+      event.waitUntil(
+        checkBackendMessages().catch(err => {
+          console.error('检查后端消息失败:', err);
+        })
+      );
     }
   });
 } else {
   console.log('浏览器不支持 Periodic Background Sync API');
+}
+
+// 检查后端生成的消息（用于在网站关闭时也能收到通知）
+let lastCheckedMessageIds = new Set();
+let workerApiUrl = null;
+let userId = null;
+
+// 从主线程接收配置
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SET_BACKGROUND_CONFIG') {
+    workerApiUrl = event.data.workerApiUrl;
+    userId = event.data.userId;
+    console.log('Service Worker: 收到后台活动配置', { workerApiUrl, userId });
+  }
+});
+
+async function checkBackendMessages() {
+  try {
+    if (!workerApiUrl || !userId) {
+      // 尝试从 IndexedDB 读取配置
+      const db = await openIndexedDB();
+      if (db) {
+        const apiConfig = await getFromIndexedDB(db, 'apiConfig', 'apiConfig');
+        if (apiConfig) {
+          workerApiUrl = apiConfig.workerApiUrl || 'https://scheduled-messages-worker.wcl20091007.workers.dev';
+          userId = apiConfig.scheduledUserId;
+        }
+      }
+      
+      if (!workerApiUrl || !userId) {
+        console.log('Service Worker: 缺少配置，跳过检查');
+        return;
+      }
+    }
+
+    console.log('Service Worker: 检查后端消息...');
+
+    // 检查定时消息
+    const scheduledResponse = await fetch(
+      `${workerApiUrl}/api/scheduled-messages?userId=${encodeURIComponent(userId)}&checkNew=true`
+    );
+
+    if (scheduledResponse.ok) {
+      const scheduledResult = await scheduledResponse.json();
+      if (scheduledResult.success && scheduledResult.messages && scheduledResult.messages.length > 0) {
+        for (const msg of scheduledResult.messages) {
+          if (!lastCheckedMessageIds.has(msg.id)) {
+            lastCheckedMessageIds.add(msg.id);
+            await showNotificationForMessage('定时消息', msg.content, msg.id);
+          }
+        }
+      }
+    }
+
+    // 检查后台活动消息
+    const bgResponse = await fetch(
+      `${workerApiUrl}/api/background-activity/messages?userId=${encodeURIComponent(userId)}&checkNew=true`
+    );
+
+    if (bgResponse.ok) {
+      const bgResult = await bgResponse.json();
+      if (bgResult.success && bgResult.messages && bgResult.messages.length > 0) {
+        for (const msg of bgResult.messages) {
+          if (!lastCheckedMessageIds.has(`bg-${msg.id}`)) {
+            lastCheckedMessageIds.add(`bg-${msg.id}`);
+            await showNotificationForMessage(
+              msg.chat_name || '角色消息',
+              msg.content,
+              `bg-${msg.id}`,
+              msg.chat_id
+            );
+          }
+        }
+      }
+    }
+
+    // 清理旧的ID
+    if (lastCheckedMessageIds.size > 100) {
+      const idsArray = Array.from(lastCheckedMessageIds);
+      lastCheckedMessageIds = new Set(idsArray.slice(-100));
+    }
+
+    console.log('Service Worker: 后端消息检查完成');
+  } catch (error) {
+    console.error('Service Worker: 检查后端消息时出错:', error);
+  }
+}
+
+async function showNotificationForMessage(title, body, tag, chatId = null) {
+  if (!isNotificationSupported) {
+    console.warn('Service Worker: 浏览器不支持通知');
+    return;
+  }
+
+  try {
+    const notificationOptions = {
+      body: body,
+      icon: 'https://i.postimg.cc/Kj8JnRcp/267611-CC01-F8-A3-B4910-A2-C2-FFDE479-DC.jpg',
+      badge: 'https://i.postimg.cc/Kj8JnRcp/267611-CC01-F8-A3-B4910-A2-C2-FFDE479-DC.jpg',
+      tag: tag,
+      data: {
+        chatId: chatId,
+        type: 'message',
+        timestamp: Date.now()
+      },
+      requireInteraction: false,
+      silent: false,
+    };
+
+    // 添加振动（如果支持）
+    if ('vibrate' in Notification.prototype) {
+      notificationOptions.vibrate = [200, 100, 200];
+    }
+
+    await self.registration.showNotification(title, notificationOptions);
+    console.log(`Service Worker: 已显示通知 - ${title}`);
+  } catch (error) {
+    console.error('Service Worker: 显示通知失败:', error);
+  }
 }
 
 // 在 Service Worker 中运行后台活动
