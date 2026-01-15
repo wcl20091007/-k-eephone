@@ -91,12 +91,20 @@ export default {
 
       // 创建定时任务
       if (path === '/api/scheduled-messages' && request.method === 'POST') {
-        const body: { userId: string; content: string; delaySeconds: number } = await request.json();
-        const { userId, content, delaySeconds } = body;
+        const body: { userId: string; content: string; delaySeconds?: number; sendAt?: number } = await request.json();
+        const { userId, content, delaySeconds, sendAt: providedSendAt } = body;
 
-        if (!userId || !content || delaySeconds === undefined) {
+        if (!userId || !content) {
           return new Response(
-            JSON.stringify({ error: 'Missing required fields: userId, content, delaySeconds' }),
+            JSON.stringify({ error: 'Missing required fields: userId, content' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // 支持两种方式：delaySeconds（延迟秒数）或 sendAt（具体时间戳）
+        if (delaySeconds === undefined && providedSendAt === undefined) {
+          return new Response(
+            JSON.stringify({ error: 'Missing required field: either delaySeconds or sendAt must be provided' }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
@@ -108,8 +116,19 @@ export default {
           );
         }
 
-        const sendAt = Math.floor(Date.now() / 1000) + delaySeconds;
+        // 计算发送时间：优先使用 sendAt，否则使用 delaySeconds
+        const sendAt = providedSendAt !== undefined 
+          ? providedSendAt 
+          : Math.floor(Date.now() / 1000) + (delaySeconds || 0);
         const createdAt = Math.floor(Date.now() / 1000);
+
+        // 验证发送时间是否在未来
+        if (sendAt <= createdAt) {
+          return new Response(
+            JSON.stringify({ error: 'Send time must be in the future' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
 
         try {
           const result = await env.DB.prepare(
@@ -166,6 +185,9 @@ export default {
         }
 
         try {
+          // 先清理已发送超过1分钟的消息（避免数据库满）
+          await cleanupOldMessages(env);
+
           const { results } = await env.DB.prepare(
             'SELECT * FROM scheduled_messages WHERE user_id = ? ORDER BY send_at ASC'
           )
@@ -297,8 +319,21 @@ export default {
         }
       }
 
+      // 返回 404，包含调试信息
       return new Response(
-        JSON.stringify({ error: 'Not Found', message: 'The requested endpoint does not exist' }),
+        JSON.stringify({ 
+          error: 'Not Found', 
+          message: 'The requested endpoint does not exist',
+          path: path,
+          method: request.method,
+          availableEndpoints: [
+            'GET /api/health',
+            'POST /api/scheduled-messages',
+            'GET /api/scheduled-messages?userId=...',
+            'DELETE /api/scheduled-messages/{id}',
+            'POST /api/test-scheduled-message'
+          ]
+        }),
         { 
           status: 404, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
@@ -312,8 +347,7 @@ export default {
       return new Response(
         JSON.stringify({ 
           error: 'Internal server error', 
-          details: errorMessage,
-          ...(process.env.NODE_ENV === 'development' && { stack: errorStack })
+          details: errorMessage
         }),
         { 
           status: 500, 
@@ -341,6 +375,9 @@ export default {
       for (const msg of results) {
         ctx.waitUntil(sendToUser(msg, env));
       }
+
+      // 清理已发送超过1分钟的消息（避免数据库满）
+      ctx.waitUntil(cleanupOldMessages(env));
     } catch (error) {
       console.error('Error in scheduled handler:', error);
     }
@@ -390,4 +427,25 @@ async function sendToUser(msg: ScheduledMessage, env: Env): Promise<void> {
         .bind('failed', msg.id)
         .run();
     }
+}
+
+// 清理已发送超过1分钟的消息（避免数据库满）
+async function cleanupOldMessages(env: Env): Promise<void> {
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    // 删除已发送状态且发送时间超过1分钟（60秒）的消息
+    const oneMinuteAgo = now - 60;
+    
+    const result = await env.DB.prepare(
+      "DELETE FROM scheduled_messages WHERE status = 'sent' AND send_at <= ?"
+    )
+      .bind(oneMinuteAgo)
+      .run();
+
+    if (result.success && result.meta.changes > 0) {
+      console.log(`清理了 ${result.meta.changes} 条已发送超过1分钟的消息`);
+    }
+  } catch (error) {
+    console.error('清理旧消息时出错:', error);
+  }
 }

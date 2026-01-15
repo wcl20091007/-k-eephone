@@ -1529,7 +1529,7 @@
                 id="scheduled-messages-details"
                 style="display: none; margin-top: 10px"
               >
-                <div class="form-group">
+                <div class="form-group" style="display: none;">
                   <label>Worker API 地址（可选）</label>
                   <input
                     type="text"
@@ -1542,7 +1542,7 @@
                     <br>💡 Default uses developer's public Worker, leave empty to use default. Fill in if you want to use a custom Worker.
                   </small>
                 </div>
-                <div class="form-group">
+                <div class="form-group" style="display: none;">
                   <label>用户 ID</label>
                   <input
                     type="text"
@@ -1576,9 +1576,23 @@
                     测试按钮将使用此延迟时间
                   </small>
                 </div>
+                <div class="form-group">
+                  <label>具体发送时间（基于设备本地时间）</label>
+                  <input
+                    type="datetime-local"
+                    id="scheduled-specific-time"
+                    class="moe-input"
+                  />
+                  <small style="color: #888; font-size: 12px; display: block; margin-top: 4px;">
+                    选择具体的日期和时间，将基于您设备的本地时区
+                  </small>
+                </div>
                 <div class="moe-btn-group">
                   <button id="test-scheduled-message-btn" class="moe-btn-secondary">
-                    🧪 测试发送
+                    🧪 测试发送（延迟时间）
+                  </button>
+                  <button id="test-scheduled-message-specific-btn" class="moe-btn-secondary">
+                    ⏰ 测试发送（具体时间）
                   </button>
                   <button id="view-scheduled-messages-btn" class="moe-btn-secondary">
                     📋 查看任务列表

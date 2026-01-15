@@ -5822,6 +5822,13 @@ document.addEventListener("DOMContentLoaded", () => {
       state.apiConfig.scheduledUserId || getDeviceCode();
     document.getElementById("scheduled-delay-seconds").value =
       state.apiConfig.scheduledDelaySeconds || 10;
+    // 设置默认的具体时间为1小时后
+    const defaultTime = new Date();
+    defaultTime.setHours(defaultTime.getHours() + 1);
+    defaultTime.setMinutes(0);
+    defaultTime.setSeconds(0);
+    const defaultTimeStr = defaultTime.toISOString().slice(0, 16); // 格式：YYYY-MM-DDTHH:mm
+    document.getElementById("scheduled-specific-time").value = defaultTimeStr;
     document.getElementById("scheduled-messages-details").style.display =
       state.apiConfig.enableScheduledMessages ? "block" : "none";
 
@@ -48797,24 +48804,28 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
         if (!workerApiUrl) {
           workerApiUrl = DEFAULT_WORKER_API_URL;
         }
-        const userId = document.getElementById("scheduled-user-id").value.trim();
+        // 自动获取用户ID（从隐藏字段或state中获取，如果没有则使用设备码）
+        let userId = document.getElementById("scheduled-user-id").value.trim();
+        if (!userId) {
+          userId = state.apiConfig.scheduledUserId || getDeviceCode();
+          // 保存到state中
+          if (!state.apiConfig.scheduledUserId) {
+            state.apiConfig.scheduledUserId = userId;
+            db.apiConfig.put(state.apiConfig);
+          }
+        }
         const content = document.getElementById("scheduled-test-content").value.trim();
         const delaySeconds = parseInt(
           document.getElementById("scheduled-delay-seconds").value
         ) || 10;
 
         if (!workerApiUrl) {
-          alert("Worker API 地址未配置");
-          return;
-        }
-
-        if (!userId) {
-          alert("请先填写用户 ID");
+          await showCustomAlert("错误", "Worker API 地址未配置");
           return;
         }
 
         if (!content) {
-          alert("请先填写测试消息内容");
+          await showCustomAlert("提示", "请先填写测试消息内容");
           return;
         }
 
@@ -48853,6 +48864,11 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
             statusText.style.color = "#28a745";
             // 清空测试内容
             document.getElementById("scheduled-test-content").value = "";
+            // 显示成功弹窗
+            await showCustomAlert(
+              "定时消息已发送", 
+              `✅ 测试消息已成功发送！\n\n消息 ID: ${result.id}\n内容: ${content}\n\n消息将在指定时间发送。`
+            );
           } else {
             const errorMsg = result.error || result.message || "发送失败";
             const errorDetails = result.details ? ` (${result.details})` : '';
@@ -48863,7 +48879,128 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
           const errorMsg = error.message || String(error);
           statusText.textContent = `❌ 错误: ${errorMsg}`;
           statusText.style.color = "#dc3545";
+          // 显示错误弹窗
+          await showCustomAlert("发送失败", `❌ 定时消息发送失败：\n\n${errorMsg}`);
           console.error("测试发送失败:", error);
+          console.error("完整错误信息:", {
+            message: error.message,
+            stack: error.stack,
+            response: error.response
+          });
+        }
+      });
+
+    // 2.5. 具体时间测试发送按钮
+    document
+      .getElementById("test-scheduled-message-specific-btn")
+      .addEventListener("click", async () => {
+        // 如果用户没有填写，使用默认的开发者的 Worker API
+        let workerApiUrl = document.getElementById("worker-api-url").value.trim();
+        if (!workerApiUrl) {
+          workerApiUrl = DEFAULT_WORKER_API_URL;
+        }
+        // 自动获取用户ID（从隐藏字段或state中获取，如果没有则使用设备码）
+        let userId = document.getElementById("scheduled-user-id").value.trim();
+        if (!userId) {
+          userId = state.apiConfig.scheduledUserId || getDeviceCode();
+          // 保存到state中
+          if (!state.apiConfig.scheduledUserId) {
+            state.apiConfig.scheduledUserId = userId;
+            db.apiConfig.put(state.apiConfig);
+          }
+        }
+        const content = document.getElementById("scheduled-test-content").value.trim();
+        const specificTimeInput = document.getElementById("scheduled-specific-time").value;
+
+        if (!workerApiUrl) {
+          await showCustomAlert("错误", "Worker API 地址未配置");
+          return;
+        }
+
+        if (!content) {
+          await showCustomAlert("提示", "请先填写测试消息内容");
+          return;
+        }
+
+        if (!specificTimeInput) {
+          await showCustomAlert("提示", "请先选择具体的发送时间");
+          return;
+        }
+
+        // 将用户输入的本地时间转换为Unix timestamp（秒）
+        // datetime-local输入的是本地时间，需要转换为UTC时间戳
+        const localDate = new Date(specificTimeInput);
+        const sendAt = Math.floor(localDate.getTime() / 1000);
+        const now = Math.floor(Date.now() / 1000);
+
+        // 检查时间是否在未来
+        if (sendAt <= now) {
+          await showCustomAlert("错误", "请选择未来的时间");
+          return;
+        }
+
+        const statusDiv = document.getElementById("scheduled-messages-status");
+        const statusText = document.getElementById("scheduled-messages-status-text");
+        statusDiv.style.display = "block";
+        statusText.textContent = "正在设置定时消息...";
+        statusText.style.color = "#007bff";
+
+        try {
+          const response = await fetch(`${workerApiUrl}/api/scheduled-messages`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              userId,
+              content,
+              sendAt, // 发送具体时间戳
+            }),
+          });
+
+          // 检查响应内容类型
+          const contentType = response.headers.get("content-type");
+          let result;
+          
+          if (contentType && contentType.includes("application/json")) {
+            result = await response.json();
+          } else {
+            // 如果不是 JSON，读取文本
+            const text = await response.text();
+            throw new Error(text || `HTTP ${response.status}: ${response.statusText}`);
+          }
+
+          if (response.ok && result.success) {
+            const sendTimeStr = localDate.toLocaleString("zh-CN", {
+              year: "numeric",
+              month: "2-digit",
+              day: "2-digit",
+              hour: "2-digit",
+              minute: "2-digit",
+            });
+            statusText.textContent = `✅ 定时消息已设置！消息 ID: ${result.id}`;
+            statusText.style.color = "#28a745";
+            // 清空测试内容和时间
+            document.getElementById("scheduled-test-content").value = "";
+            document.getElementById("scheduled-specific-time").value = "";
+            // 显示成功弹窗
+            await showCustomAlert(
+              "定时消息已设置", 
+              `✅ 定时消息已成功设置！\n\n消息 ID: ${result.id}\n内容: ${content}\n发送时间: ${sendTimeStr}\n\n消息将在指定时间自动发送。`
+            );
+          } else {
+            const errorMsg = result.error || result.message || "设置失败";
+            const errorDetails = result.details ? ` (${result.details})` : '';
+            const errorHint = result.hint ? `\n提示: ${result.hint}` : '';
+            throw new Error(errorMsg + errorDetails + errorHint);
+          }
+        } catch (error) {
+          const errorMsg = error.message || String(error);
+          statusText.textContent = `❌ 错误: ${errorMsg}`;
+          statusText.style.color = "#dc3545";
+          // 显示错误弹窗
+          await showCustomAlert("设置失败", `❌ 定时消息设置失败：\n\n${errorMsg}`);
+          console.error("设置定时消息失败:", error);
           console.error("完整错误信息:", {
             message: error.message,
             stack: error.stack,
@@ -48881,15 +49018,19 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
         if (!workerApiUrl) {
           workerApiUrl = DEFAULT_WORKER_API_URL;
         }
-        const userId = document.getElementById("scheduled-user-id").value.trim();
-
-        if (!workerApiUrl) {
-          alert("Worker API 地址未配置");
-          return;
+        // 自动获取用户ID（从隐藏字段或state中获取，如果没有则使用设备码）
+        let userId = document.getElementById("scheduled-user-id").value.trim();
+        if (!userId) {
+          userId = state.apiConfig.scheduledUserId || getDeviceCode();
+          // 保存到state中
+          if (!state.apiConfig.scheduledUserId) {
+            state.apiConfig.scheduledUserId = userId;
+            db.apiConfig.put(state.apiConfig);
+          }
         }
 
-        if (!userId) {
-          alert("请先填写用户 ID");
+        if (!workerApiUrl) {
+          await showCustomAlert("错误", "Worker API 地址未配置");
           return;
         }
 
@@ -48913,7 +49054,7 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
           if (response.ok && result.success) {
             const messages = result.messages || [];
             if (messages.length === 0) {
-              alert("暂无定时任务");
+              await showCustomAlert("定时任务", "暂无定时任务");
               return;
             }
 
@@ -48930,12 +49071,15 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
               })
               .join("\n\n");
 
-            alert(`定时任务列表 (共 ${messages.length} 条):\n\n${messagesList}`);
+            await showCustomAlert(
+              `定时任务列表 (共 ${messages.length} 条)`,
+              messagesList
+            );
           } else {
             throw new Error(result.error || result.message || "获取失败");
           }
         } catch (error) {
-          alert(`获取任务列表失败: ${error.message}`);
+          await showCustomAlert("错误", `获取任务列表失败：\n\n${error.message}`);
           console.error("获取任务列表失败:", error);
         }
       });
