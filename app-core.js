@@ -4627,22 +4627,43 @@ document.addEventListener("DOMContentLoaded", () => {
   // 浏览器原生通知管理函数
   // ===================================================================
   /**
+   * 安全地获取 Notification API
+   * @returns {Notification|undefined} Notification 对象或 undefined
+   */
+  function getNotificationAPI() {
+    try {
+      if (typeof window !== 'undefined' && 'Notification' in window) {
+        return window.Notification;
+      }
+      return undefined;
+    } catch (e) {
+      return undefined;
+    }
+  }
+
+  /**
    * 请求浏览器通知权限
    * @returns {Promise<boolean>} 是否获得权限
    */
   async function requestNotificationPermission() {
-    if (!('Notification' in window)) {
+    const Notification = getNotificationAPI();
+    if (!Notification) {
       console.warn('此浏览器不支持通知功能');
       return false;
     }
 
-    if (Notification.permission === 'granted') {
-      return true;
-    }
+    try {
+      if (Notification.permission === 'granted') {
+        return true;
+      }
 
-    if (Notification.permission !== 'denied') {
-      const permission = await Notification.requestPermission();
-      return permission === 'granted';
+      if (Notification.permission !== 'denied') {
+        const permission = await Notification.requestPermission();
+        return permission === 'granted';
+      }
+    } catch (e) {
+      console.error('访问通知权限时出错:', e);
+      return false;
     }
 
     return false;
@@ -4655,14 +4676,16 @@ document.addEventListener("DOMContentLoaded", () => {
    */
   async function showBrowserNotification(title, options = {}) {
     // 检查是否支持通知
-    if (!('Notification' in window)) {
+    const Notification = getNotificationAPI();
+    if (!Notification) {
       console.warn('❌ 此浏览器不支持通知功能');
       await showCustomAlert("不支持", "您的浏览器不支持通知功能。\n\n支持的浏览器：\n• Chrome/Edge (Windows/Mac/Android)\n• Firefox (Windows/Mac/Android)\n• Safari (Mac/iOS - 需添加到主屏幕)");
       return;
     }
 
-    // 如果权限已授予，直接显示通知
-    if (Notification.permission === 'granted') {
+    try {
+      // 如果权限已授予，直接显示通知
+      if (Notification.permission === 'granted') {
       // 优先使用 Service Worker 发送通知（这样即使页面关闭或后台也能收到）
       if ('serviceWorker' in navigator) {
         try {
@@ -4735,18 +4758,22 @@ document.addEventListener("DOMContentLoaded", () => {
         console.error('❌ 普通通知也失败:', error);
         await showCustomAlert("通知失败", "发送通知时出错：" + error.message);
       }
-    } else if (Notification.permission !== 'denied') {
-      // 如果权限未请求，尝试请求权限
-      const permission = await Notification.requestPermission();
-      if (permission === 'granted') {
-        // 权限已授予，重新调用
-        showBrowserNotification(title, options);
+      } else if (Notification.permission !== 'denied') {
+        // 如果权限未请求，尝试请求权限
+        const permission = await Notification.requestPermission();
+        if (permission === 'granted') {
+          // 权限已授予，重新调用
+          showBrowserNotification(title, options);
+        } else {
+          console.warn('用户拒绝了通知权限');
+        }
       } else {
-        console.warn('用户拒绝了通知权限');
+        console.warn('通知权限已被拒绝，需要在浏览器设置中手动允许');
+        await showCustomAlert("权限被拒绝", "通知权限已被拒绝。\n\n请在浏览器设置中允许此网站的通知权限：\n• Chrome/Edge: 设置 > 隐私和安全 > 网站设置 > 通知\n• Firefox: 设置 > 隐私与安全 > 权限 > 通知\n• Safari: 系统偏好设置 > 通知");
       }
-    } else {
-      console.warn('通知权限已被拒绝，需要在浏览器设置中手动允许');
-      await showCustomAlert("权限被拒绝", "通知权限已被拒绝。\n\n请在浏览器设置中允许此网站的通知权限：\n• Chrome/Edge: 设置 > 隐私和安全 > 网站设置 > 通知\n• Firefox: 设置 > 隐私与安全 > 权限 > 通知\n• Safari: 系统偏好设置 > 通知");
+    } catch (error) {
+      console.error('❌ 访问通知 API 时出错:', error);
+      await showCustomAlert("通知错误", "访问通知功能时出错：" + error.message);
     }
   }
 
@@ -4830,7 +4857,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // 发送浏览器原生通知（如果已授权）
     // 无论页面是否可见，都显示通知（这样即使页面在前台也能收到通知）
-    if (Notification.permission === 'granted') {
+    const Notification = getNotificationAPI();
+    if (Notification && Notification.permission === 'granted') {
       const avatarUrl = chat.settings.aiAvatar ||
         chat.settings.groupAvatar ||
         defaultAvatar;
@@ -5899,7 +5927,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // 检查通知支持
-    if (!('Notification' in window)) {
+    const Notification = getNotificationAPI();
+    if (!Notification) {
       statusText.textContent = "❌ 浏览器不支持通知功能\n当前：" + browser + " (" + os + ")";
       statusDiv.style.background = "#fee";
       requestBtn.style.display = "none";
@@ -14932,7 +14961,8 @@ document.addEventListener("DOMContentLoaded", () => {
               notificationShown = true;
             } else {
               // 后续消息只显示浏览器通知，不显示页面内通知条
-              if (shouldShowBrowserNotification && Notification.permission === 'granted') {
+              const Notification = getNotificationAPI();
+              if (shouldShowBrowserNotification && Notification && Notification.permission === 'granted') {
                 const notifName =
                   !chat.isGroup && chat.settings.remarkName
                     ? chat.settings.remarkName
@@ -14958,7 +14988,8 @@ document.addEventListener("DOMContentLoaded", () => {
             }
           } else if (shouldShowBrowserNotification) {
             // 用户在当前聊天界面，但页面在后台：只显示浏览器通知（不显示页面内通知条）
-            if (Notification.permission === 'granted') {
+            const Notification = getNotificationAPI();
+            if (Notification && Notification.permission === 'granted') {
               const notifName =
                 !chat.isGroup && chat.settings.remarkName
                   ? chat.settings.remarkName
@@ -17844,7 +17875,8 @@ document.addEventListener("DOMContentLoaded", () => {
             showNotification(chatId, aiMessage.content);
           } else if (shouldShowBrowserNotification) {
             // 用户在当前聊天界面，但页面在后台：只显示浏览器通知
-            if (Notification.permission === 'granted') {
+            const Notification = getNotificationAPI();
+            if (Notification && Notification.permission === 'granted') {
               const notifName =
                 !chat.isGroup && chat.settings.remarkName
                   ? chat.settings.remarkName
@@ -41013,7 +41045,8 @@ ${chat.settings.aiPersona}
       .getElementById("test-notification-btn")
       .addEventListener("click", async () => {
         // 检查权限
-        if (!('Notification' in window)) {
+        const Notification = getNotificationAPI();
+        if (!Notification) {
           await showCustomAlert("不支持", "您的浏览器不支持通知功能。");
           return;
         }
@@ -41056,7 +41089,8 @@ ${chat.settings.aiPersona}
       .getElementById("test-background-notification-btn")
       .addEventListener("click", async () => {
         // 检查权限
-        if (!('Notification' in window)) {
+        const Notification = getNotificationAPI();
+        if (!Notification) {
           await showCustomAlert("不支持", "您的浏览器不支持通知功能。");
           return;
         }
