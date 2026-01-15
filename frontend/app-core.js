@@ -5735,7 +5735,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
           if (!workerApiUrl || !userId) return;
 
-          // 先检查是否有待发送但时间已到的消息（前端主动检查）
+          // 先检查是否有待发送但时间已到的消息（前端主动触发后端处理）
           const allMessagesResponse = await fetch(
             `${workerApiUrl}/api/scheduled-messages?userId=${encodeURIComponent(userId)}`
           );
@@ -5750,9 +5750,26 @@ document.addEventListener("DOMContentLoaded", () => {
               );
               
               if (overdueMessages.length > 0) {
-                console.log(`发现 ${overdueMessages.length} 条已到期但未发送的消息，等待后端处理...`);
-                // 等待一下让后端处理，然后检查新消息
-                await new Promise(resolve => setTimeout(resolve, 2000));
+                console.log(`发现 ${overdueMessages.length} 条已到期但未发送的消息，主动触发后端处理...`);
+                // 主动触发后端立即检查并发送
+                try {
+                  const triggerResponse = await fetch(`${workerApiUrl}/api/check-and-send`, {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                    },
+                  });
+                  
+                  if (triggerResponse.ok) {
+                    const triggerResult = await triggerResponse.json();
+                    console.log(`✅ 后端已处理: ${triggerResult.message || '处理完成'}`);
+                  }
+                } catch (error) {
+                  console.error('触发后端处理失败:', error);
+                }
+                
+                // 等待一下让后端处理完成
+                await new Promise(resolve => setTimeout(resolve, 1000));
               }
             }
           }

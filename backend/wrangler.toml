@@ -10,7 +10,7 @@ database_id = "26c6364d-b790-47b0-af36-3da2c2a3c575"  # 部署后会自动生成
 
 # Cron 触发器 - 每分钟执行一次
 [triggers]
-crons = ["* 1 * * *"]
+crons = ["* * * * *"]
 
 [[kv_namespaces]]
 binding = "PUSH_SUBSCRIPTIONS"

@@ -340,6 +340,53 @@ export default {
         }
       }
 
+      // 手动触发检查并发送到期消息（用于前端主动触发）
+      if (path === '/api/check-and-send' && request.method === 'POST') {
+        if (!env.DB) {
+          return new Response(
+            JSON.stringify({ error: 'Database not configured. Please check D1 database binding.' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        try {
+          const now = Math.floor(Date.now() / 1000);
+          
+          // 查询所有到期且未发送的消息
+          const { results } = await env.DB.prepare(
+            "SELECT * FROM scheduled_messages WHERE send_at <= ? AND status = 'pending'"
+          )
+            .bind(now)
+            .all<ScheduledMessage>();
+
+          console.log(`手动检查：发现 ${results.length} 条到期消息需要发送`);
+
+          // 立即处理这些消息
+          const sendPromises = results.map(msg => sendToUser(msg, env));
+          await Promise.all(sendPromises);
+
+          return new Response(
+            JSON.stringify({ 
+              success: true, 
+              message: `已处理 ${results.length} 条到期消息`,
+              processed: results.length
+            }),
+            { 
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+            }
+          );
+        } catch (error: any) {
+          console.error('手动检查错误:', error);
+          return new Response(
+            JSON.stringify({ 
+              error: 'Check failed', 
+              details: error?.message || String(error)
+            }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+
       // 返回 404，包含调试信息
       return new Response(
         JSON.stringify({ 
@@ -352,7 +399,8 @@ export default {
             'POST /api/scheduled-messages',
             'GET /api/scheduled-messages?userId=...',
             'DELETE /api/scheduled-messages/{id}',
-            'POST /api/test-scheduled-message'
+            'POST /api/test-scheduled-message',
+            'POST /api/check-and-send'
           ]
         }),
         { 
