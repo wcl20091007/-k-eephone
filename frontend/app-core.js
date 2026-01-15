@@ -4,7 +4,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // ===================================================================
   // 开发者的公共 Worker API 地址（用户无需自己部署）
   // Developer's public Worker API URL (users don't need to deploy their own)
-  const DEFAULT_WORKER_API_URL = "https://scheduled-messages-worker.your-subdomain.workers.dev";
+  const DEFAULT_WORKER_API_URL = "https://scheduled-messages-worker.wcl20091007.workers.dev";
   
   // 检测浏览器兼容性（支持 Chrome, Edge, Firefox, Safari, Opera, 百度浏览器等）
   const isServiceWorkerSupported = 'serviceWorker' in navigator;
@@ -40968,9 +40968,12 @@ ${chat.settings.aiPersona}
         state.apiConfig.enableScheduledMessages = document.getElementById(
           "scheduled-messages-switch"
         ).checked;
-        state.apiConfig.workerApiUrl = document
-          .getElementById("worker-api-url")
-          .value.trim();
+        // 如果用户填写的是默认值或为空，保存为空字符串（加载时会使用默认值）
+        const workerApiUrlInput = document.getElementById("worker-api-url").value.trim();
+        state.apiConfig.workerApiUrl = 
+          (workerApiUrlInput && workerApiUrlInput !== DEFAULT_WORKER_API_URL) 
+            ? workerApiUrlInput 
+            : "";
         state.apiConfig.scheduledUserId = document
           .getElementById("scheduled-user-id")
           .value.trim();
@@ -48789,7 +48792,11 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
     document
       .getElementById("test-scheduled-message-btn")
       .addEventListener("click", async () => {
-        const workerApiUrl = document.getElementById("worker-api-url").value.trim();
+        // 如果用户没有填写，使用默认的开发者的 Worker API
+        let workerApiUrl = document.getElementById("worker-api-url").value.trim();
+        if (!workerApiUrl) {
+          workerApiUrl = DEFAULT_WORKER_API_URL;
+        }
         const userId = document.getElementById("scheduled-user-id").value.trim();
         const content = document.getElementById("scheduled-test-content").value.trim();
         const delaySeconds = parseInt(
@@ -48797,7 +48804,7 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
         ) || 10;
 
         if (!workerApiUrl) {
-          alert("请先填写 Worker API 地址");
+          alert("Worker API 地址未配置");
           return;
         }
 
@@ -48850,11 +48857,15 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
     document
       .getElementById("view-scheduled-messages-btn")
       .addEventListener("click", async () => {
-        const workerApiUrl = document.getElementById("worker-api-url").value.trim();
+        // 如果用户没有填写，使用默认的开发者的 Worker API
+        let workerApiUrl = document.getElementById("worker-api-url").value.trim();
+        if (!workerApiUrl) {
+          workerApiUrl = DEFAULT_WORKER_API_URL;
+        }
         const userId = document.getElementById("scheduled-user-id").value.trim();
 
         if (!workerApiUrl) {
-          alert("请先填写 Worker API 地址");
+          alert("Worker API 地址未配置");
           return;
         }
 

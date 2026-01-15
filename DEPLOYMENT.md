@@ -61,11 +61,11 @@ Worker 使用开发者的公共端点，用户无需自己部署。
 ## Worker API 配置 / Worker API Configuration
 
 前端默认使用开发者的公共 Worker API：
-- 默认 URL: `https://scheduled-messages-worker.your-subdomain.workers.dev`
+- 默认 URL: `https://scheduled-messages-worker.wcl20091007.workers.dev`
 - 用户可以在 API 设置中修改此地址（如果需要使用自定义 Worker）
 
 The frontend uses the developer's public Worker API by default:
-- Default URL: `https://scheduled-messages-worker.your-subdomain.workers.dev`
+- Default URL: `https://scheduled-messages-worker.wcl20091007.workers.dev`
 - Users can modify this in API settings if they want to use a custom Worker
 
 ## 注意事项 / Notes

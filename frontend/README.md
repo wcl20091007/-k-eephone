@@ -21,5 +21,5 @@
 ## 注意事项
 
 - 所有文件路径使用相对路径，可以直接部署
-- Worker API 默认使用开发者的公共端点（在 `app-core.js` 中配置）
+- Worker API 默认使用开发者的公共端点：`https://scheduled-messages-worker.wcl20091007.workers.dev`
 - 如需修改 Worker API 地址，请编辑 `app-core.js` 中的 `DEFAULT_WORKER_API_URL`
