@@ -221,7 +221,7 @@ self.addEventListener('push', (event) => {
   );
 });
 
-// 后台同步 - 确保在后台也能发送通知
+// 后台同步 - 确保在后台也能发送通知和运行后台活动
 // 注意：Background Sync API 不是所有浏览器都支持（Firefox 不支持）
 if (isSyncManagerSupported) {
   self.addEventListener('sync', (event) => {
@@ -235,10 +235,184 @@ if (isSyncManagerSupported) {
           console.error('后台同步失败:', err);
         })
       );
+    } else if (event.tag === 'background-activity') {
+      // 后台活动同步
+      event.waitUntil(
+        runBackgroundActivityInSW().catch(err => {
+          console.error('后台活动同步失败:', err);
+        })
+      );
     }
   });
 } else {
   console.log('浏览器不支持 Background Sync API');
+}
+
+// Periodic Background Sync - 定期后台同步（更强大的后台运行能力）
+// 注意：需要用户添加到主屏幕，且不是所有浏览器都支持
+if ('periodicSync' in self.registration) {
+  self.addEventListener('periodicsync', (event) => {
+    console.log('定期后台同步事件:', event.tag);
+    
+    if (event.tag === 'background-activity-periodic') {
+      event.waitUntil(
+        runBackgroundActivityInSW().catch(err => {
+          console.error('定期后台活动失败:', err);
+        })
+      );
+    }
+  });
+} else {
+  console.log('浏览器不支持 Periodic Background Sync API');
+}
+
+// 在 Service Worker 中运行后台活动
+async function runBackgroundActivityInSW() {
+  try {
+    console.log('Service Worker: 开始运行后台活动...');
+    
+    // 从 IndexedDB 读取配置和聊天数据
+    // 注意：Service Worker 中需要使用 indexedDB API
+    const db = await openIndexedDB();
+    if (!db) {
+      console.warn('Service Worker: 无法打开 IndexedDB');
+      return;
+    }
+
+    // 读取全局设置
+    const globalSettings = await getFromIndexedDB(db, 'globalSettings', 'global');
+    if (!globalSettings || !globalSettings.enableBackgroundActivity) {
+      console.log('Service Worker: 后台活动未启用');
+      return;
+    }
+
+    // 读取所有聊天
+    const allChats = await getAllFromIndexedDB(db, 'chats');
+    const allSingleChats = allChats.filter(chat => !chat.isGroup);
+
+    if (allSingleChats.length === 0) {
+      console.log('Service Worker: 没有单聊角色，跳过本次检测。');
+      return;
+    }
+
+    const frequencyProbabilities = {
+      low: 0.3,
+      medium: 0.5,
+      high: 0.8,
+    };
+
+    const config = globalSettings.backgroundActivityConfig || {};
+    const intervalSeconds = globalSettings.backgroundActivityInterval || 60;
+    const minInterval = intervalSeconds * 1000;
+
+    for (const chat of allSingleChats) {
+      // 检查好友关系
+      if (chat.relationship?.status === 'friend') {
+        const frequency = config[chat.id];
+        if (!frequency) continue;
+
+        const probability = frequencyProbabilities[frequency];
+        if (!probability) continue;
+
+        // 检查距离上次活动的时间
+        const lastActivityTimestamp = chat.settings?.backgroundActivity?.lastActivityTimestamp || 0;
+        const timeSinceLastActivity = Date.now() - lastActivityTimestamp;
+        
+        if (timeSinceLastActivity < minInterval) {
+          continue;
+        }
+
+        // 随机决定是否行动
+        if (Math.random() < probability) {
+          console.log(`Service Worker: 角色 "${chat.name}" 被唤醒，准备独立行动...`);
+          
+          // 更新最后活动时间戳
+          if (!chat.settings) chat.settings = {};
+          if (!chat.settings.backgroundActivity) chat.settings.backgroundActivity = {};
+          chat.settings.backgroundActivity.lastActivityTimestamp = Date.now();
+          
+          // 保存到数据库
+          await putToIndexedDB(db, 'chats', chat);
+          
+          // 通知主线程触发AI行动
+          const clients = await self.clients.matchAll();
+          clients.forEach(client => {
+            client.postMessage({
+              type: 'TRIGGER_BACKGROUND_ACTIVITY',
+              chatId: chat.id
+            });
+          });
+          
+          // 显示通知
+          if (isNotificationSupported) {
+            await self.registration.showNotification(
+              `${chat.name} 正在思考...`,
+              {
+                body: '角色正在后台活动',
+                icon: chat.settings?.aiAvatar || 'https://i.postimg.cc/Kj8JnRcp/267611-CC01-F8-A3-B4910-A2-C2-FFDE479-DC.jpg',
+                tag: `bg-activity-${chat.id}`,
+                silent: true, // 静默通知，不打扰用户
+                data: { chatId: chat.id, type: 'background-activity' }
+              }
+            );
+          }
+        }
+      }
+    }
+
+    console.log('Service Worker: 后台活动检查完成');
+  } catch (error) {
+    console.error('Service Worker: 后台活动运行失败:', error);
+  }
+}
+
+// IndexedDB 辅助函数
+function openIndexedDB() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open('ephone-db', 1);
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result);
+    request.onupgradeneeded = (event) => {
+      const db = event.target.result;
+      // 创建对象存储（如果不存在）
+      if (!db.objectStoreNames.contains('chats')) {
+        db.createObjectStore('chats', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('globalSettings')) {
+        db.createObjectStore('globalSettings', { keyPath: 'id' });
+      }
+    };
+  });
+}
+
+function getFromIndexedDB(db, storeName, key) {
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([storeName], 'readonly');
+    const store = transaction.objectStore(storeName);
+    const request = store.get(key);
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result);
+  });
+}
+
+function getAllFromIndexedDB(db, storeName) {
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([storeName], 'readonly');
+    const store = transaction.objectStore(storeName);
+    const request = store.getAll();
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result || []);
+  });
+}
+
+function putToIndexedDB(db, storeName, data) {
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([storeName], 'readwrite');
+    const store = transaction.objectStore(storeName);
+    const request = store.put(data);
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result);
+  });
 }
 
 // 处理通知点击事件（兼容所有浏览器）

@@ -102,9 +102,80 @@ document.addEventListener("DOMContentLoaded", () => {
             // 打开查岗界面并直接进入该角色的房屋视图
             openKkHouseView(charId);
           }
+        } else if (event.data && event.data.type === 'TRIGGER_BACKGROUND_ACTIVITY') {
+          // 处理来自 Service Worker 的后台活动触发
+          const chatId = event.data.chatId;
+          if (chatId && typeof triggerInactiveAiAction === 'function') {
+            console.log(`收到 Service Worker 的后台活动触发: ${chatId}`);
+            triggerInactiveAiAction(chatId);
+          }
         }
       });
     }
+
+    // 注册 Periodic Background Sync（用于后台活动）
+    async function registerPeriodicBackgroundSync() {
+      try {
+        const registration = await navigator.serviceWorker.ready;
+        
+        // 检查是否支持 Periodic Background Sync
+        if ('periodicSync' in registration) {
+          try {
+            // 请求权限
+            const status = await navigator.permissions.query({ name: 'periodic-background-sync' });
+            if (status.state === 'granted' || status.state === 'prompt') {
+              // 注册定期同步
+              await registration.periodicSync.register('background-activity-periodic', {
+                minInterval: (state.globalSettings.backgroundActivityInterval || 60) * 1000, // 转换为毫秒
+              });
+              console.log('✅ Periodic Background Sync 已注册');
+            } else {
+              console.warn('Periodic Background Sync 权限被拒绝');
+            }
+          } catch (error) {
+            console.warn('Periodic Background Sync 注册失败:', error);
+            // 如果 Periodic Sync 不支持，使用 Background Sync 作为后备
+            if ('sync' in registration) {
+              await registration.sync.register('background-activity');
+              console.log('✅ 使用 Background Sync 作为后备方案');
+            }
+          }
+        } else {
+          console.log('浏览器不支持 Periodic Background Sync，使用 Background Sync');
+          // 使用 Background Sync 作为后备
+          if ('sync' in registration) {
+            await registration.sync.register('background-activity');
+            console.log('✅ Background Sync 已注册');
+          }
+        }
+      } catch (error) {
+        console.error('注册后台同步失败:', error);
+      }
+    }
+
+    // 取消注册 Periodic Background Sync
+    async function unregisterPeriodicBackgroundSync() {
+      try {
+        const registration = await navigator.serviceWorker.ready;
+        
+        if ('periodicSync' in registration) {
+          await registration.periodicSync.unregister('background-activity-periodic');
+          console.log('✅ Periodic Background Sync 已取消注册');
+        }
+        
+        // 也取消 Background Sync
+        if ('sync' in registration) {
+          // 注意：Background Sync 无法直接取消，但可以通过不处理事件来停止
+          console.log('Background Sync 将在下次同步时停止');
+        }
+      } catch (error) {
+        console.error('取消注册后台同步失败:', error);
+      }
+    }
+
+    // 将函数挂载到全局，以便在其他地方使用
+    window.registerPeriodicBackgroundSync = registerPeriodicBackgroundSync;
+    window.unregisterPeriodicBackgroundSync = unregisterPeriodicBackgroundSync;
 
     // 监听 Service Worker 控制器变化（兼容性处理）
     if (navigator.serviceWorker.addEventListener) {
@@ -41354,10 +41425,14 @@ ${chat.settings.aiPersona}
         stopBackgroundSimulation();
         if (state.globalSettings.enableBackgroundActivity) {
           startBackgroundSimulation();
+          // 注册 Periodic Background Sync（如果支持）
+          await registerPeriodicBackgroundSync();
           console.log(
             `后台活动模拟已启动，间隔: ${state.globalSettings.backgroundActivityInterval}秒`
           );
         } else {
+          // 取消注册 Periodic Background Sync
+          await unregisterPeriodicBackgroundSync();
           console.log("后台活动模拟已停止。");
         }
 
