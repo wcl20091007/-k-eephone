@@ -48836,7 +48836,17 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
             }),
           });
 
-          const result = await response.json();
+          // 检查响应内容类型
+          const contentType = response.headers.get("content-type");
+          let result;
+          
+          if (contentType && contentType.includes("application/json")) {
+            result = await response.json();
+          } else {
+            // 如果不是 JSON，读取文本
+            const text = await response.text();
+            throw new Error(text || `HTTP ${response.status}: ${response.statusText}`);
+          }
 
           if (response.ok && result.success) {
             statusText.textContent = `✅ 测试消息已发送！消息 ID: ${result.id}`;
@@ -48844,7 +48854,7 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
             // 清空测试内容
             document.getElementById("scheduled-test-content").value = "";
           } else {
-            throw new Error(result.error || "发送失败");
+            throw new Error(result.error || result.message || "发送失败");
           }
         } catch (error) {
           statusText.textContent = `❌ 错误: ${error.message}`;
@@ -48878,7 +48888,18 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
           const response = await fetch(
             `${workerApiUrl}/api/scheduled-messages?userId=${encodeURIComponent(userId)}`
           );
-          const result = await response.json();
+          
+          // 检查响应内容类型
+          const contentType = response.headers.get("content-type");
+          let result;
+          
+          if (contentType && contentType.includes("application/json")) {
+            result = await response.json();
+          } else {
+            // 如果不是 JSON，读取文本
+            const text = await response.text();
+            throw new Error(text || `HTTP ${response.status}: ${response.statusText}`);
+          }
 
           if (response.ok && result.success) {
             const messages = result.messages || [];
@@ -48902,7 +48923,7 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
 
             alert(`定时任务列表 (共 ${messages.length} 条):\n\n${messagesList}`);
           } else {
-            throw new Error(result.error || "获取失败");
+            throw new Error(result.error || result.message || "获取失败");
           }
         } catch (error) {
           alert(`获取任务列表失败: ${error.message}`);

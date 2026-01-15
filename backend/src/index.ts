@@ -17,7 +17,7 @@ interface ScheduledMessage {
 
 export default {
   // 1. 接收用户定义的定时任务
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     const path = url.pathname;
 
@@ -148,10 +148,8 @@ export default {
           status: 'pending'
         };
         
-        // 异步发送，不阻塞响应
-        setTimeout(async () => {
-          await sendToUser(msg, env);
-        }, 0);
+        // 异步发送，不阻塞响应（使用 ctx.waitUntil 确保任务完成）
+        ctx.waitUntil(sendToUser(msg, env));
 
         return new Response(
           JSON.stringify({ 
@@ -165,7 +163,13 @@ export default {
         );
       }
 
-      return new Response('Not Found', { status: 404, headers: corsHeaders });
+      return new Response(
+        JSON.stringify({ error: 'Not Found', message: 'The requested endpoint does not exist' }),
+        { 
+          status: 404, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
     } catch (error) {
       console.error('Error in fetch handler:', error);
       return new Response(
