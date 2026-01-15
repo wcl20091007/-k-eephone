@@ -34,6 +34,61 @@ export default {
     }
 
     try {
+      // 健康检查端点 - 用于诊断数据库连接
+      if (path === '/api/health' && request.method === 'GET') {
+        try {
+          if (!env.DB) {
+            return new Response(
+              JSON.stringify({ 
+                status: 'error', 
+                message: 'Database not configured',
+                database: 'not_bound'
+              }),
+              { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
+          // 尝试查询数据库表是否存在
+          const testQuery = await env.DB.prepare('SELECT name FROM sqlite_master WHERE type="table" AND name="scheduled_messages"').first();
+          
+          if (!testQuery) {
+            return new Response(
+              JSON.stringify({ 
+                status: 'error', 
+                message: 'Database table not found',
+                database: 'connected',
+                table: 'missing',
+                hint: 'Please run: npx wrangler d1 execute scheduled-messages-db --file=./schema.sql'
+              }),
+              { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
+          // 尝试一个简单的查询
+          const countResult = await env.DB.prepare('SELECT COUNT(*) as count FROM scheduled_messages').first();
+          
+          return new Response(
+            JSON.stringify({ 
+              status: 'ok', 
+              message: 'Database is healthy',
+              database: 'connected',
+              table: 'exists',
+              recordCount: countResult?.count || 0
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        } catch (healthError: any) {
+          return new Response(
+            JSON.stringify({ 
+              status: 'error', 
+              message: 'Database health check failed',
+              error: healthError?.message || String(healthError)
+            }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+
       // 创建定时任务
       if (path === '/api/scheduled-messages' && request.method === 'POST') {
         const body: { userId: string; content: string; delaySeconds: number } = await request.json();
@@ -46,25 +101,50 @@ export default {
           );
         }
 
+        if (!env.DB) {
+          return new Response(
+            JSON.stringify({ error: 'Database not configured. Please check D1 database binding.' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
         const sendAt = Math.floor(Date.now() / 1000) + delaySeconds;
         const createdAt = Math.floor(Date.now() / 1000);
 
-        const result = await env.DB.prepare(
-          'INSERT INTO scheduled_messages (user_id, content, send_at, status, created_at) VALUES (?, ?, ?, ?, ?)'
-        )
-          .bind(userId, content, sendAt, 'pending', createdAt)
-          .run();
+        try {
+          const result = await env.DB.prepare(
+            'INSERT INTO scheduled_messages (user_id, content, send_at, status, created_at) VALUES (?, ?, ?, ?, ?)'
+          )
+            .bind(userId, content, sendAt, 'pending', createdAt)
+            .run();
 
-        return new Response(
-          JSON.stringify({ 
-            success: true, 
-            message: '定时任务已设置',
-            id: result.meta.last_row_id 
-          }),
-          { 
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          if (!result.success) {
+            return new Response(
+              JSON.stringify({ error: 'Failed to insert message into database', details: result.error }),
+              { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
           }
-        );
+
+          return new Response(
+            JSON.stringify({ 
+              success: true, 
+              message: '定时任务已设置',
+              id: result.meta.last_row_id 
+            }),
+            { 
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+            }
+          );
+        } catch (dbError: any) {
+          console.error('Database error in scheduled-messages POST:', dbError);
+          return new Response(
+            JSON.stringify({ 
+              error: 'Database error', 
+              details: dbError?.message || String(dbError)
+            }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
       }
 
       // 获取用户的定时任务列表
@@ -78,18 +158,36 @@ export default {
           );
         }
 
-        const { results } = await env.DB.prepare(
-          'SELECT * FROM scheduled_messages WHERE user_id = ? ORDER BY send_at ASC'
-        )
-          .bind(userId)
-          .all<ScheduledMessage>();
+        if (!env.DB) {
+          return new Response(
+            JSON.stringify({ error: 'Database not configured. Please check D1 database binding.' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
 
-        return new Response(
-          JSON.stringify({ success: true, messages: results }),
-          { 
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-          }
-        );
+        try {
+          const { results } = await env.DB.prepare(
+            'SELECT * FROM scheduled_messages WHERE user_id = ? ORDER BY send_at ASC'
+          )
+            .bind(userId)
+            .all<ScheduledMessage>();
+
+          return new Response(
+            JSON.stringify({ success: true, messages: results }),
+            { 
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+            }
+          );
+        } catch (dbError: any) {
+          console.error('Database error in scheduled-messages GET:', dbError);
+          return new Response(
+            JSON.stringify({ 
+              error: 'Database error', 
+              details: dbError?.message || String(dbError)
+            }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
       }
 
       // 删除定时任务
@@ -127,40 +225,76 @@ export default {
           );
         }
 
+        // 检查数据库连接
+        if (!env.DB) {
+          return new Response(
+            JSON.stringify({ error: 'Database not configured. Please check D1 database binding.' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
         // 立即发送（延迟 0 秒）
         const sendAt = Math.floor(Date.now() / 1000);
         const createdAt = Math.floor(Date.now() / 1000);
 
-        const result = await env.DB.prepare(
-          'INSERT INTO scheduled_messages (user_id, content, send_at, status, created_at) VALUES (?, ?, ?, ?, ?)'
-        )
-          .bind(userId, content, sendAt, 'pending', createdAt)
-          .run();
+        try {
+          const result = await env.DB.prepare(
+            'INSERT INTO scheduled_messages (user_id, content, send_at, status, created_at) VALUES (?, ?, ?, ?, ?)'
+          )
+            .bind(userId, content, sendAt, 'pending', createdAt)
+            .run();
 
-        // 立即触发一次检查（通过 scheduled handler）
-        // 注意：这需要手动触发，或者等待下一次 cron 执行
-        // 为了测试，我们可以立即处理这条消息
-        const msg: ScheduledMessage = { 
-          id: result.meta.last_row_id as number,
-          user_id: userId, 
-          content, 
-          send_at: sendAt,
-          status: 'pending'
-        };
-        
-        // 异步发送，不阻塞响应（使用 ctx.waitUntil 确保任务完成）
-        ctx.waitUntil(sendToUser(msg, env));
-
-        return new Response(
-          JSON.stringify({ 
-            success: true, 
-            message: '测试消息已发送',
-            id: result.meta.last_row_id 
-          }),
-          { 
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          // 检查插入结果
+          if (!result.success) {
+            return new Response(
+              JSON.stringify({ error: 'Failed to insert message into database', details: result.error }),
+              { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
           }
-        );
+
+          const messageId = result.meta.last_row_id;
+          if (!messageId) {
+            return new Response(
+              JSON.stringify({ error: 'Failed to get message ID from database' }),
+              { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
+          // 立即触发一次检查（通过 scheduled handler）
+          // 注意：这需要手动触发，或者等待下一次 cron 执行
+          // 为了测试，我们可以立即处理这条消息
+          const msg: ScheduledMessage = { 
+            id: messageId as number,
+            user_id: userId, 
+            content, 
+            send_at: sendAt,
+            status: 'pending'
+          };
+          
+          // 异步发送，不阻塞响应（使用 ctx.waitUntil 确保任务完成）
+          ctx.waitUntil(sendToUser(msg, env));
+
+          return new Response(
+            JSON.stringify({ 
+              success: true, 
+              message: '测试消息已发送',
+              id: messageId 
+            }),
+            { 
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+            }
+          );
+        } catch (dbError: any) {
+          console.error('Database error in test-scheduled-message:', dbError);
+          return new Response(
+            JSON.stringify({ 
+              error: 'Database error', 
+              details: dbError?.message || String(dbError),
+              hint: 'Please ensure the database table is created. Run: npx wrangler d1 execute scheduled-messages-db --file=./schema.sql'
+            }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
       }
 
       return new Response(
@@ -170,10 +304,17 @@ export default {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         }
       );
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error in fetch handler:', error);
+      const errorMessage = error?.message || String(error);
+      const errorStack = error?.stack || '';
+      
       return new Response(
-        JSON.stringify({ error: 'Internal server error', details: String(error) }),
+        JSON.stringify({ 
+          error: 'Internal server error', 
+          details: errorMessage,
+          ...(process.env.NODE_ENV === 'development' && { stack: errorStack })
+        }),
         { 
           status: 500, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 

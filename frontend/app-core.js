@@ -48854,12 +48854,21 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
             // 清空测试内容
             document.getElementById("scheduled-test-content").value = "";
           } else {
-            throw new Error(result.error || result.message || "发送失败");
+            const errorMsg = result.error || result.message || "发送失败";
+            const errorDetails = result.details ? ` (${result.details})` : '';
+            const errorHint = result.hint ? `\n提示: ${result.hint}` : '';
+            throw new Error(errorMsg + errorDetails + errorHint);
           }
         } catch (error) {
-          statusText.textContent = `❌ 错误: ${error.message}`;
+          const errorMsg = error.message || String(error);
+          statusText.textContent = `❌ 错误: ${errorMsg}`;
           statusText.style.color = "#dc3545";
           console.error("测试发送失败:", error);
+          console.error("完整错误信息:", {
+            message: error.message,
+            stack: error.stack,
+            response: error.response
+          });
         }
       });
 
