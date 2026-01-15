@@ -5817,10 +5817,132 @@ document.addEventListener("DOMContentLoaded", () => {
       // 随机选择一个角色
       const randomChar = characters[Math.floor(Math.random() * characters.length)];
       
+      // 获取API配置
+      const { proxyUrl, apiKey, model, temperature } = state.apiConfig;
+      
+      if (!proxyUrl || !apiKey || !model) {
+        console.error("API配置不完整，无法生成消息");
+        // 如果API配置不完整，直接发送原始内容
+        const message = {
+          role: "assistant",
+          content: msg.content,
+          timestamp: Date.now(),
+        };
+        randomChar.history.push(message);
+        await db.chats.put(randomChar);
+        
+        if (state.activeChatId === randomChar.id) {
+          appendMessage(message, randomChar);
+          renderChatList();
+        } else {
+          randomChar.unreadCount = (randomChar.unreadCount || 0) + 1;
+          await db.chats.put(randomChar);
+          renderChatList();
+        }
+        
+        if (window.showBrowserNotification) {
+          await window.showBrowserNotification(
+            `${randomChar.name} 发来消息`,
+            {
+              body: msg.content,
+              icon: randomChar.settings?.aiAvatar || defaultAvatar,
+              tag: `scheduled-msg-${msg.id}`,
+            }
+          );
+        }
+        return;
+      }
+
+      // 使用测试消息内容作为主题，调用API生成消息
+      let generatedContent = msg.content; // 默认使用原始内容
+      
+      try {
+        // 构建系统提示
+        const systemPrompt = `你是角色"${randomChar.name}"，正在给用户发送一条消息。
+
+# 你的角色设定
+${randomChar.settings.aiPersona || "你是一个友好的角色。"}
+
+# 消息主题/提示
+${msg.content}
+
+# 任务要求
+请根据以上主题/提示，以"${randomChar.name}"的身份和语气，生成一条自然、符合人设的消息发送给用户。消息应该：
+1. 符合角色的性格和人设
+2. 围绕给定的主题/提示展开
+3. 自然流畅，就像角色主动发来的消息
+4. 长度适中（50-200字左右）
+
+请直接返回消息内容，不要添加任何解释或标记。`;
+
+        // 构建消息数组
+        const messagesForApi = [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: "请生成一条消息。" }
+        ];
+
+        // 判断是否为Gemini API
+        const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models";
+        const isGemini = proxyUrl === GEMINI_API_URL || proxyUrl?.includes("generativelanguage.googleapis.com");
+        
+        let requestUrl, requestHeaders, requestBody;
+        
+        if (isGemini) {
+          requestUrl = `${GEMINI_API_URL}/${model}:generateContent?key=${apiKey}`;
+          requestHeaders = { "Content-Type": "application/json" };
+          requestBody = {
+            contents: [{ role: "user", parts: [{ text: systemPrompt + "\n\n请生成一条消息。" }] }],
+            generationConfig: {
+              temperature: parseFloat(temperature) || 0.8,
+            },
+          };
+        } else {
+          requestUrl = `${proxyUrl}/v1/chat/completions`;
+          requestHeaders = {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+          };
+          requestBody = {
+            model: model,
+            messages: messagesForApi,
+            temperature: parseFloat(temperature) || 0.8,
+            stream: false,
+          };
+        }
+
+        // 调用API
+        const response = await fetch(requestUrl, {
+          method: "POST",
+          headers: requestHeaders,
+          body: JSON.stringify(requestBody),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          generatedContent = isGemini
+            ? data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim()
+            : data?.choices?.[0]?.message?.content?.trim();
+          
+          if (!generatedContent) {
+            console.warn("API返回内容为空，使用原始内容");
+            generatedContent = msg.content;
+          }
+        } else {
+          const errorText = await response.text();
+          console.error("API调用失败:", errorText);
+          // API失败时使用原始内容
+          generatedContent = msg.content;
+        }
+      } catch (apiError) {
+        console.error("生成消息时出错:", apiError);
+        // 出错时使用原始内容
+        generatedContent = msg.content;
+      }
+      
       // 创建消息对象
       const message = {
         role: "assistant",
-        content: msg.content,
+        content: generatedContent,
         timestamp: Date.now(),
       };
 
@@ -5844,14 +5966,15 @@ document.addEventListener("DOMContentLoaded", () => {
         await window.showBrowserNotification(
           `${randomChar.name} 发来消息`,
           {
-            body: msg.content,
+            body: generatedContent,
             icon: randomChar.settings?.aiAvatar || defaultAvatar,
             tag: `scheduled-msg-${msg.id}`,
           }
         );
       }
 
-      console.log(`✅ 定时消息已发送到角色 "${randomChar.name}": ${msg.content}`);
+      console.log(`✅ 定时消息已发送到角色 "${randomChar.name}": ${generatedContent}`);
+      console.log(`   原始主题: ${msg.content}`);
     } catch (error) {
       console.error("处理定时消息失败:", error);
     }
