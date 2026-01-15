@@ -6,7 +6,7 @@ compatibility_date = "2024-01-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "scheduled-messages-db"
-database_id = ""  # 部署后会自动生成，需要替换
+database_id = "26c6364d-b790-47b0-af36-3da2c2a3c575"  # 部署后会自动生成，需要替换
 
 # Cron 触发器 - 每分钟执行一次
 [triggers]
