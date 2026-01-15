@@ -5721,47 +5721,70 @@ document.addEventListener("DOMContentLoaded", () => {
       clearInterval(scheduledMessagesPollingInterval);
     }
 
-    // 每10秒检查一次新消息
-    scheduledMessagesPollingInterval = setInterval(async () => {
-      if (!state.apiConfig.enableScheduledMessages) {
-        clearInterval(scheduledMessagesPollingInterval);
-        scheduledMessagesPollingInterval = null;
-        return;
-      }
+      // 每10秒检查一次新消息
+      scheduledMessagesPollingInterval = setInterval(async () => {
+        if (!state.apiConfig.enableScheduledMessages) {
+          clearInterval(scheduledMessagesPollingInterval);
+          scheduledMessagesPollingInterval = null;
+          return;
+        }
 
-      try {
-        const workerApiUrl = state.apiConfig.workerApiUrl || DEFAULT_WORKER_API_URL;
-        const userId = state.apiConfig.scheduledUserId || getDeviceCode();
+        try {
+          const workerApiUrl = state.apiConfig.workerApiUrl || DEFAULT_WORKER_API_URL;
+          const userId = state.apiConfig.scheduledUserId || getDeviceCode();
 
-        if (!workerApiUrl || !userId) return;
+          if (!workerApiUrl || !userId) return;
 
-        const response = await fetch(
-          `${workerApiUrl}/api/scheduled-messages?userId=${encodeURIComponent(userId)}&checkNew=true`
-        );
-
-        if (response.ok) {
-          const result = await response.json();
-          if (result.success && result.messages && result.messages.length > 0) {
-            // 处理新消息
-            for (const msg of result.messages) {
-              // 避免重复处理
-              if (!lastCheckedMessageIds.has(msg.id)) {
-                lastCheckedMessageIds.add(msg.id);
-                await handleScheduledMessage(msg);
+          // 先检查是否有待发送但时间已到的消息（前端主动检查）
+          const allMessagesResponse = await fetch(
+            `${workerApiUrl}/api/scheduled-messages?userId=${encodeURIComponent(userId)}`
+          );
+          
+          if (allMessagesResponse.ok) {
+            const allResult = await allMessagesResponse.json();
+            if (allResult.success && allResult.messages) {
+              const now = Math.floor(Date.now() / 1000);
+              // 检查是否有待发送但时间已过的消息
+              const overdueMessages = allResult.messages.filter(
+                msg => msg.status === 'pending' && msg.send_at <= now
+              );
+              
+              if (overdueMessages.length > 0) {
+                console.log(`发现 ${overdueMessages.length} 条已到期但未发送的消息，等待后端处理...`);
+                // 等待一下让后端处理，然后检查新消息
+                await new Promise(resolve => setTimeout(resolve, 2000));
               }
             }
+          }
 
-            // 清理旧的ID（只保留最近100个）
-            if (lastCheckedMessageIds.size > 100) {
-              const idsArray = Array.from(lastCheckedMessageIds);
-              lastCheckedMessageIds = new Set(idsArray.slice(-100));
+          // 检查新发送的消息
+          const response = await fetch(
+            `${workerApiUrl}/api/scheduled-messages?userId=${encodeURIComponent(userId)}&checkNew=true`
+          );
+
+          if (response.ok) {
+            const result = await response.json();
+            if (result.success && result.messages && result.messages.length > 0) {
+              // 处理新消息
+              for (const msg of result.messages) {
+                // 避免重复处理
+                if (!lastCheckedMessageIds.has(msg.id)) {
+                  lastCheckedMessageIds.add(msg.id);
+                  await handleScheduledMessage(msg);
+                }
+              }
+
+              // 清理旧的ID（只保留最近100个）
+              if (lastCheckedMessageIds.size > 100) {
+                const idsArray = Array.from(lastCheckedMessageIds);
+                lastCheckedMessageIds = new Set(idsArray.slice(-100));
+              }
             }
           }
+        } catch (error) {
+          console.error("定时消息轮询错误:", error);
         }
-      } catch (error) {
-        console.error("定时消息轮询错误:", error);
-      }
-    }, 10000); // 每10秒检查一次
+      }, 10000); // 每10秒检查一次
   }
 
   async function handleScheduledMessage(msg) {
@@ -5814,6 +5837,45 @@ document.addEventListener("DOMContentLoaded", () => {
       console.log(`✅ 定时消息已发送到角色 "${randomChar.name}": ${msg.content}`);
     } catch (error) {
       console.error("处理定时消息失败:", error);
+    }
+  }
+
+  // 实时时间显示器
+  let timeDisplayInterval = null;
+  function startTimeDisplay() {
+    // 如果已经在运行，先停止
+    if (timeDisplayInterval) {
+      clearInterval(timeDisplayInterval);
+    }
+
+    // 立即更新一次
+    updateTimeDisplay();
+
+    // 每秒更新一次
+    timeDisplayInterval = setInterval(updateTimeDisplay, 1000);
+  }
+
+  function updateTimeDisplay() {
+    const now = new Date();
+    const timeDisplay = document.getElementById("current-time-display");
+    const timestampDisplay = document.getElementById("current-timestamp-display");
+    
+    if (timeDisplay && timestampDisplay) {
+      // 显示本地时间
+      const localTimeStr = now.toLocaleString("zh-CN", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+      });
+      timeDisplay.textContent = localTimeStr;
+
+      // 显示Unix时间戳（秒）
+      const unixTimestamp = Math.floor(now.getTime() / 1000);
+      timestampDisplay.textContent = `Unix 时间戳: ${unixTimestamp}`;
     }
   }
 
@@ -5937,6 +5999,9 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("scheduled-specific-time").value = defaultTimeStr;
     document.getElementById("scheduled-messages-details").style.display =
       state.apiConfig.enableScheduledMessages ? "block" : "none";
+
+    // 启动实时时间显示器
+    startTimeDisplay();
 
     // 启动定时消息轮询（如果启用了定时发送）
     if (state.apiConfig.enableScheduledMessages) {
@@ -49266,16 +49331,39 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
               return;
             }
 
-            // 格式化显示任务列表
+            // 格式化显示任务列表（包含时间对比）
+            const now = Math.floor(Date.now() / 1000);
             const messagesList = messages
               .map((msg) => {
-                const sendAt = new Date(msg.send_at * 1000).toLocaleString("zh-CN");
+                const sendAtDate = new Date(msg.send_at * 1000);
+                const sendAtStr = sendAtDate.toLocaleString("zh-CN", {
+                  year: "numeric",
+                  month: "2-digit",
+                  day: "2-digit",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  second: "2-digit",
+                });
                 const statusMap = {
                   pending: "⏳ 待发送",
                   sent: "✅ 已发送",
                   failed: "❌ 发送失败",
                 };
-                return `[${statusMap[msg.status] || msg.status}] ${sendAt}\n${msg.content}`;
+                
+                // 计算时间差
+                const timeDiff = msg.send_at - now;
+                let timeInfo = "";
+                if (msg.status === 'pending') {
+                  if (timeDiff > 0) {
+                    const minutes = Math.floor(timeDiff / 60);
+                    const seconds = timeDiff % 60;
+                    timeInfo = ` (还有 ${minutes}分${seconds}秒)`;
+                  } else {
+                    timeInfo = ` (已过期 ${Math.abs(Math.floor(timeDiff / 60))}分钟)`;
+                  }
+                }
+                
+                return `[${statusMap[msg.status] || msg.status}]${timeInfo}\n发送时间: ${sendAtStr}\nUnix: ${msg.send_at}\n内容: ${msg.content}`;
               })
               .join("\n\n");
 
