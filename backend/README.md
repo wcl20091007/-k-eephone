@@ -121,7 +121,7 @@ Worker 配置了每分钟执行一次的 cron 触发器（`* * * * *`），会�
 
 在 `src/index.ts` 的 `sendToUser` 方法中，你可以自定义实际的发送逻辑，例如：
 - 调用 AI 接口生成回复
-- 通过 Webhook 发送
+- 通过 Webhook 发送3
 - 通过 WebSocket 推送
 - 发送浏览器通知
 
