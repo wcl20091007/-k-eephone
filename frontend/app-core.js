@@ -48820,23 +48820,32 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
         ) || 10;
 
         if (!workerApiUrl) {
-          await showCustomAlert("错误", "Worker API 地址未配置");
+          if (window.showCustomAlert) {
+            await window.showCustomAlert("错误", "Worker API 地址未配置");
+          } else {
+            alert("Worker API 地址未配置");
+          }
           return;
         }
 
         if (!content) {
-          await showCustomAlert("提示", "请先填写测试消息内容");
+          if (window.showCustomAlert) {
+            await window.showCustomAlert("提示", "请先填写测试消息内容");
+          } else {
+            alert("请先填写测试消息内容");
+          }
           return;
         }
 
         const statusDiv = document.getElementById("scheduled-messages-status");
         const statusText = document.getElementById("scheduled-messages-status-text");
         statusDiv.style.display = "block";
-        statusText.textContent = "正在发送测试消息...";
+        statusText.textContent = "正在设置定时消息...";
         statusText.style.color = "#007bff";
 
         try {
-          const response = await fetch(`${workerApiUrl}/api/test-scheduled-message`, {
+          // 使用延迟时间接口，而不是立即发送接口
+          const response = await fetch(`${workerApiUrl}/api/scheduled-messages`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -48844,6 +48853,7 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
             body: JSON.stringify({
               userId,
               content,
+              delaySeconds, // 使用延迟秒数
             }),
           });
 
@@ -48860,17 +48870,30 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
           }
 
           if (response.ok && result.success) {
-            statusText.textContent = `✅ 测试消息已发送！消息 ID: ${result.id}`;
+            const sendTime = new Date(Date.now() + delaySeconds * 1000);
+            const sendTimeStr = sendTime.toLocaleString("zh-CN", {
+              year: "numeric",
+              month: "2-digit",
+              day: "2-digit",
+              hour: "2-digit",
+              minute: "2-digit",
+              second: "2-digit",
+            });
+            statusText.textContent = `✅ 定时消息已设置！消息 ID: ${result.id}`;
             statusText.style.color = "#28a745";
             // 清空测试内容
             document.getElementById("scheduled-test-content").value = "";
             // 显示成功弹窗
-            await showCustomAlert(
-              "定时消息已发送", 
-              `✅ 测试消息已成功发送！\n\n消息 ID: ${result.id}\n内容: ${content}\n\n消息将在指定时间发送。`
-            );
+            if (window.showCustomAlert) {
+              await window.showCustomAlert(
+                "定时消息已设置", 
+                `✅ 定时消息已成功设置！\n\n消息 ID: ${result.id}\n内容: ${content}\n延迟时间: ${delaySeconds} 秒\n预计发送时间: ${sendTimeStr}\n\n消息将在 ${delaySeconds} 秒后自动发送。`
+              );
+            } else {
+              alert(`✅ 定时消息已成功设置！\n\n消息 ID: ${result.id}\n内容: ${content}\n延迟时间: ${delaySeconds} 秒\n预计发送时间: ${sendTimeStr}`);
+            }
           } else {
-            const errorMsg = result.error || result.message || "发送失败";
+            const errorMsg = result.error || result.message || "设置失败";
             const errorDetails = result.details ? ` (${result.details})` : '';
             const errorHint = result.hint ? `\n提示: ${result.hint}` : '';
             throw new Error(errorMsg + errorDetails + errorHint);
@@ -48880,7 +48903,11 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
           statusText.textContent = `❌ 错误: ${errorMsg}`;
           statusText.style.color = "#dc3545";
           // 显示错误弹窗
-          await showCustomAlert("发送失败", `❌ 定时消息发送失败：\n\n${errorMsg}`);
+          if (window.showCustomAlert) {
+            await window.showCustomAlert("设置失败", `❌ 定时消息设置失败：\n\n${errorMsg}`);
+          } else {
+            alert(`❌ 定时消息设置失败：\n\n${errorMsg}`);
+          }
           console.error("测试发送失败:", error);
           console.error("完整错误信息:", {
             message: error.message,
