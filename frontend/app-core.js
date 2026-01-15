@@ -5711,6 +5711,112 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  // --- 定时消息轮询功能（需要在 renderApiSettings 之前定义）---
+  let scheduledMessagesPollingInterval = null;
+  let lastCheckedMessageIds = new Set(); // 记录已处理的消息ID
+
+  function startScheduledMessagesPolling() {
+    // 如果已经在运行，先停止
+    if (scheduledMessagesPollingInterval) {
+      clearInterval(scheduledMessagesPollingInterval);
+    }
+
+    // 每10秒检查一次新消息
+    scheduledMessagesPollingInterval = setInterval(async () => {
+      if (!state.apiConfig.enableScheduledMessages) {
+        clearInterval(scheduledMessagesPollingInterval);
+        scheduledMessagesPollingInterval = null;
+        return;
+      }
+
+      try {
+        const workerApiUrl = state.apiConfig.workerApiUrl || DEFAULT_WORKER_API_URL;
+        const userId = state.apiConfig.scheduledUserId || getDeviceCode();
+
+        if (!workerApiUrl || !userId) return;
+
+        const response = await fetch(
+          `${workerApiUrl}/api/scheduled-messages?userId=${encodeURIComponent(userId)}&checkNew=true`
+        );
+
+        if (response.ok) {
+          const result = await response.json();
+          if (result.success && result.messages && result.messages.length > 0) {
+            // 处理新消息
+            for (const msg of result.messages) {
+              // 避免重复处理
+              if (!lastCheckedMessageIds.has(msg.id)) {
+                lastCheckedMessageIds.add(msg.id);
+                await handleScheduledMessage(msg);
+              }
+            }
+
+            // 清理旧的ID（只保留最近100个）
+            if (lastCheckedMessageIds.size > 100) {
+              const idsArray = Array.from(lastCheckedMessageIds);
+              lastCheckedMessageIds = new Set(idsArray.slice(-100));
+            }
+          }
+        }
+      } catch (error) {
+        console.error("定时消息轮询错误:", error);
+      }
+    }, 10000); // 每10秒检查一次
+  }
+
+  async function handleScheduledMessage(msg) {
+    try {
+      // 获取所有非群聊的角色
+      const characters = Object.values(state.chats).filter(chat => !chat.isGroup);
+      
+      if (characters.length === 0) {
+        console.log("没有可用的角色来发送定时消息");
+        return;
+      }
+
+      // 随机选择一个角色
+      const randomChar = characters[Math.floor(Math.random() * characters.length)];
+      
+      // 创建消息对象
+      const message = {
+        role: "assistant",
+        content: msg.content,
+        timestamp: Date.now(),
+      };
+
+      // 添加到聊天历史
+      randomChar.history.push(message);
+      await db.chats.put(randomChar);
+
+      // 如果用户正在查看这个聊天，实时更新界面
+      if (state.activeChatId === randomChar.id) {
+        appendMessage(message, randomChar);
+        renderChatList(); // 更新聊天列表
+      } else {
+        // 更新未读数
+        randomChar.unreadCount = (randomChar.unreadCount || 0) + 1;
+        await db.chats.put(randomChar);
+        renderChatList(); // 更新聊天列表显示未读数
+      }
+
+      // 显示浏览器通知
+      if (window.showBrowserNotification) {
+        await window.showBrowserNotification(
+          `${randomChar.name} 发来消息`,
+          {
+            body: msg.content,
+            icon: randomChar.settings?.aiAvatar || defaultAvatar,
+            tag: `scheduled-msg-${msg.id}`,
+          }
+        );
+      }
+
+      console.log(`✅ 定时消息已发送到角色 "${randomChar.name}": ${msg.content}`);
+    } catch (error) {
+      console.error("处理定时消息失败:", error);
+    }
+  }
+
   function renderApiSettings() {
     // 1. 更新 API 相关的输入框
     document.getElementById("proxy-url").value =
@@ -48787,112 +48893,6 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
       });
 
     // --- 定时发送设置界面的事件绑定 ---
-
-    // 0. 定时消息轮询功能
-    let scheduledMessagesPollingInterval = null;
-    let lastCheckedMessageIds = new Set(); // 记录已处理的消息ID
-
-    function startScheduledMessagesPolling() {
-      // 如果已经在运行，先停止
-      if (scheduledMessagesPollingInterval) {
-        clearInterval(scheduledMessagesPollingInterval);
-      }
-
-      // 每10秒检查一次新消息
-      scheduledMessagesPollingInterval = setInterval(async () => {
-        if (!state.apiConfig.enableScheduledMessages) {
-          clearInterval(scheduledMessagesPollingInterval);
-          scheduledMessagesPollingInterval = null;
-          return;
-        }
-
-        try {
-          const workerApiUrl = state.apiConfig.workerApiUrl || DEFAULT_WORKER_API_URL;
-          const userId = state.apiConfig.scheduledUserId || getDeviceCode();
-
-          if (!workerApiUrl || !userId) return;
-
-          const response = await fetch(
-            `${workerApiUrl}/api/scheduled-messages?userId=${encodeURIComponent(userId)}&checkNew=true`
-          );
-
-          if (response.ok) {
-            const result = await response.json();
-            if (result.success && result.messages && result.messages.length > 0) {
-              // 处理新消息
-              for (const msg of result.messages) {
-                // 避免重复处理
-                if (!lastCheckedMessageIds.has(msg.id)) {
-                  lastCheckedMessageIds.add(msg.id);
-                  await handleScheduledMessage(msg);
-                }
-              }
-
-              // 清理旧的ID（只保留最近100个）
-              if (lastCheckedMessageIds.size > 100) {
-                const idsArray = Array.from(lastCheckedMessageIds);
-                lastCheckedMessageIds = new Set(idsArray.slice(-100));
-              }
-            }
-          }
-        } catch (error) {
-          console.error("定时消息轮询错误:", error);
-        }
-      }, 10000); // 每10秒检查一次
-    }
-
-    async function handleScheduledMessage(msg) {
-      try {
-        // 获取所有非群聊的角色
-        const characters = Object.values(state.chats).filter(chat => !chat.isGroup);
-        
-        if (characters.length === 0) {
-          console.log("没有可用的角色来发送定时消息");
-          return;
-        }
-
-        // 随机选择一个角色
-        const randomChar = characters[Math.floor(Math.random() * characters.length)];
-        
-        // 创建消息对象
-        const message = {
-          role: "assistant",
-          content: msg.content,
-          timestamp: Date.now(),
-        };
-
-        // 添加到聊天历史
-        randomChar.history.push(message);
-        await db.chats.put(randomChar);
-
-        // 如果用户正在查看这个聊天，实时更新界面
-        if (state.activeChatId === randomChar.id) {
-          appendMessage(message, randomChar);
-          renderChatList(); // 更新聊天列表
-        } else {
-          // 更新未读数
-          randomChar.unreadCount = (randomChar.unreadCount || 0) + 1;
-          await db.chats.put(randomChar);
-          renderChatList(); // 更新聊天列表显示未读数
-        }
-
-        // 显示浏览器通知
-        if (window.showBrowserNotification) {
-          await window.showBrowserNotification(
-            `${randomChar.name} 发来消息`,
-            {
-              body: msg.content,
-              icon: randomChar.settings?.aiAvatar || defaultAvatar,
-              tag: `scheduled-msg-${msg.id}`,
-            }
-          );
-        }
-
-        console.log(`✅ 定时消息已发送到角色 "${randomChar.name}": ${msg.content}`);
-      } catch (error) {
-        console.error("处理定时消息失败:", error);
-      }
-    }
 
     // 1. 定时发送总开关
     document
