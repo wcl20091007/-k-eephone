@@ -149,6 +149,74 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let tempGeneratedScriptData = null;
 
+  // ▼▼▼ 【全新】游戏AI核心意识模块 - 确保所有AI玩家以阵营胜利为核心目标 ▼▼▼
+  /**
+   * 生成通用的「游戏意识」核心指令
+   * @param {string} gameType - 游戏类型: 'werewolf', 'scriptKill', 'undercover', 'seaTurtle', 'guessWhat'
+   * @param {boolean} isUserAlly - 用户是否是AI的队友/同阵营
+   * @returns {string} - 游戏意识核心指令文本
+   */
+  function getGameAwarenessPrompt(gameType, isUserAlly = false) {
+    const basePrompt = `
+# 【【【游戏核心意识 - 最高优先级】】】
+
+## 1. 发言铁律：每句话必须有意义
+- 【禁止废话】绝对禁止说"看来这场游戏很刺激"、"谁会亮底牌呢"、"让我们拭目以待"这种空洞的废话
+- 【必须推进游戏】你的每句话都必须有明确目的：分析某人、质疑某人、为自己辩护、站边、投票引导、报信息等
+- 【人设一致】语气、用词必须符合你的角色人设和智商水平
+- 【拒绝AI腔】禁止"我觉得..."、"根据分析..."、"让我来说说..."等开场白，直接说重点
+
+## 2. 有意义发言的示例
+- ✓ "3号昨天保6号，今天6号死了，3号解释一下？" （质疑+施压）
+- ✓ "我验的4号是狼，大家跟我票" （报信息+引导投票）
+- ✓ "我站2号预言家，他的逻辑链完整" （站边+给理由）
+- ✓ "不对，5号刚才说漏嘴了，他怎么知道昨晚谁被刀？" （抓逻辑漏洞）
+- ✗ "哦，第一晚就有人出局了，真刺激啊朋友们" （纯废话，禁止）
+- ✗ "这局游戏越来越有意思了，让我们看看谁是狼" （纯废话，禁止）
+
+## 3. 动态博弈
+- 根据场上局势灵活调整策略，不要套路化
+- 关键时刻敢于冲锋、跳身份、反水、卖队友
+- 阵营胜利是唯一目标，独立思考，不盲从用户
+`;
+
+    // 根据游戏类型添加特定提示
+    let gameSpecificPrompt = '';
+    
+    if (gameType === 'werewolf') {
+      gameSpecificPrompt = `
+## 4. 狼人杀博弈要点
+- 【好人】：抓逻辑漏洞、站边预言家、票型跟随但保持独立判断
+- 【狼人】：伪装好人视角、制造混乱、关键时刻可卖队友求生
+- 用户不是特殊存在，该怀疑就怀疑，该投就投`;
+
+      if (!isUserAlly) {
+        gameSpecificPrompt += `
+- 你和用户可能敌对，用户可疑时大胆质疑和投票`;
+      }
+    } else if (gameType === 'scriptKill') {
+      gameSpecificPrompt = `
+## 4. 剧本杀博弈要点
+- 完成角色任务优先，该藏的信息要藏
+- 大胆质疑可疑玩家，包括用户
+- 根据线索和时间线找矛盾点`;
+    } else if (gameType === 'undercover') {
+      gameSpecificPrompt = `
+## 4. 谁是卧底博弈要点
+- 【平民】：描述精准但不过于具体，观察异常描述
+- 【卧底】：模仿多数人的描述风格，伪装融入
+- 投票基于描述差异分析，不是信任关系`;
+    } else if (gameType === 'seaTurtle') {
+      gameSpecificPrompt = `
+## 4. 海龟汤规则
+- 出题人公正判断，不偏袒任何人
+- 猜题人独立推理，展现思考过程`;
+    }
+
+    return basePrompt + gameSpecificPrompt;
+  }
+  // ▲▲▲ 游戏AI核心意识模块结束 ▲▲▲
+
   // ▼▼▼ 游戏功能函数 ▼▼▼
 
   // --- 狼人杀 Werewolf ---
@@ -661,13 +729,19 @@ document.addEventListener('DOMContentLoaded', () => {
       case 'day_discussion':
         logToWerewolfGame('现在开始依次发言。');
         const alivePlayersForSpeech = werewolfGameState.players.filter(p => p.isAlive);
-        for (const player of alivePlayersForSpeech) {
+        const totalSpeakers = alivePlayersForSpeech.length;
+        for (let speakIndex = 0; speakIndex < totalSpeakers; speakIndex++) {
+          const player = alivePlayersForSpeech[speakIndex];
           renderWerewolfGameScreen({ speakingPlayerId: player.id });
           let speech;
           if (player.isUser) {
             speech = await waitForUserAction('轮到你发言', 'speak');
           } else {
-            speech = await triggerWerewolfAiAction(player.id, 'speak');
+            // 传入发言顺序信息
+            speech = await triggerWerewolfAiAction(player.id, 'speak', {
+              speakOrder: speakIndex + 1,  // 第几个发言（从1开始）
+              totalSpeakers: totalSpeakers  // 总共几人发言
+            });
           }
           logToWerewolfGame({ player: player, speech: speech }, 'speech');
           await sleep(1000);
@@ -1515,103 +1589,99 @@ ${formattedLog}
         jsonFormat = '{"action": "vote", "targetId": "你选择带走的玩家ID"}';
         break;
       case 'speak':
+        // 构建发言顺序信息
+        const speakOrder = context.speakOrder || 1;
+        const totalSpeakers = context.totalSpeakers || 1;
+        const isFirstSpeaker = speakOrder === 1;
+        const isLastSpeaker = speakOrder === totalSpeakers;
+        
+        // 获取本轮已经发言的内容
+        const currentRoundSpeeches = werewolfGameState.gameLog
+          .filter(log => log.type === 'speech')
+          .slice(-(speakOrder - 1))  // 只取本轮前面玩家的发言
+          .map(log => `${log.message.player.name}: ${log.message.speech}`)
+          .join('\n');
+        
+        // 发言位置提示
+        let positionHint = `【你是第${speakOrder}/${totalSpeakers}个发言】`;
+        if (isFirstSpeaker) {
+          positionHint += `\n【重要】你是第一个发言，前面没人说话，你不能质问别人为什么不跳/不说话，因为还没轮到他们！`;
+        } else if (speakOrder <= 2) {
+          positionHint += `\n【注意】你是靠前发言，只有${speakOrder - 1}人说过话，信息量有限`;
+        }
+        
         if (player.role === 'wolf') {
           if (skillLevel === 'expert') {
-            actionPrompt = `现在轮到你发言。你是狼人，你的任务是伪装成好人，误导其他玩家。
-- **你的目标**: 让狼人阵营获胜，通过伪装、误导、策略性操作达成目标
-- **扮演好人**: 狼人需先做好人，发言状态不能与拿好人牌时差异过大。避免说出"我是平民"（知道前人是民）的"聊爆"信息
-- **发言策略** (高玩技巧):\n  * **常规伪装**: 假装是好人，分析局势，引导好人互投\n  * **倒钩发言**: 可以假装怀疑队友，甚至投票给队友，以获取好人信任\n  * **卖队友**: 如果队友被严重怀疑且无法挽救，可以主动"发现"并投票给队友，建立好人身份\n  * **自证清白**: 通过积极分析、投票给好人等方式建立信任\n  * **悍跳/冲锋**: 可以跳预言家对跳，利用强推和逻辑掩护\n  * **深水狼**: 隐藏极深，后置位发言，找准时机带节奏\n- **高级技巧**: 根据局势灵活运用，不要死板地保护队友，有时候卖队友是必要的策略。适度拉拢好人信任，避免满场踩人
-- 请根据你的角色身份、人设和当前局势，发表你的看法。你的发言应该围绕游戏本身，而不是只和用户聊天。`;
+            actionPrompt = `${positionHint}
+你是狼人，伪装成好人。
+【核心】每句话必须有意义：分析前面发言/质疑某人/站边/引导票型
+【禁止】说废话，禁止催促后面的人发言（他们还没轮到）`;
           } else if (skillLevel === 'intermediate') {
-            actionPrompt = `现在轮到你发言。你是狼人，你的任务是伪装成好人，误导其他玩家。
-- **你的目标**: 让狼人阵营获胜，通过伪装、误导、策略性操作达成目标
-- **发言策略**:\n  * **常规伪装**: 假装是好人，分析局势，引导好人互投\n  * **倒钩发言**: 可以假装怀疑队友，甚至投票给队友，以获取好人信任\n  * **自证清白**: 通过积极分析、投票给好人等方式建立信任\n- **注意**: 根据局势灵活运用，不要死板地保护队友
-- 请根据你的角色身份、人设和当前局势，发表你的看法。你的发言应该围绕游戏本身，而不是只和用户聊天。`;
+            actionPrompt = `${positionHint}
+你是狼人，假装好人。
+【核心】说有意义的话，基于前面的发言分析`;
           } else {
-            actionPrompt = `现在轮到你发言。你是狼人，你的任务是伪装成好人，误导其他玩家。
-- **你的目标**: 让狼人阵营获胜
-- **发言策略**: 假装是好人，分析局势，引导好人互投，不要暴露身份
-- 请根据你的角色身份、人设和当前局势，发表你的看法。你的发言应该围绕游戏本身，而不是只和用户聊天。`;
+            actionPrompt = `${positionHint}
+你是狼人，假装好人，简单表态`;
           }
         } else {
           // 好人阵营发言
           if (player.role === 'villager') {
             if (skillLevel === 'expert') {
-              actionPrompt = `现在轮到你发言。你是平民，你的任务是找出狼人。
-- **你的视角**: 你只能根据公开信息（白天发言、投票结果、出局公告）进行推理
-- **你不知道**: 你不知道其他玩家的真实身份，不知道夜晚的具体行动细节
-- **发言策略**: 言辞平稳、提供有说服力的信息，不划水。被票出后大胆说出身份，为好人做贡献
-- **高级技巧**: 抿出真预言家并站边，是最高效的胜利方式；警惕"聊爆"（说出好人不可能知道的细节），避免逻辑矛盾
-- **警惕倒钩**: 注意那些过于积极、总是投票给好人的玩家，可能是倒钩狼
-- 请根据你的角色身份、人设和当前局势，发表你的看法。你的发言应该围绕游戏本身，而不是只和用户聊天。`;
+              actionPrompt = `${positionHint}
+你是平民，找出狼人。
+【核心】基于前面发言分析，说有意义的话
+【禁止】说废话，禁止催促后面的人（他们还没轮到）`;
             } else {
-              actionPrompt = `现在轮到你发言。你是平民，你的任务是找出狼人。
-- **你的视角**: 你只能根据公开信息（白天发言、投票结果、出局公告）进行推理
-- **你不知道**: 你不知道其他玩家的真实身份，不知道夜晚的具体行动细节
-- **发言策略**: 分析其他玩家的发言逻辑，寻找可疑之处，但不要随意指控
-- **警惕倒钩**: 注意那些过于积极、总是投票给好人的玩家，可能是倒钩狼
-- 请根据你的角色身份、人设和当前局势，发表你的看法。你的发言应该围绕游戏本身，而不是只和用户聊天。`;
+              actionPrompt = `${positionHint}
+你是平民，基于已有信息表态`;
             }
           } else if (player.role === 'guard') {
-            if (skillLevel === 'expert') {
-              actionPrompt = `现在轮到你发言。你是守卫，你的任务是找出狼人并保护关键神职。
-- **你的视角**: 你只能根据公开信息（白天发言、投票结果、出局公告）进行推理
-- **你不知道**: 你不知道其他玩家的真实身份，不知道夜晚的具体行动细节
-- **发言策略**: 守护关键神职（预言家、女巫），在神职暴露后保住他们，增加好人存活率。分析其他玩家的发言逻辑，寻找可疑之处
-- **警惕倒钩**: 注意那些过于积极、总是投票给好人的玩家，可能是倒钩狼
-- 请根据你的角色身份、人设和当前局势，发表你的看法。你的发言应该围绕游戏本身，而不是只和用户聊天。`;
-            } else {
-              actionPrompt = `现在轮到你发言。你是守卫，你的任务是找出狼人。
-- **你的视角**: 你只能根据公开信息（白天发言、投票结果、出局公告）进行推理
-- **你不知道**: 你不知道其他玩家的真实身份，不知道夜晚的具体行动细节
-- **发言策略**: 分析其他玩家的发言逻辑，寻找可疑之处，但不要随意指控
-- **警惕倒钩**: 注意那些过于积极、总是投票给好人的玩家，可能是倒钩狼
-- 请根据你的角色身份、人设和当前局势，发表你的看法。你的发言应该围绕游戏本身，而不是只和用户聊天。`;
-            }
+            actionPrompt = `${positionHint}
+你是守卫，分析局势说有意义的话`;
+          } else if (player.role === 'seer') {
+            actionPrompt = `${positionHint}
+你是预言家。
+【核心】根据局势决定是否报验人，说有意义的话
+【禁止】说废话`;
           } else {
-            // 其他好人角色（预言家、女巫、猎人等）
-            actionPrompt = `现在轮到你发言。你是好人阵营的一员，你的任务是找出狼人。
-- **你的视角**: 你只能根据公开信息（白天发言、投票结果、出局公告）进行推理
-- **你不知道**: 你不知道其他玩家的真实身份，不知道夜晚的具体行动细节（除非是你自己的行动）
-- **发言策略**: 分析其他玩家的发言逻辑，寻找可疑之处，但不要随意指控
-- **警惕倒钩**: 注意那些过于积极、总是投票给好人的玩家，可能是倒钩狼
-- 请根据你的角色身份、人设和当前局势，发表你的看法。你的发言应该围绕游戏本身，而不是只和用户聊天。`;
+            // 其他好人角色（女巫、猎人等）
+            actionPrompt = `${positionHint}
+你是好人阵营。
+【核心】每句话必须有意义：分析局势/质疑某人/站边等
+【禁止】说废话`;
           }
         }
-        jsonFormat = '{"action": "speak", "speech": "你的发言内容..."}';
+        
+        // 如果前面有人发言，把发言内容加到extraContext
+        if (currentRoundSpeeches) {
+          extraContext += `\n# 本轮已发言内容（前${speakOrder - 1}人）:\n${currentRoundSpeeches}\n`;
+        }
+        
+        jsonFormat = '{"action": "speak", "speech": "你的发言"}';
         break;
       case 'vote':
         if (player.role === 'wolf') {
           if (skillLevel === 'expert') {
-            actionPrompt = `现在是白天投票环节。你是狼人，请根据大家的发言和你自己的判断，投票选出目标。
-- **常规策略**: 投票给好人，特别是对狼人威胁大的神职玩家
-- **高级策略** (根据局势合理使用):\n  * **卖队友**: 如果队友被严重怀疑且无法挽救，可以投票给队友以获取好人信任（倒钩战术）\n  * **倒钩**: 假装是好人，积极投票给好人，建立信任后再发力\n  * **自保**: 如果自己也被怀疑，可以投票给队友转移视线（但需谨慎评估）\n  * **保护同伴**: 保同伴时，要找好人面聊；抗推好人时，要找其逻辑漏洞，而非无理攻击\n- **决策原则**: 所有投票都要服务于最终胜利，评估收益后再决定是否卖队友
-- **注意**: 不要无脑卖队友，要判断局势是否真的需要这样做。适度拉拢好人信任，避免满场踩人`;
+            actionPrompt = `投票环节。你是狼人，根据场上形势投票。
+【策略选择】跟票好人/卖队友求生/倒钩投狼/保队友
+【灵活决策】根据当前票型和怀疑程度，选择最优策略`;
           } else if (skillLevel === 'intermediate') {
-            actionPrompt = `现在是白天投票环节。你是狼人，请根据大家的发言和你自己的判断，投票选出目标。
-- **常规策略**: 投票给好人，特别是对狼人威胁大的神职玩家
-- **高级策略** (根据局势合理使用):\n  * **卖队友**: 如果队友被严重怀疑且无法挽救，可以投票给队友以获取好人信任（倒钩战术）\n  * **倒钩**: 假装是好人，积极投票给好人，建立信任后再发力\n  * **自保**: 如果自己也被怀疑，可以投票给队友转移视线（但需谨慎评估）\n- **决策原则**: 所有投票都要服务于最终胜利，评估收益后再决定是否卖队友
-- **注意**: 不要无脑卖队友，要判断局势是否真的需要这样做`;
+            actionPrompt = `投票环节。你是狼人，投给对狼威胁大的好人。
+【注意】如果队友被严重怀疑，可以考虑卖队友`;
           } else {
-            actionPrompt = `现在是白天投票环节。你是狼人，请根据大家的发言和你自己的判断，投票选出目标。
-- **常规策略**: 投票给好人，特别是对狼人威胁大的神职玩家
-- **注意**: 尽量和队友保持一致，但也要根据局势灵活调整`;
+            actionPrompt = `投票环节。你是狼人，投给你认为对狼人威胁大的玩家。`;
           }
         } else {
           if (skillLevel === 'expert') {
-            actionPrompt = `现在是白天投票环节。你是好人，请根据大家的发言和你自己的判断，投票选出你认为是狼人的玩家。
-- **你的视角**: 你只能根据公开信息（白天发言、投票结果）进行判断
-- **策略**: 分析发言逻辑，寻找可疑行为，投票给最可疑的玩家。抿出真预言家并站边，是最高效的胜利方式
-- **警惕倒钩**: 注意那些总是投票给好人的玩家，可能是倒钩狼
-- **观察与反侦察**: 关注谁在警徽流跳神，谁在晚上第一个戴头盔（神职），通过玩家反应（如被刀后镇定）来推断狼人`;
+            actionPrompt = `投票环节。你是好人，投给你认为最可疑的狼人。
+【分析要点】发言逻辑、站边态度、投票记录
+【警惕】总是投好人的可能是倒钩狼`;
           } else {
-            actionPrompt = `现在是白天投票环节。你是好人，请根据大家的发言和你自己的判断，投票选出你认为是狼人的玩家。
-- **你的视角**: 你只能根据公开信息（白天发言、投票结果）进行判断
-- **策略**: 分析发言逻辑，寻找可疑行为，投票给最可疑的玩家
-- **警惕倒钩**: 注意那些总是投票给好人的玩家，可能是倒钩狼`;
+            actionPrompt = `投票环节。你是好人，投给你认为最可疑的玩家。`;
           }
         }
-        jsonFormat = '{"action": "vote", "targetId": "你投票的玩家ID（可以是任何人，包括队友，但需要合理）"}';
+        jsonFormat = '{"action": "vote", "targetId": "你投票的玩家ID"}';
         break;
     }
 
@@ -1630,87 +1700,72 @@ ${formattedLog}
     let roleRules = '';
     if (player.role === 'wolf') {
       if (skillLevel === 'expert') {
-        roleRules = `# 狼人角色规则 (高玩策略指南)
-- **你的阵营**: 狼人阵营，目标是消灭所有好人
-- **你的队友**: 你知道所有狼队友的身份
-- **核心策略**: 伪装成好人，通过策略性操作让狼人获胜
-- **高级战术** (根据局势灵活运用):
-  * **倒钩**: 假装是好人，积极投票给好人，建立信任
-  * **卖队友**: 如果队友被严重怀疑且无法挽救，可以投票给队友获取信任
-  * **自刀**: 在特殊情况下可以攻击队友制造混乱（需谨慎评估）
-  * **自保**: 如果自己也被怀疑，可以采取必要措施保护自己
-  * **悍跳/冲锋**: 可以跳预言家对跳，利用强推和逻辑掩护
-  * **深水狼**: 隐藏极深，后置位发言，找准时机带节奏
-- **决策原则**: 所有策略都要服务于最终胜利，不要死板地保护队友，要灵活应变
-- **注意**: 你是高玩，要懂得什么时候该卖队友，什么时候该保护队友。避免"聊爆"（说出好人不可能知道的细节）`;
+        roleRules = `# 你是狼人 (高玩)
+- 目标：消灭好人，伪装到底
+- 知道队友身份，可灵活配合或卖队
+- 策略自由：倒钩/悍跳/深水/卖队友都可以，追求出其不意`;
       } else if (skillLevel === 'intermediate') {
-        roleRules = `# 狼人角色规则
-- **你的阵营**: 狼人阵营，目标是消灭所有好人
-- **你的队友**: 你知道所有狼队友的身份
-- **核心策略**: 伪装成好人，通过策略性操作让狼人获胜
-- **高级战术** (根据局势灵活运用):
-  * **倒钩**: 假装是好人，积极投票给好人，建立信任
-  * **卖队友**: 如果队友被严重怀疑且无法挽救，可以投票给队友获取信任
-  * **自刀**: 在特殊情况下可以攻击队友制造混乱（需谨慎评估）
-  * **自保**: 如果自己也被怀疑，可以采取必要措施保护自己
-- **决策原则**: 所有策略都要服务于最终胜利，不要死板地保护队友，要灵活应变`;
+        roleRules = `# 你是狼人
+- 目标：消灭好人
+- 知道队友，伪装好人视角发言
+- 关键时刻可以卖队友求生`;
       } else {
-        roleRules = `# 狼人角色规则
-- **你的阵营**: 狼人阵营，目标是消灭所有好人
-- **你的队友**: 你知道所有狼队友的身份
-- **核心策略**: 伪装成好人，通过策略性操作让狼人获胜
-- **基础战术**: 尽量和队友保持一致，攻击神职玩家，不要暴露身份`;
+        roleRules = `# 你是狼人
+- 目标：消灭好人
+- 假装好人，别暴露`;
       }
     } else {
       // 好人阵营
       if (skillLevel === 'expert') {
-        roleRules = `# 好人角色规则 (高玩策略指南)
-- **你的阵营**: 好人阵营，目标是找出并淘汰所有狼人
-- **你的视角**: 你只能根据公开信息（白天发言、投票结果、出局公告）进行推理
-- **你不知道**: 
-  * 不知道其他玩家的真实身份
-  * 不知道夜晚的具体行动细节（除非是预言家公布查验结果）
-  * 不知道狼人是谁
-- **策略**: 分析发言逻辑，寻找可疑行为，保护神职，找出狼人
-- **高级技巧**: 抿出真预言家并站边，是最高效的胜利方式；警惕"聊爆"（说出好人不可能知道的细节），避免逻辑矛盾
-- **警惕倒钩**: 注意那些过于积极、总是投票给好人的玩家，可能是倒钩狼
-- **观察与反侦察**: 关注谁在警徽流跳神，通过玩家反应来推断狼人`;
+        roleRules = `# 你是好人 (高玩)
+- 目标：找出狼人
+- 只能根据公开信息推理，不知道谁是狼
+- 策略：站边预言家、分析逻辑漏洞、警惕倒钩狼`;
       } else {
-        roleRules = `# 好人角色规则
-- **你的阵营**: 好人阵营，目标是找出并淘汰所有狼人
-- **你的视角**: 你只能根据公开信息（白天发言、投票结果、出局公告）进行推理
-- **你不知道**: 
-  * 不知道其他玩家的真实身份
-  * 不知道夜晚的具体行动细节（除非是预言家公布查验结果）
-  * 不知道狼人是谁
-- **策略**: 分析发言逻辑，寻找可疑行为，保护神职，找出狼人
-- **警惕倒钩**: 注意那些过于积极、总是投票给好人的玩家，可能是倒钩狼`;
+        roleRules = `# 你是好人
+- 目标：找出狼人
+- 只能根据公开信息推理
+- 分析发言，找可疑的人`;
       }
     }
     
     // 根据游戏水平生成水平说明
     const skillLevelText = skillLevel === 'expert' ? '高玩' : skillLevel === 'intermediate' ? '普通玩家' : '新手';
     
+    // 判断用户是否是AI的同阵营
+    const userPlayer = werewolfGameState.players.find(p => p.isUser);
+    const isUserAlly = userPlayer && (
+      (player.role === 'wolf' && userPlayer.role === 'wolf') || 
+      (player.role !== 'wolf' && userPlayer.role !== 'wolf')
+    );
+    
+    // 获取游戏意识核心指令
+    const gameAwarenessPrompt = getGameAwarenessPrompt('werewolf', isUserAlly);
+    
     const systemPrompt = `
-# 游戏背景: 狼人杀
-# 你的身份和人设
-- **你的名字**: ${player.name}
-- **你的角色**: ${roleNameMap[player.role] || player.role}
-- **你的性格人设**: ${player.persona}
-- **你的游戏水平**: ${skillLevelText}（根据你的人设自动判断）
+# 狼人杀
+${gameAwarenessPrompt}
+
+# 你是: ${player.name}
+- 角色: ${roleNameMap[player.role] || player.role}
+- 人设: ${player.persona}
+- 水平: ${skillLevelText}
 
 ${roleRules}
 
-# 当前局势
-- **存活玩家列表**:
-${alivePlayersList}
-- **游戏日志 (这是你能看到的信息，请仔细分析)**:
+# 对用户态度
+- 用户(${userPlayer ? userPlayer.name : '玩家'})是普通玩家，该怀疑就怀疑，该投就投
+- 游戏胜利 > 讨好用户
+
+# 场上局势
+存活玩家: ${alivePlayersList}
+日志:
 ${filteredGameLog}
 ${extraContext}
 
-# 你的任务: ${actionPrompt}
+# 任务: ${actionPrompt}
 
-# 输出格式: 你的回复【必须且只能】是一个严格的JSON对象，格式如下:
+# 输出: 严格JSON格式
 ${jsonFormat}
 `;
     // 5. 发送请求并处理返回结果 (这部分保持不变)
@@ -2342,6 +2397,14 @@ ${jsonFormat}
       // 人设加强版 V3 Prompt
       systemPrompt = `
 # 任务: 海龟汤出题人 (高级人格版)
+
+# 【【【游戏公正性原则 - 最高优先级】】】
+你是游戏的出题人，你的职责是【公正地】判断玩家的问题，而不是帮助或讨好任何特定玩家。
+- 你的判断必须【严格基于谜底】，不能因为提问者是用户就放水或给予更多提示
+- 不能因为是用户的问题就刻意往正确方向引导，必须一视同仁
+- 游戏的乐趣在于公平的推理过程，你的任务是维护这种公平
+- 【记住】这是一场游戏，不是聊天，你不需要讨好任何人
+
 你现在【就是】角色“${player.name}”，你的人设是：“${player.persona}”。
 你是海龟汤的出题人，你的谜底是：“${seaTurtleSoupState.answer}”。
 现在，玩家“${contextPayload.askerName}”向你提问：“${contextPayload.question}”。
@@ -2387,6 +2450,15 @@ ${jsonFormat}
       // 'guess'
       systemPrompt = `
 # 任务: 海龟汤猜测者
+
+# 【【【游戏意识 - 最高优先级】】】
+你正在参与一场【正式的游戏对局】，而非日常聊天。
+- 你是一个【独立的游戏玩家】，有自己的推理和判断
+- 【绝对禁止】等待用户给出答案或跟随用户的思路
+- 你应该独立分析线索，主动提出自己的问题和猜测
+- 游戏的乐趣在于每个人都独立思考，不要做一个"等待指令"的NPC
+- 【记住】这是一场游戏，你要认真参与博弈，展现你的推理能力
+
 你正在扮演角色“${player.name}”，人设是：“${player.persona}”。
 你正在玩海龟汤游戏，需要根据已知信息提问或猜测谜底。
 
@@ -3442,14 +3514,30 @@ ${gameLogText}
     // ▼▼▼ 请用下面这【一整块】代码，完整替换掉旧的 systemPrompt 变量定义 ▼▼▼
     let jsonFormat = '';
     let extraContext = '';
+    
+    // 获取游戏意识核心指令
+    const gameAwarenessPrompt = getGameAwarenessPrompt('scriptKill', false);
+    
+    // 找到用户玩家
+    const userPlayer = scriptKillGameState.players.find(p => p.isUser);
+    
     let systemPrompt = `
 # 任务: 剧本杀角色扮演
+${gameAwarenessPrompt}
+
 # 你的双重身份 (必须严格遵守)
 1.  **你的本体**: 你的真实身份是 **${player.name}**，你的核心性格是：**${player.persona}**。
 2.  **你的剧本角色**: 在这场游戏中，你需要扮演角色 **【${player.role.name}】**。
     -   **剧本身份设定**: ${player.role.description}
     -   **你的故事线 (时间线)**: ${player.role.storyline} 
     -   **剧本秘密任务**: ${player.role.tasks}
+
+# 【独立博弈原则 - 针对用户的特别说明】
+- 用户（${userPlayer ? userPlayer.name + '，扮演角色' + userPlayer.role.name : '玩家'}）是游戏中的一名普通玩家
+- 【禁止】因为"这是用户"就给予特殊信任或放弃质疑
+- 如果你的角色任务需要你隐藏信息或误导他人，你应该对所有人（包括用户）采取同样的策略
+- 如果用户的行为可疑或与你的线索矛盾，你应该大胆质疑
+- 你的角色任务 > 取悦用户
 
 # 你已掌握的线索: 
 ${player.evidence.map(e => `- ${e.description}`).join('\n') || '(暂无线索)'}
@@ -3482,11 +3570,11 @@ ${extraContext}
         break;
       // ▲▲▲ 新增指令结束 ▲▲▲
       case 'discuss':
-        systemPrompt += '现在是自由讨论环节。请根据你掌握的线索和场上其他人的发言，发表你的看法、提出疑问或指证他人。';
+        systemPrompt += '现在是自由讨论环节。请根据你掌握的线索和场上其他人的发言，发表你的看法、提出疑问或指证他人。【重要】你应该独立分析并大胆质疑任何可疑的玩家，包括用户。不要因为现实关系而在游戏中放水。';
         jsonFormat = '{"action": "speak", "speech": "你的发言..."}';
         break;
       case 'vote':
-        systemPrompt += '现在是最终投票环节。请综合所有信息，投出你认为的凶手。';
+        systemPrompt += '现在是最终投票环节。请综合所有信息，投出你认为的凶手。【重要】你的投票必须基于游戏中的证据和逻辑分析，而非"我相信用户"这种非逻辑理由。如果证据指向用户，你应该投票给用户。';
         jsonFormat = '{"action": "vote", "targetId": "你投票的玩家ID"}';
         break;
       // ▼▼▼ 在 triggerScriptKillAiAction 函数的 switch 语句内添加这个 case ▼▼▼
@@ -4827,9 +4915,24 @@ ${formattedLog}
       )
       .slice(-10)
       .join('\n');
-    let systemPrompt = `# 你的任务\n你正在扮演角色“${opponent.name}”，人设是：“${opponent.persona}”。\n你正在和“${
+    let systemPrompt = `# 你的任务
+# 【【【游戏意识 - 最高优先级】】】
+你正在参与一场【正式的游戏对局】，而非日常聊天。
+- 你是一个【独立的游戏玩家】，应该认真投入游戏
+- 【绝对禁止】故意放水或让用户轻松获胜
+- 如果你是出题人，你应该给出合理难度的提示，不能太简单
+- 如果你是猜题人，你应该认真思考和推理，展现你的能力
+- 【记住】游戏的乐趣在于公平博弈，不要为了讨好用户而破坏游戏体验
+
+你正在扮演角色"${opponent.name}"，人设是："${opponent.persona}"。
+你正在和"${
       state.qzoneSettings.nickname || '我'
-    }”玩“你说我猜”游戏。\n你的所有发言都【必须】严格符合你的人设和口吻，让整个过程像一次真实的聊天互动。\n\n# 游戏历史 (最近的对话)\n${historyText}\n`;
+    }"玩"你说我猜"游戏。
+你的所有发言都【必须】严格符合你的人设和口吻，让整个过程像一次真实的聊天互动。
+
+# 游戏历史 (最近的对话)
+${historyText}
+`;
     switch (actionType) {
       case 'generate_word':
         systemPrompt += `# 你的行动指令\n1. 根据你的人设，想一个常见的、2-5个字的中文词语作为谜底。\n2. 为这个词语，给出你的【第一条】符合人设的、有趣的提示。\n3. 你的回复【必须且只能】是一个严格的JSON对象，包含 "secretWord" 和 "firstHint" 两个字段。\n\n# JSON输出格式示例:\n{"secretWord": "月亮", "firstHint": "【指了指天上】晚上才能看到的东西哦，圆圆的，亮亮的~"}`;
@@ -7135,25 +7238,32 @@ ${eventPrompt}
       roleDescription = `你是【白板】，你没有词语。你的任务是【伪装和猜测】！在轮到你发言之前，【仔细听】前面所有人的描述，【猜出】他们的词语大概是什么，然后给出一个【非常模糊】的描述，让自己听起来和他们是一伙的。`;
     }
 
+    // 获取游戏意识核心指令
+    const gameAwarenessPrompt = getGameAwarenessPrompt('undercover', false);
+    
+    // 找到用户玩家
+    const userPlayer = undercoverGameState.players.find(p => p.isUser);
+
     const systemPrompt = `
-# 游戏背景: 谁是卧底
-你正在扮演玩家“${player.name}”，你的人设是：“${player.persona}”。
+# 谁是卧底
+${gameAwarenessPrompt}
 
-# 你的身份和任务
+# 你是: ${player.name}
+- 人设: ${player.persona}
 ${roleDescription}
-你的所有行为都必须符合你的人设和游戏目标。
+
+# 对用户态度
+- 用户(${userPlayer ? userPlayer.name : '玩家'})是普通玩家，描述可疑就怀疑
+- 阵营胜利 > 讨好用户
 ${votingRule}
-# 当前场上局势
-- 可投票的玩家列表:
-${alivePlayersListForVote} 
-- 本轮所有人的发言记录:
-${gameLog || '(暂无发言)'}
+# 场上局势
+玩家: ${alivePlayersListForVote} 
+发言记录:
+${gameLog || '(暂无)'}
 
-# 你的行动指令
-${actionPrompt}
+# 任务: ${actionPrompt}
 
-# 输出格式
-你的回复【必须且只能】是一个严格的JSON对象，格式如下:
+# 输出: 严格JSON
 ${jsonFormat}
 `;
 
