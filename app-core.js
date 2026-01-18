@@ -6084,6 +6084,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const keepAliveSwitch = document.getElementById("keep-alive-switch");
     const keepAliveDetails = document.getElementById("keep-alive-details");
     const heartbeatIntervalInput = document.getElementById("heartbeat-interval-input");
+    const iosNotice = document.getElementById("ios-keepalive-notice");
     
     if (keepAliveSwitch) {
       keepAliveSwitch.checked = !!state.globalSettings.enableKeepAlive;
@@ -6094,6 +6095,17 @@ document.addEventListener("DOMContentLoaded", () => {
     
     if (heartbeatIntervalInput) {
       heartbeatIntervalInput.value = state.globalSettings.heartbeatInterval || 30;
+    }
+
+    // 显示iOS提示（如果是iOS设备且未添加到主屏幕）
+    if (iosNotice) {
+      const isIOS = isIOSDevice();
+      const isStandalone = isStandaloneMode();
+      if (isIOS && !isStandalone) {
+        iosNotice.style.display = "block";
+      } else {
+        iosNotice.style.display = "none";
+      }
     }
 
     // 3. 渲染预设和频率的下拉框
@@ -17112,6 +17124,25 @@ document.addEventListener("DOMContentLoaded", () => {
   let wakeLock = null;
   let heartbeatIntervalId = null;
   let keepAliveWorker = null;
+  let keepAliveAudio = null; // iOS保活音频
+  let iosKeepAliveIntervalId = null; // iOS专用定时器
+
+  /**
+   * 检测是否为iOS设备
+   */
+  function isIOSDevice() {
+    const ua = navigator.userAgent;
+    return /iPhone|iPad|iPod/.test(ua);
+  }
+
+  /**
+   * 检测是否添加到主屏幕（standalone模式）
+   */
+  function isStandaloneMode() {
+    return window.matchMedia('(display-mode: standalone)').matches || 
+           window.navigator.standalone === true ||
+           document.referrer.includes('android-app://');
+  }
 
   /**
    * 启动强力保活功能
@@ -17119,11 +17150,24 @@ document.addEventListener("DOMContentLoaded", () => {
   async function startKeepAlive() {
     if (!state.globalSettings.enableKeepAlive) return;
 
-    console.log("启动强力保活功能...");
+    const isIOS = isIOSDevice();
+    const isStandalone = isStandaloneMode();
 
-    // 1. 请求 Wake Lock（防止屏幕关闭）
+    console.log("启动强力保活功能...", { isIOS, isStandalone });
+
+    // iOS特殊处理
+    if (isIOS) {
+      if (!isStandalone) {
+        console.warn("iOS需要添加到主屏幕才能使用保活功能");
+        updateWakeLockStatus(false, "iOS需添加到主屏幕");
+        // 即使不在standalone模式，也启动基础保活
+      }
+      startIOSKeepAlive();
+    }
+
+    // 1. 请求 Wake Lock（防止屏幕关闭）- iOS不支持
     try {
-      if ('wakeLock' in navigator) {
+      if ('wakeLock' in navigator && !isIOS) {
         wakeLock = await navigator.wakeLock.request('screen');
         console.log("Wake Lock 已获取");
         updateWakeLockStatus(true);
@@ -17133,7 +17177,7 @@ document.addEventListener("DOMContentLoaded", () => {
           console.log("Wake Lock 已释放");
           updateWakeLockStatus(false);
           // 如果保活功能仍然启用，尝试重新获取
-          if (state.globalSettings.enableKeepAlive) {
+          if (state.globalSettings.enableKeepAlive && !isIOS) {
             setTimeout(() => {
               if (state.globalSettings.enableKeepAlive) {
                 startKeepAlive();
@@ -17141,6 +17185,10 @@ document.addEventListener("DOMContentLoaded", () => {
             }, 1000);
           }
         });
+      } else if (isIOS) {
+        // iOS不支持Wake Lock，使用替代方案
+        console.log("iOS设备，使用音频保活方案");
+        updateWakeLockStatus(false, "iOS使用音频保活");
       } else {
         console.warn("浏览器不支持 Wake Lock API");
         updateWakeLockStatus(false, "不支持");
@@ -17148,6 +17196,10 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch (err) {
       console.error("获取 Wake Lock 失败:", err);
       updateWakeLockStatus(false, "失败: " + err.message);
+      // 如果是iOS，即使Wake Lock失败也继续
+      if (isIOS) {
+        startIOSKeepAlive();
+      }
     }
 
     // 2. 监听页面可见性变化
@@ -17169,6 +17221,100 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   /**
+   * iOS专用保活方案
+   */
+  function startIOSKeepAlive() {
+    console.log("启动iOS保活方案...");
+
+    // 方法1: 使用静音音频播放保持活跃
+    try {
+      // 使用已有的保活音频URL（如果存在）
+      const keepAliveUrl = "https://files.catbox.moe/7jn7bp.mp3";
+      
+      if (!keepAliveAudio) {
+        keepAliveAudio = new Audio(keepAliveUrl);
+        keepAliveAudio.volume = 0; // 静音
+        keepAliveAudio.loop = true; // 循环播放
+        
+        // 监听播放错误
+        keepAliveAudio.addEventListener('error', (e) => {
+          console.warn("保活音频加载失败，使用备用方案:", e);
+          // 如果音频加载失败，使用定时器方案
+          startIOSKeepAliveTimer();
+        });
+
+        // 尝试播放
+        keepAliveAudio.play().then(() => {
+          console.log("iOS音频保活已启动");
+        }).catch(err => {
+          console.warn("音频播放失败，使用定时器方案:", err);
+          startIOSKeepAliveTimer();
+        });
+      } else {
+        // 如果音频已存在，尝试恢复播放
+        keepAliveAudio.play().catch(err => {
+          console.warn("恢复音频播放失败:", err);
+        });
+      }
+    } catch (err) {
+      console.error("启动iOS音频保活失败:", err);
+      startIOSKeepAliveTimer();
+    }
+
+    // 方法2: 使用定时器定期执行操作（备用方案）
+    startIOSKeepAliveTimer();
+  }
+
+  /**
+   * iOS定时器保活方案（备用）
+   */
+  function startIOSKeepAliveTimer() {
+    if (iosKeepAliveIntervalId) return; // 已启动
+
+    // 每10秒执行一次轻量级操作
+    iosKeepAliveIntervalId = setInterval(() => {
+      try {
+        // 更新localStorage（轻量级操作）
+        localStorage.setItem('ephone_ios_keepalive', Date.now().toString());
+        
+        // 触发一个微小的事件
+        window.dispatchEvent(new Event('ios-keepalive-tick'));
+        
+        // 如果页面可见，可以做一些UI更新
+        if (!document.hidden) {
+          updateHeartbeatStatus();
+        }
+      } catch (err) {
+        console.warn("iOS定时器保活操作失败:", err);
+      }
+    }, 10000); // 10秒间隔
+
+    console.log("iOS定时器保活已启动");
+  }
+
+  /**
+   * 停止iOS保活
+   */
+  function stopIOSKeepAlive() {
+    // 停止音频播放
+    if (keepAliveAudio) {
+      try {
+        keepAliveAudio.pause();
+        keepAliveAudio.currentTime = 0;
+      } catch (err) {
+        console.warn("停止音频失败:", err);
+      }
+      keepAliveAudio = null;
+    }
+
+    // 清除定时器
+    if (iosKeepAliveIntervalId) {
+      clearInterval(iosKeepAliveIntervalId);
+      iosKeepAliveIntervalId = null;
+    }
+  }
+
+  /**
    * 停止强力保活功能
    */
   function stopKeepAlive() {
@@ -17183,16 +17329,21 @@ document.addEventListener("DOMContentLoaded", () => {
       updateWakeLockStatus(false);
     }
 
-    // 2. 移除页面可见性监听
+    // 2. 停止iOS保活
+    if (isIOSDevice()) {
+      stopIOSKeepAlive();
+    }
+
+    // 3. 移除页面可见性监听
     document.removeEventListener('visibilitychange', handleVisibilityChange);
 
-    // 3. 清除心跳定时器
+    // 4. 清除心跳定时器
     if (heartbeatIntervalId) {
       clearInterval(heartbeatIntervalId);
       heartbeatIntervalId = null;
     }
 
-    // 4. 终止 Web Worker（如果有）
+    // 5. 终止 Web Worker（如果有）
     if (keepAliveWorker) {
       keepAliveWorker.terminate();
       keepAliveWorker = null;
@@ -17235,8 +17386,8 @@ document.addEventListener("DOMContentLoaded", () => {
         updatePageVisibilityStatus();
       }
 
-      // 方法4: 确保Wake Lock仍然有效（如果支持）
-      if (wakeLock && 'wakeLock' in navigator) {
+      // 方法4: 确保Wake Lock仍然有效（如果支持且非iOS）
+      if (!isIOSDevice() && wakeLock && 'wakeLock' in navigator) {
         // 检查Wake Lock是否仍然有效
         if (wakeLock.released) {
           console.log("Wake Lock已释放，尝试重新获取...");
@@ -17252,6 +17403,16 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       }
 
+      // 方法5: iOS设备特殊处理
+      if (isIOSDevice() && state.globalSettings.enableKeepAlive) {
+        // 确保iOS保活音频正在播放
+        if (keepAliveAudio && keepAliveAudio.paused) {
+          keepAliveAudio.play().catch(err => {
+            console.warn("iOS音频保活恢复失败:", err);
+          });
+        }
+      }
+
       window.lastHeartbeat = now;
     } catch (err) {
       console.error("心跳发送失败:", err);
@@ -17264,21 +17425,37 @@ document.addEventListener("DOMContentLoaded", () => {
   function handleVisibilityChange() {
     updatePageVisibilityStatus();
     
+    const isIOS = isIOSDevice();
+    
     if (document.hidden) {
       console.log("页面已切换到后台");
-      // 页面在后台时，可以尝试重新获取 Wake Lock
-      if (state.globalSettings.enableKeepAlive && wakeLock === null) {
+      // 页面在后台时，可以尝试重新获取 Wake Lock（非iOS）
+      if (state.globalSettings.enableKeepAlive && !isIOS && wakeLock === null) {
         setTimeout(() => {
           if (state.globalSettings.enableKeepAlive && !document.hidden) {
             startKeepAlive();
           }
         }, 1000);
       }
+      // iOS设备：确保音频保活继续运行
+      if (isIOS && state.globalSettings.enableKeepAlive && keepAliveAudio) {
+        if (keepAliveAudio.paused) {
+          keepAliveAudio.play().catch(err => {
+            console.warn("iOS后台音频保活失败:", err);
+          });
+        }
+      }
     } else {
       console.log("页面已切换到前台");
-      // 页面回到前台时，确保 Wake Lock 仍然有效
-      if (state.globalSettings.enableKeepAlive && wakeLock === null) {
+      // 页面回到前台时，确保 Wake Lock 仍然有效（非iOS）
+      if (state.globalSettings.enableKeepAlive && !isIOS && wakeLock === null) {
         startKeepAlive();
+      }
+      // iOS设备：确保音频保活继续运行
+      if (isIOS && state.globalSettings.enableKeepAlive) {
+        if (!keepAliveAudio || keepAliveAudio.paused) {
+          startIOSKeepAlive();
+        }
       }
     }
   }
@@ -17289,9 +17466,20 @@ document.addEventListener("DOMContentLoaded", () => {
   function updateWakeLockStatus(active, message = null) {
     const statusText = document.getElementById("wake-lock-status-text");
     if (statusText) {
+      const isIOS = isIOSDevice();
+      const isStandalone = isStandaloneMode();
+      
       if (message) {
         statusText.textContent = message;
         statusText.style.color = "#ff6b6b";
+      } else if (isIOS) {
+        if (isStandalone) {
+          statusText.textContent = "iOS音频保活已激活 ✓";
+          statusText.style.color = "#51cf66";
+        } else {
+          statusText.textContent = "iOS需添加到主屏幕";
+          statusText.style.color = "#ffa94d";
+        }
       } else if (active) {
         statusText.textContent = "已激活 ✓";
         statusText.style.color = "#51cf66";
@@ -49760,14 +49948,33 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
     // 1.5. 保活开关的事件
     const keepAliveSwitch = document.getElementById("keep-alive-switch");
     const keepAliveDetails = document.getElementById("keep-alive-details");
+    const iosNotice = document.getElementById("ios-keepalive-notice");
+    
     if (keepAliveSwitch && keepAliveDetails) {
       keepAliveSwitch.addEventListener("change", () => {
         // 根据开关状态显示或隐藏详细信息
         keepAliveDetails.style.display = keepAliveSwitch.checked ? "block" : "none";
+        
+        // 更新iOS提示显示
+        if (iosNotice) {
+          const isIOS = isIOSDevice();
+          const isStandalone = isStandaloneMode();
+          if (isIOS && !isStandalone && keepAliveSwitch.checked) {
+            iosNotice.style.display = "block";
+          } else {
+            iosNotice.style.display = "none";
+          }
+        }
+        
         // 如果启用了保活，立即更新状态显示
         if (keepAliveSwitch.checked) {
           updatePageVisibilityStatus();
-          updateWakeLockStatus(wakeLock !== null);
+          const isIOS = isIOSDevice();
+          if (isIOS) {
+            updateWakeLockStatus(false, isStandaloneMode() ? "iOS音频保活" : "iOS需添加到主屏幕");
+          } else {
+            updateWakeLockStatus(wakeLock !== null);
+          }
         }
       });
     }
