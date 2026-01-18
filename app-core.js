@@ -43982,7 +43982,9 @@ ${chat.settings.aiPersona}
           chat.settings.desktopPetShape = selectedShape;
           
           // 保存桌宠大小
-          const desktopPetSize = parseInt(document.getElementById("desktop-pet-size-slider").value);
+          const desktopPetSizeSlider = document.getElementById("desktop-pet-size-slider");
+          const desktopPetSize = parseInt(desktopPetSizeSlider.value);
+          console.log("桌宠大小保存调试 - 滑块值:", desktopPetSizeSlider.value, "滑块max:", desktopPetSizeSlider.max, "解析后:", desktopPetSize);
           chat.settings.desktopPetSize = desktopPetSize;
           
           // 如果桌宠已显示，保存当前位置
