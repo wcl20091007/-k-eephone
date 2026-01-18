@@ -10864,8 +10864,14 @@ document.addEventListener("DOMContentLoaded", () => {
 			${calendarContextForActiveChat}
 			${periodContextForActiveChat}
 
-			# 用户的角色
+			# 用户的角色 (【重要】请仔细阅读用户的性别、身份等信息，在对话中正确使用称谓)
 			- **${myNickname}**: ${chat.settings.myPersona}
+			
+			**【【【性别与身份信息铁律】】】**:
+			- 你【必须】仔细阅读上方每个角色人设以及用户人设中的**性别、年龄、身份、关系**等关键信息。
+			- 在对话中，你【绝对不能】弄错任何人的性别（包括你扮演的角色和用户）。
+			- 例如：如果某角色人设明确是男性，就不能表现出女性特征或使用"她"称呼；如果用户人设写明是女性，所有角色都必须用"她"来称呼用户。
+			- 这是最基本的角色扮演要求，违反此规则会严重破坏沉浸感。
 
 			现在，请根据以上所有规则和下方的对话历史，继续这场群聊。`;
 
@@ -11188,6 +11194,13 @@ document.addEventListener("DOMContentLoaded", () => {
 			${worldBookContentMedium}
 			- **核心人设**: ${chat.settings.aiPersona}
 			${worldBookContentLow}
+			
+			**【【【性别与身份信息铁律】】】**:
+			- 你【必须】仔细阅读上方"核心人设"以及下方"对话者(用户)角色设定"中的所有信息，特别是**性别、年龄、身份、关系**等关键资料。
+			- 在对话中，你【绝对不能】弄错任何人的性别（包括你自己和用户）。例如：如果人设中明确写了用户是女性，你就不能用"他"来称呼用户，必须用"她"；如果你的人设是男性，你就不能表现出女性特征。
+			- 如果人设中包含其他NPC或相关人物的信息，你也必须记住并正确使用他们的性别和称谓。
+			- 这是最基本的角色扮演要求，违反此规则会严重破坏沉浸感。
+			
 			- **总结**:${summaryContext}
 			- **情侣头像**: ${coupleAvatarContext}
 			- **世界观/NPC**: ${npcContext}
@@ -11458,7 +11471,7 @@ document.addEventListener("DOMContentLoaded", () => {
 			-   **添加日记备注**: \`{"type": "ls_diary_annotation", "annotation": "你的备注内容...", "dateStr": "YYYY-MM-DD"}\` (可选dateStr，不提供则使用今天日期)
 			### **【第六部分：当前上下文信息】**
 
-			- **对话者(用户)角色设定**:
+			- **对话者(用户)角色设定** (【重要】请仔细阅读用户的性别、身份等信息，在对话中正确使用称谓):
 			${chat.settings.myPersona}
 
 			- **当前情景**:
@@ -18441,6 +18454,7 @@ document.addEventListener("DOMContentLoaded", () => {
 			${worldBookContextBreakLimit}
 			${worldBookContextHigh}
 			-   **你的角色设定**: ${chat.settings.aiPersona}
+			**【【【性别与身份信息铁律】】】**: 你【必须】仔细阅读你的角色设定和用户人设中的**性别**等关键信息，【绝对不能】弄错任何人的性别。
 			${worldBookContextMedium}
 			${worldBookContextLow}
 			- 情侣空间状态: ${chat.loversSpaceData ? "已开启" : "未开启"}

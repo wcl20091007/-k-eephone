@@ -1640,6 +1640,7 @@ async function generateMonitorDialogue(areaName, userInput, textElement, voiceSe
 
     # 你的角色人设
     ${chat.settings.aiPersona}
+    【重要】请仔细阅读人设中的性别信息，确保在回复中正确表现你的性别特征。
 
     # 你的任务
     请以【第一人称】，**紧接着刚才的状态**，对这句突如其来的话做出【反应】。

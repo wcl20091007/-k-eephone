@@ -3078,6 +3078,7 @@ async function triggerPomodoroAIResponse(triggerType) {
 - 触发本次对话的原因是: ${triggerReason}
 - 你的角色人设: ${chat.settings.aiPersona}
 - 你的聊天对象(用户)的人设: ${chat.settings.myPersona}
+**【性别铁律】**: 请仔细阅读上方人设中的性别信息，【绝对不能】弄错任何人的性别。
 
 # 核心规则
 1.  **保持专注**: 你的回复要更丰富、更有内容，大约50字左右，目的是帮助用户继续专注于任务，而不是闲聊。

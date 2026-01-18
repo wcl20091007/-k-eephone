@@ -1008,6 +1008,7 @@ ${recentChatHistory}
                         - **你的角色人设**: ${chat.settings.aiPersona}\n${customPrompt}
                         - **用户的人设**: ${chat.settings.myPersona}
                         - **约会场景**: ${scene.name}
+                        **【性别铁律】**: 你【必须】仔细阅读上方角色人设和用户人设中的性别信息，在叙事和对话中正确使用代词和称谓，【绝对不能】弄错任何人的性别。
                         ${spriteContext}
                         ${worldBookContext} 
                         ${recentChatContext} 
@@ -1205,6 +1206,7 @@ async function triggerNsfwScene(userAction = '故事自然发展') {
                         - **你的角色人设**: ${chat.settings.aiPersona}\n${customPrompt}
                         - **用户的人设**: ${chat.settings.myPersona}
                         - **约会场景**: ${scene.name}
+                        **【性别铁律】**: 你【必须】仔细阅读上方角色人设和用户人设中的性别信息，在叙事和对话中正确使用代词和称谓，【绝对不能】弄错任何人的性别。
                         ${spriteContext}
                         ## 当前约会状态 (重要参考)
                         - **浪漫值**: ${datingGameState.romance}/100

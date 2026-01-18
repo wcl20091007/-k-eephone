@@ -1861,6 +1861,7 @@ ${gameAwarenessPrompt}
 - 角色: ${roleNameMap[player.role] || player.role}
 - 人设: ${player.persona}
 - 水平: ${skillLevelText}
+【重要】请仔细阅读人设中的性别信息，确保在发言和行为中正确表现你的性别特征，不要弄错任何人的性别。
 
 ${roleRules}
 
