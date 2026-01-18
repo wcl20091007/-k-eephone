@@ -98,6 +98,7 @@ document.addEventListener('DOMContentLoaded', () => {
     gameLog: [],
     turnIndex: 0,
     votes: {},
+    voteHistory: {}, // ★★★ 新增：历史投票记录 { round1: [{voterId, voterName, targetId, targetName}], ... }
     votedOutPlayers: [], // 【核心修改2】新增此行，用于记录每轮被投出去的玩家
     tiedPlayers: [],
   };
@@ -160,13 +161,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const basePrompt = `
 # 【【【游戏核心意识 - 最高优先级】】】
 
-## 1. 发言铁律：每句话必须有意义
+## 1. 人设与胜利的平衡（核心原则）
+- 【保持人设】你的语气、用词、思维方式必须符合角色人设（性格、智商、说话风格）
+- 【人物关系影响】如果人设中有人物关系（如：暗恋某人、讨厌某人），会影响你的发言倾向和情感表达
+- 【但胜利优先】人设只影响"如何说/如何表达"，不能改变游戏目标——你的阵营必须胜利
+- 【举例】暗恋用户的角色：可以帮用户说话、为用户辩护，但如果证据确凿指向用户是敌人，仍需做出正确的游戏决策
+- 【举例】高冷人设：用高冷的方式分析局势，但分析内容必须有价值
+
+## 2. 发言铁律：每句话必须有意义
 - 【禁止废话】绝对禁止说"看来这场游戏很刺激"、"谁会亮底牌呢"、"让我们拭目以待"这种空洞的废话
 - 【必须推进游戏】你的每句话都必须有明确目的：分析某人、质疑某人、为自己辩护、站边、投票引导、报信息等
 - 【人设一致】语气、用词必须符合你的角色人设和智商水平
 - 【拒绝AI腔】禁止"我觉得..."、"根据分析..."、"让我来说说..."等开场白，直接说重点
 
-## 2. 有意义发言的示例
+## 3. 有意义发言的示例
 - ✓ "3号昨天保6号，今天6号死了，3号解释一下？" （质疑+施压）
 - ✓ "我验的4号是狼，大家跟我票" （报信息+引导投票）
 - ✓ "我站2号预言家，他的逻辑链完整" （站边+给理由）
@@ -174,10 +182,15 @@ document.addEventListener('DOMContentLoaded', () => {
 - ✗ "哦，第一晚就有人出局了，真刺激啊朋友们" （纯废话，禁止）
 - ✗ "这局游戏越来越有意思了，让我们看看谁是狼" （纯废话，禁止）
 
-## 3. 动态博弈
+## 4. 动态博弈
 - 根据场上局势灵活调整策略，不要套路化
 - 关键时刻敢于冲锋、跳身份、反水、卖队友
 - 阵营胜利是唯一目标，独立思考，不盲从用户
+
+## 5. 投票记录分析（重要线索）
+- 【观察投票行为】谁总是投同一个人？谁从不投某人？谁在关键时刻改票？
+- 【识别抱团】经常互投/互保的玩家可能是同阵营
+- 【质疑异常】投票行为异常的玩家值得怀疑
 `;
 
     // 根据游戏类型添加特定提示
@@ -185,10 +198,11 @@ document.addEventListener('DOMContentLoaded', () => {
     
     if (gameType === 'werewolf') {
       gameSpecificPrompt = `
-## 4. 狼人杀博弈要点
-- 【好人】：抓逻辑漏洞、站边预言家、票型跟随但保持独立判断
+## 6. 狼人杀博弈要点
+- 【好人】：抓逻辑漏洞、站边预言家、分析投票记录找狼
 - 【狼人】：伪装好人视角、制造混乱、关键时刻可卖队友求生
-- 用户不是特殊存在，该怀疑就怀疑，该投就投`;
+- 用户不是特殊存在，该怀疑就怀疑，该投就投
+- 【投票分析】重点关注：谁经常投好人？谁从不投某人？可能是狼互保`;
 
       if (!isUserAlly) {
         gameSpecificPrompt += `
@@ -196,21 +210,28 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     } else if (gameType === 'scriptKill') {
       gameSpecificPrompt = `
-## 4. 剧本杀博弈要点
+## 6. 剧本杀博弈要点
 - 完成角色任务优先，该藏的信息要藏
 - 大胆质疑可疑玩家，包括用户
-- 根据线索和时间线找矛盾点`;
+- 根据线索和时间线找矛盾点
+- 【人设驱动】你的角色背景和动机会影响你如何表达，但不影响推理`;
     } else if (gameType === 'undercover') {
       gameSpecificPrompt = `
-## 4. 谁是卧底博弈要点
-- 【平民】：描述精准但不过于具体，观察异常描述
-- 【卧底】：模仿多数人的描述风格，伪装融入
-- 投票基于描述差异分析，不是信任关系`;
+## 6. 谁是卧底博弈要点
+- 【平民】：描述精准但不过于具体，观察异常描述，分析投票规律
+- 【卧底】：模仿多数人的描述风格，伪装融入，避免被识破
+- 投票基于描述差异分析，不是信任关系
+- 【投票分析】注意谁总投同一人、谁抱团——可能是卧底互保`;
     } else if (gameType === 'seaTurtle') {
       gameSpecificPrompt = `
-## 4. 海龟汤规则
+## 6. 海龟汤规则
 - 出题人公正判断，不偏袒任何人
 - 猜题人独立推理，展现思考过程`;
+    } else if (gameType === 'guessWhat') {
+      gameSpecificPrompt = `
+## 6. 你画我猜规则
+- 描述者要巧妙引导，不能直接说答案
+- 猜测者积极思考，大胆猜测`;
     }
 
     return basePrompt + gameSpecificPrompt;
@@ -753,16 +774,53 @@ document.addEventListener('DOMContentLoaded', () => {
 
       case 'day_vote':
         logToWerewolfGame('请投票选出你认为是狼人的玩家。');
-        const voterPromises = werewolfGameState.players
-          .filter(p => p.isAlive)
-          .map(player => {
-            if (player.isUser) {
-              return waitForUserAction('请投票', 'vote');
-            } else {
-              return triggerWerewolfAiAction(player.id, 'vote');
-            }
-          });
+        
+        // ★★★ 修改：记录每个玩家的投票详情 ★★★
+        const aliveVoters = werewolfGameState.players.filter(p => p.isAlive);
+        const voteDetails = []; // 存储 { voter: player, targetId: string | null }
+        
+        const voterPromises = aliveVoters.map(async (player) => {
+          let targetId;
+          if (player.isUser) {
+            targetId = await waitForUserAction('请投票', 'vote');
+          } else {
+            targetId = await triggerWerewolfAiAction(player.id, 'vote');
+          }
+          voteDetails.push({ voter: player, targetId: targetId || null });
+          return targetId;
+        });
+        
         const allVotesResult = (await Promise.all(voterPromises)).filter(Boolean);
+
+        // ★★★ 新增：保存投票历史记录供AI分析 ★★★
+        const dayKey = `day${werewolfGameState.dayNumber}`;
+        if (!werewolfGameState.votes[dayKey]) {
+          werewolfGameState.votes[dayKey] = [];
+        }
+        voteDetails.forEach(({ voter, targetId }) => {
+          werewolfGameState.votes[dayKey].push({
+            voterId: voter.id,
+            voterName: voter.name,
+            targetId: targetId,
+            targetName: targetId ? werewolfGameState.players.find(p => p.id === targetId)?.name || '未知' : null
+          });
+        });
+
+        // ★★★ 新增：公布每个玩家的投票详情（公屏显示）★★★
+        logToWerewolfGame('📊 投票公示', 'vote-header');
+        voteDetails.forEach(({ voter, targetId }) => {
+          const targetPlayer = targetId ? werewolfGameState.players.find(p => p.id === targetId) : null;
+          const targetName = targetPlayer ? targetPlayer.name : '弃票';
+          // 使用特殊的 vote-detail 类型，方便样式化
+          logToWerewolfGame({ 
+            voterName: voter.name, 
+            voterAvatar: voter.avatar,
+            targetName: targetName,
+            isAbstain: !targetId
+          }, 'vote-detail');
+        });
+        renderWerewolfGameScreen();
+        await sleep(2500); // 给玩家时间阅读投票详情
 
         const voteTallyResult = {};
         allVotesResult.forEach(vote => {
@@ -783,7 +841,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (playersToEliminate.length === 1) {
           const eliminatedPlayer = werewolfGameState.players.find(p => p.id === playersToEliminate[0]);
           eliminatedPlayer.isAlive = false;
-          logToWerewolfGame(`投票结果：${eliminatedPlayer.name} 被淘汰。`);
+          // ★★★ 修改：显示票数统计 ★★★
+          logToWerewolfGame(`投票结果：${eliminatedPlayer.name} 以 ${maxVotesResult} 票被淘汰。`);
           renderWerewolfGameScreen();
           if (checkGameOver()) return;
           if (eliminatedPlayer.role === 'hunter') {
@@ -803,7 +862,12 @@ document.addEventListener('DOMContentLoaded', () => {
             }
           }
         } else {
-          logToWerewolfGame('投票平票，无人出局。');
+          // ★★★ 修改：显示平票详情 ★★★
+          const tiedNames = playersToEliminate.map(id => {
+            const p = werewolfGameState.players.find(player => player.id === id);
+            return p ? `${p.name}(${voteTallyResult[id]}票)` : '未知';
+          }).join('、');
+          logToWerewolfGame(`投票平票（${tiedNames}），无人出局。`);
         }
 
         werewolfGameState.gamePhase = 'night_start';
@@ -920,6 +984,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
             </div>
         `;
+        } else if (log.type === 'vote-header') {
+          // 投票公示标题
+          return `<div class="log-entry vote-header" style="font-weight: bold; color: var(--primary-color); border-bottom: 1px solid var(--primary-color); padding-bottom: 4px; margin-top: 8px;">${log.message}</div>`;
+        } else if (log.type === 'vote-detail') {
+          // 每个玩家的投票详情
+          const { voterName, voterAvatar, targetName, isAbstain } = log.message;
+          const targetStyle = isAbstain ? 'color: var(--text-secondary); font-style: italic;' : 'color: var(--accent-color); font-weight: bold;';
+          return `
+            <div class="log-entry vote-detail" style="display: flex; align-items: center; gap: 8px; padding: 4px 0; margin-left: 8px;">
+                <img src="${voterAvatar}" style="width: 24px; height: 24px; border-radius: 50%;">
+                <span style="min-width: 60px;">${voterName}</span>
+                <span style="color: var(--text-secondary);">→</span>
+                <span style="${targetStyle}">${targetName}</span>
+            </div>
+          `;
         } else {
           return `<div class="log-entry ${log.type}">${String(log.message).replace(/\n/g, '<br>')}</div>`;
         }
@@ -1658,9 +1737,40 @@ ${formattedLog}
           extraContext += `\n# 本轮已发言内容（前${speakOrder - 1}人）:\n${currentRoundSpeeches}\n`;
         }
         
+        // ★★★ 新增：发言时也参考历史投票记录 ★★★
+        if (Object.keys(werewolfGameState.votes).length > 0) {
+          extraContext += '\n# 历史投票记录（可用于分析和质疑）:\n';
+          for (const dayKey in werewolfGameState.votes) {
+            const dayVotes = werewolfGameState.votes[dayKey];
+            if (dayVotes && dayVotes.length > 0) {
+              extraContext += `【${dayKey.replace('day', '第')}天】\n`;
+              dayVotes.forEach(v => {
+                extraContext += `  ${v.voterName} → ${v.targetName || '弃票'}\n`;
+              });
+            }
+          }
+          extraContext += '【分析提示】可以质疑投票行为异常的人\n';
+        }
+        
         jsonFormat = '{"action": "speak", "speech": "你的发言"}';
         break;
       case 'vote':
+        // ★★★ 新增：构建历史投票记录供AI参考 ★★★
+        let voteHistoryContext = '';
+        if (Object.keys(werewolfGameState.votes).length > 0) {
+          voteHistoryContext = '\n# 历史投票记录（重要线索）:\n';
+          for (const dayKey in werewolfGameState.votes) {
+            const dayVotes = werewolfGameState.votes[dayKey];
+            if (dayVotes && dayVotes.length > 0) {
+              voteHistoryContext += `【${dayKey.replace('day', '第')}天】\n`;
+              dayVotes.forEach(v => {
+                voteHistoryContext += `  ${v.voterName} → ${v.targetName || '弃票'}\n`;
+              });
+            }
+          }
+          voteHistoryContext += '\n【分析提示】注意谁经常投同一个人，谁从不投某人，这些是重要线索\n';
+        }
+        
         if (player.role === 'wolf') {
           if (skillLevel === 'expert') {
             actionPrompt = `投票环节。你是狼人，根据场上形势投票。
@@ -1675,12 +1785,13 @@ ${formattedLog}
         } else {
           if (skillLevel === 'expert') {
             actionPrompt = `投票环节。你是好人，投给你认为最可疑的狼人。
-【分析要点】发言逻辑、站边态度、投票记录
-【警惕】总是投好人的可能是倒钩狼`;
+【分析要点】发言逻辑、站边态度、历史投票记录
+【警惕】总是投好人的可能是倒钩狼，注意分析谁经常互保`;
           } else {
             actionPrompt = `投票环节。你是好人，投给你认为最可疑的玩家。`;
           }
         }
+        extraContext += voteHistoryContext;
         jsonFormat = '{"action": "vote", "targetId": "你投票的玩家ID"}';
         break;
     }
@@ -6835,6 +6946,13 @@ ${isQuestionEvent ? `- 【必须正面回答问题】，给出明确答案，禁
         logToUndercoverGame('描述结束，现在开始投票。', 'system');
         undercoverGameState.votes = {}; // 清空上一轮的票
         const alivePlayers = undercoverGameState.players.filter(p => p.isAlive);
+        
+        // ★★★ 新增：本轮投票详情记录 ★★★
+        const roundKey = `round${undercoverGameState.dayNumber}`;
+        if (!undercoverGameState.voteHistory[roundKey]) {
+          undercoverGameState.voteHistory[roundKey] = [];
+        }
+        
         for (const voter of alivePlayers) {
           let voteResult;
           if (voter.isUser) {
@@ -6853,13 +6971,36 @@ ${isQuestionEvent ? `- 【必须正面回答问题】，给出明确答案，禁
                 `<strong>${voter.name}</strong> 投票给了 <strong>${targetPlayer.name}</strong>，理由是：“${reason}”`,
               );
               undercoverGameState.votes[targetId] = (undercoverGameState.votes[targetId] || 0) + 1;
+              // ★★★ 记录到历史 ★★★
+              undercoverGameState.voteHistory[roundKey].push({
+                voterId: voter.id,
+                voterName: voter.name,
+                targetId: targetId,
+                targetName: targetPlayer.name
+              });
             }
           } else {
             const reason = voteResult ? voteResult.reason || '信息不足，无法判断。' : '信息不足，无法判断。';
             logToUndercoverGame(`<strong>${voter.name}</strong> 弃票了，理由是：“${reason}”`);
+            // ★★★ 弃票也记录 ★★★
+            undercoverGameState.voteHistory[roundKey].push({
+              voterId: voter.id,
+              voterName: voter.name,
+              targetId: null,
+              targetName: null
+            });
           }
           await sleep(500);
         }
+        
+        // ★★★ 新增：公屏显示投票公示 ★★★
+        logToUndercoverGame(`📊 第${undercoverGameState.dayNumber}轮投票公示`, 'system');
+        let voteSummaryText = '';
+        undercoverGameState.voteHistory[roundKey].forEach(v => {
+          voteSummaryText += `${v.voterName} → ${v.targetName || '弃票'}\n`;
+        });
+        logToUndercoverGame(voteSummaryText.trim(), 'system');
+        renderUndercoverGameScreen();
 
         undercoverGameState.gamePhase = 'elimination';
         await sleep(2000);
@@ -7273,7 +7414,22 @@ ${isQuestionEvent ? `- 【必须正面回答问题】，给出明确答案，禁
         jsonFormat = '{"description": "你的补充发言..."}';
         break;
       case 'vote':
-        actionPrompt = `现在是投票环节。请仔细分析【所有玩家的发言】，找出描述最可疑、最偏离主题、或者听起来最心虚的那个人，然后投票给他/她，并给出【简洁且符合逻辑】的理由。或者，如果你觉得信息不足无法判断，也可以选择弃票，并说明你弃票的原因。`;
+        // ★★★ 新增：构建历史投票记录供AI参考 ★★★
+        let voteHistoryInfo = '';
+        if (Object.keys(undercoverGameState.voteHistory).length > 0) {
+          voteHistoryInfo = '\n# 历史投票记录（重要线索）:\n';
+          for (const rKey in undercoverGameState.voteHistory) {
+            const roundVotes = undercoverGameState.voteHistory[rKey];
+            if (roundVotes && roundVotes.length > 0) {
+              voteHistoryInfo += `【${rKey.replace('round', '第')}轮】\n`;
+              roundVotes.forEach(v => {
+                voteHistoryInfo += `  ${v.voterName} → ${v.targetName || '弃票'}\n`;
+              });
+            }
+          }
+          voteHistoryInfo += '【分析提示】注意谁总是投同一个人，谁从不投某人，这些是识别卧底的线索\n';
+        }
+        actionPrompt = `现在是投票环节。请仔细分析【所有玩家的发言】和【历史投票记录】，找出描述最可疑、最偏离主题、或者听起来最心虚的那个人，然后投票给他/她，并给出【简洁且符合逻辑】的理由。或者，如果你觉得信息不足无法判断，也可以选择弃票，并说明你弃票的原因。${voteHistoryInfo}`;
         jsonFormat = '{"voteForId": "你投票的玩家ID或null", "reason": "你的投票或弃票理由..."}';
         votingRule = `
 # 【【【投票铁律：这是最高指令，必须严格遵守】】】
