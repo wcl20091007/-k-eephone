@@ -1407,7 +1407,56 @@
             </div>
           </div>
 
-          <!-- 4. 浏览器通知权限卡片 -->
+          <!-- 4. 强力保活卡片 -->
+          <div class="moe-card">
+            <div class="moe-card-header">
+              <span class="icon">⚡</span>
+              <h3>强力保活</h3>
+            </div>
+            <div class="moe-card-body">
+              <div class="form-group">
+                <label class="toggle-switch-label">
+                  <span class="toggle-switch-text">启用强力保活</span>
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="keep-alive-switch" />
+                    <span class="slider"></span>
+                  </label>
+                </label>
+                <p style="color: #666; font-size: 12px; margin-top: 10px;">
+                  💡 开启后，网站将在后台保持活动状态，AI可以继续回应和输出，即使应用被挂到后台也能正常工作。
+                </p>
+              </div>
+              <div
+                id="keep-alive-details"
+                style="display: none; margin-top: 10px"
+              >
+                <div class="form-group">
+                  <label>保活状态</label>
+                  <div id="keep-alive-status" style="padding: 10px; border-radius: 8px; background: #f0f0f0; margin-top: 5px;">
+                    <strong>Wake Lock：</strong><span id="wake-lock-status-text">检查中...</span><br>
+                    <strong>页面状态：</strong><span id="page-visibility-status-text">检查中...</span><br>
+                    <strong>心跳间隔：</strong><span id="heartbeat-interval-text">30秒</span>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label>心跳间隔 (秒)</label>
+                  <input
+                    type="number"
+                    id="heartbeat-interval-input"
+                    min="10"
+                    max="300"
+                    value="30"
+                    class="moe-input center-text"
+                  />
+                  <p style="color: #888; font-size: 11px; margin-top: 5px;">
+                    定期发送心跳保持连接活跃（建议10-60秒）
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 5. 浏览器通知权限卡片 -->
           <div class="moe-card">
             <div class="moe-card-header">
               <span class="icon">🔔</span>
@@ -1443,7 +1492,7 @@
             </div>
           </div>
 
-          <!-- 5. 图像生成卡片 -->
+          <!-- 6. 图像生成卡片 -->
           <div class="moe-card">
             <div class="moe-card-header">
               <span class="icon">🎨</span>
@@ -1510,7 +1559,7 @@
             </div>
           </div>
 
-          <!-- 5. 存储与备份卡片 -->
+          <!-- 7. 存储与备份卡片 -->
           <div class="moe-card">
             <div class="moe-card-header">
               <span class="icon">💾</span>

@@ -4746,6 +4746,8 @@ document.addEventListener("DOMContentLoaded", () => {
       enableBackgroundActivity: false,
       backgroundActivityInterval: 60,
       blockCooldownHours: 1,
+      enableKeepAlive: false,
+      heartbeatInterval: 30,
       appIcons: { ...DEFAULT_APP_ICONS },
       appLabels: {},
       ringtoneUrl: "https://files.catbox.moe/3w7gla.mp3",
@@ -6077,6 +6079,22 @@ document.addEventListener("DOMContentLoaded", () => {
       state.globalSettings.backgroundActivityInterval || 60;
     document.getElementById("block-cooldown-input").value =
       state.globalSettings.blockCooldownHours || 1;
+
+    // 2.5. 更新保活相关的开关和输入框
+    const keepAliveSwitch = document.getElementById("keep-alive-switch");
+    const keepAliveDetails = document.getElementById("keep-alive-details");
+    const heartbeatIntervalInput = document.getElementById("heartbeat-interval-input");
+    
+    if (keepAliveSwitch) {
+      keepAliveSwitch.checked = !!state.globalSettings.enableKeepAlive;
+      if (keepAliveDetails) {
+        keepAliveDetails.style.display = keepAliveSwitch.checked ? "block" : "none";
+      }
+    }
+    
+    if (heartbeatIntervalInput) {
+      heartbeatIntervalInput.value = state.globalSettings.heartbeatInterval || 30;
+    }
 
     // 3. 渲染预设和频率的下拉框
     renderApiPresetSelector();
@@ -17087,6 +17105,228 @@ document.addEventListener("DOMContentLoaded", () => {
     if (simulationIntervalId) {
       clearInterval(simulationIntervalId);
       simulationIntervalId = null;
+    }
+  }
+
+  // ==================== 强力保活功能 ====================
+  let wakeLock = null;
+  let heartbeatIntervalId = null;
+  let keepAliveWorker = null;
+
+  /**
+   * 启动强力保活功能
+   */
+  async function startKeepAlive() {
+    if (!state.globalSettings.enableKeepAlive) return;
+
+    console.log("启动强力保活功能...");
+
+    // 1. 请求 Wake Lock（防止屏幕关闭）
+    try {
+      if ('wakeLock' in navigator) {
+        wakeLock = await navigator.wakeLock.request('screen');
+        console.log("Wake Lock 已获取");
+        updateWakeLockStatus(true);
+
+        // 监听 Wake Lock 释放事件
+        wakeLock.addEventListener('release', () => {
+          console.log("Wake Lock 已释放");
+          updateWakeLockStatus(false);
+          // 如果保活功能仍然启用，尝试重新获取
+          if (state.globalSettings.enableKeepAlive) {
+            setTimeout(() => {
+              if (state.globalSettings.enableKeepAlive) {
+                startKeepAlive();
+              }
+            }, 1000);
+          }
+        });
+      } else {
+        console.warn("浏览器不支持 Wake Lock API");
+        updateWakeLockStatus(false, "不支持");
+      }
+    } catch (err) {
+      console.error("获取 Wake Lock 失败:", err);
+      updateWakeLockStatus(false, "失败: " + err.message);
+    }
+
+    // 2. 监听页面可见性变化
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // 3. 启动心跳定时器
+    const heartbeatInterval = (state.globalSettings.heartbeatInterval || 30) * 1000;
+    heartbeatIntervalId = setInterval(() => {
+      sendHeartbeat();
+    }, heartbeatInterval);
+
+    // 4. 立即发送一次心跳
+    sendHeartbeat();
+
+    // 5. 更新页面可见性状态
+    updatePageVisibilityStatus();
+
+    console.log(`强力保活已启动，心跳间隔: ${state.globalSettings.heartbeatInterval || 30}秒`);
+  }
+
+  /**
+   * 停止强力保活功能
+   */
+  function stopKeepAlive() {
+    console.log("停止强力保活功能...");
+
+    // 1. 释放 Wake Lock
+    if (wakeLock) {
+      wakeLock.release().catch(err => {
+        console.error("释放 Wake Lock 失败:", err);
+      });
+      wakeLock = null;
+      updateWakeLockStatus(false);
+    }
+
+    // 2. 移除页面可见性监听
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
+
+    // 3. 清除心跳定时器
+    if (heartbeatIntervalId) {
+      clearInterval(heartbeatIntervalId);
+      heartbeatIntervalId = null;
+    }
+
+    // 4. 终止 Web Worker（如果有）
+    if (keepAliveWorker) {
+      keepAliveWorker.terminate();
+      keepAliveWorker = null;
+    }
+
+    console.log("强力保活已停止");
+  }
+
+  /**
+   * 发送心跳保持连接活跃
+   */
+  function sendHeartbeat() {
+    try {
+      const now = Date.now();
+      if (!window.lastHeartbeat) window.lastHeartbeat = 0;
+      
+      // 更新心跳状态显示
+      updateHeartbeatStatus();
+      
+      // 方法1: 通过更新本地存储来保持活跃（轻量级操作）
+      // 这可以防止浏览器将页面标记为不活跃
+      try {
+        localStorage.setItem('ephone_keepalive', now.toString());
+      } catch (e) {
+        // localStorage可能不可用，忽略
+      }
+
+      // 方法2: 触发一个微小的事件来保持JavaScript引擎活跃
+      // 即使页面在后台，这个操作也能执行
+      if (typeof window.requestIdleCallback === 'function') {
+        window.requestIdleCallback(() => {
+          // 空闲时执行轻量级操作
+          updateHeartbeatStatus();
+        }, { timeout: 100 });
+      }
+
+      // 方法3: 如果页面可见，可以做一些UI更新
+      if (!document.hidden) {
+        // 页面可见时的额外操作
+        updatePageVisibilityStatus();
+      }
+
+      // 方法4: 确保Wake Lock仍然有效（如果支持）
+      if (wakeLock && 'wakeLock' in navigator) {
+        // 检查Wake Lock是否仍然有效
+        if (wakeLock.released) {
+          console.log("Wake Lock已释放，尝试重新获取...");
+          if (state.globalSettings.enableKeepAlive) {
+            navigator.wakeLock.request('screen').then(lock => {
+              wakeLock = lock;
+              updateWakeLockStatus(true);
+            }).catch(err => {
+              console.warn("重新获取Wake Lock失败:", err);
+              updateWakeLockStatus(false, "获取失败");
+            });
+          }
+        }
+      }
+
+      window.lastHeartbeat = now;
+    } catch (err) {
+      console.error("心跳发送失败:", err);
+    }
+  }
+
+  /**
+   * 处理页面可见性变化
+   */
+  function handleVisibilityChange() {
+    updatePageVisibilityStatus();
+    
+    if (document.hidden) {
+      console.log("页面已切换到后台");
+      // 页面在后台时，可以尝试重新获取 Wake Lock
+      if (state.globalSettings.enableKeepAlive && wakeLock === null) {
+        setTimeout(() => {
+          if (state.globalSettings.enableKeepAlive && !document.hidden) {
+            startKeepAlive();
+          }
+        }, 1000);
+      }
+    } else {
+      console.log("页面已切换到前台");
+      // 页面回到前台时，确保 Wake Lock 仍然有效
+      if (state.globalSettings.enableKeepAlive && wakeLock === null) {
+        startKeepAlive();
+      }
+    }
+  }
+
+  /**
+   * 更新 Wake Lock 状态显示
+   */
+  function updateWakeLockStatus(active, message = null) {
+    const statusText = document.getElementById("wake-lock-status-text");
+    if (statusText) {
+      if (message) {
+        statusText.textContent = message;
+        statusText.style.color = "#ff6b6b";
+      } else if (active) {
+        statusText.textContent = "已激活 ✓";
+        statusText.style.color = "#51cf66";
+      } else {
+        statusText.textContent = "未激活";
+        statusText.style.color = "#868e96";
+      }
+    }
+  }
+
+  /**
+   * 更新页面可见性状态显示
+   */
+  function updatePageVisibilityStatus() {
+    const statusText = document.getElementById("page-visibility-status-text");
+    if (statusText) {
+      if (document.hidden) {
+        statusText.textContent = "后台运行";
+        statusText.style.color = "#ffa94d";
+      } else {
+        statusText.textContent = "前台运行 ✓";
+        statusText.style.color = "#51cf66";
+      }
+    }
+  }
+
+  /**
+   * 更新心跳状态显示
+   */
+  function updateHeartbeatStatus() {
+    const intervalText = document.getElementById("heartbeat-interval-text");
+    if (intervalText) {
+      const interval = state.globalSettings.heartbeatInterval || 30;
+      const now = new Date().toLocaleTimeString();
+      intervalText.textContent = `${interval}秒 (最后: ${now})`;
     }
   }
 
@@ -41418,6 +41658,17 @@ ${chat.settings.aiPersona}
           parseFloat(
             document.getElementById("block-cooldown-input").value
           ) || 1;
+        
+        // 保存保活设置
+        const keepAliveSwitch = document.getElementById("keep-alive-switch");
+        const heartbeatIntervalInput = document.getElementById("heartbeat-interval-input");
+        if (keepAliveSwitch) {
+          state.globalSettings.enableKeepAlive = keepAliveSwitch.checked;
+        }
+        if (heartbeatIntervalInput) {
+          state.globalSettings.heartbeatInterval = parseInt(heartbeatIntervalInput.value) || 30;
+        }
+        
         await db.globalSettings.put(state.globalSettings);
 
         // 动态启动或停止模拟器
@@ -41429,6 +41680,17 @@ ${chat.settings.aiPersona}
           );
         } else {
           console.log("后台活动模拟已停止。");
+        }
+
+        // 动态启动或停止保活功能
+        stopKeepAlive();
+        if (state.globalSettings.enableKeepAlive) {
+          startKeepAlive();
+          console.log(
+            `强力保活已启动，心跳间隔: ${state.globalSettings.heartbeatInterval}秒`
+          );
+        } else {
+          console.log("强力保活已停止。");
         }
 
         alert("API设置已保存!");
@@ -45390,6 +45652,12 @@ ${chat.settings.aiPersona}
     if (state.globalSettings.enableBackgroundActivity) {
       startBackgroundSimulation();
       console.log("后台活动模拟已自动启动。");
+    }
+
+    // 启动保活功能（如果已启用）
+    if (state.globalSettings.enableKeepAlive) {
+      startKeepAlive();
+      console.log("强力保活已自动启动。");
     }
 
     // 1. 监听主题选择
@@ -49488,6 +49756,21 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
         // 每次点击总开关，都重新渲染一次详细设置区（它会根据开关状态自动显示或隐藏）
         renderBackgroundFrequencySelector();
       });
+
+    // 1.5. 保活开关的事件
+    const keepAliveSwitch = document.getElementById("keep-alive-switch");
+    const keepAliveDetails = document.getElementById("keep-alive-details");
+    if (keepAliveSwitch && keepAliveDetails) {
+      keepAliveSwitch.addEventListener("change", () => {
+        // 根据开关状态显示或隐藏详细信息
+        keepAliveDetails.style.display = keepAliveSwitch.checked ? "block" : "none";
+        // 如果启用了保活，立即更新状态显示
+        if (keepAliveSwitch.checked) {
+          updatePageVisibilityStatus();
+          updateWakeLockStatus(wakeLock !== null);
+        }
+      });
+    }
 
     // 2. 全选按钮
     document
