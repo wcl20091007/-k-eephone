@@ -1568,6 +1568,47 @@
             </div>
           </div>
 
+          <!-- 6.5. Pollinations 图像生成卡片 -->
+          <div class="moe-card">
+            <div class="moe-card-header">
+              <span class="icon">🌸</span>
+              <h3>Pollinations 生图</h3>
+            </div>
+            <div class="moe-card-body">
+              <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 10px;">
+                Pollinations 是免费的图像生成服务，用于约会、商城等场景。填入 API Key 可获得更稳定的服务和更高质量的生成效果。
+              </p>
+              <div class="form-group">
+                <label>API Key (可选)</label>
+                <div style="position: relative">
+                  <input
+                    type="password"
+                    id="pollinations-api-key"
+                    class="moe-input"
+                    placeholder="留空则使用免费公共服务"
+                  />
+                  <span
+                    id="pollinations-key-toggle"
+                    style="
+                      position: absolute;
+                      right: 10px;
+                      top: 10px;
+                      cursor: pointer;
+                    "
+                    >👀</span
+                  >
+                </div>
+              </div>
+              <button
+                type="button"
+                id="pollinations-test-btn"
+                class="moe-btn-secondary"
+              >
+                🧪 测试生图
+              </button>
+            </div>
+          </div>
+
           <!-- 7. 存储与备份卡片 -->
           <div class="moe-card">
             <div class="moe-card-header">

@@ -191,8 +191,10 @@ async function generateAndLoadImage(prompt, maxRetries = 5) {
       const encodedPrompt = encodeURIComponent(prompt);
       const seed = Math.floor(Math.random() * 100000);
 
-      // 尝试主域名
-      const primaryUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=640&seed=${seed}`;
+      // 使用全局函数获取Pollinations URL（支持用户自定义API Key）
+      const primaryUrl = window.getPollinationsImageUrl 
+        ? window.getPollinationsImageUrl(prompt, 1024, 640, { seed })
+        : `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=640&seed=${seed}`;
 
       const loadImage = url =>
         new Promise((resolve, reject) => {

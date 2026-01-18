@@ -383,6 +383,35 @@ document.addEventListener("DOMContentLoaded", () => {
     return await Http_Get_External(url);
   }
 
+  /**
+   * 生成 Pollinations 图片 URL
+   * 如果用户配置了自己的 API Key，使用新的 gen.pollinations.ai 接口
+   * 否则使用免费的 image.pollinations.ai 接口
+   * @param {string} prompt - 图片生成提示词
+   * @param {number} width - 图片宽度，默认1024
+   * @param {number} height - 图片高度，默认640
+   * @param {object} options - 可选参数 { seed, nologo, model }
+   * @returns {string} 图片URL
+   */
+  window.getPollinationsImageUrl = function(prompt, width = 1024, height = 640, options = {}) {
+    const encodedPrompt = encodeURIComponent(prompt);
+    const seed = options.seed ?? Math.floor(Math.random() * 100000);
+    const nologo = options.nologo !== false; // 默认去除logo
+    const model = options.model || "flux"; // 默认使用flux模型
+    
+    // 检查用户是否配置了 Pollinations API Key
+    const pollinationsApiKey = state.apiConfig?.pollinationsApiKey || "";
+    
+    if (pollinationsApiKey) {
+      // 使用带 key 的新API格式
+      return `https://gen.pollinations.ai/image/${encodedPrompt}?width=${width}&height=${height}&model=${model}&key=${pollinationsApiKey}&seed=${seed}`;
+    } else {
+      // 使用免费公共服务
+      const nologoParam = nologo ? "&nologo=true" : "";
+      return `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}&seed=${seed}${nologoParam}`;
+    }
+  };
+
   // 检查音频链接是否真的可以播放
   function checkAudioAvailability(url) {
     return new Promise((resolve) => {
@@ -4726,6 +4755,7 @@ document.addEventListener("DOMContentLoaded", () => {
       minimaxApiKey: "",
       minimaxProvider: "cn",
       minimaxSpeechModel: "speech-01-turbo",
+      pollinationsApiKey: "", // Pollinations API Key (可选，用于更稳定的图片生成)
     };
 
     // 兼容旧数据，如果加载的设置里没有温度，也给一个默认值
@@ -6070,6 +6100,12 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("novelai-api-key").value = novelaiApiKey;
     document.getElementById("novelai-details").style.display =
       novelaiEnabled ? "block" : "none";
+
+    // 加载Pollinations配置
+    const pollinationsApiKeyEl = document.getElementById("pollinations-api-key");
+    if (pollinationsApiKeyEl) {
+      pollinationsApiKeyEl.value = state.apiConfig.pollinationsApiKey || "";
+    }
 
     // 2. 更新后台活动相关的开关和输入框
     document.getElementById("background-activity-switch").checked =
@@ -13538,10 +13574,11 @@ document.addEventListener("DOMContentLoaded", () => {
                 ? msgData.prompt.slice(0, 9)
                 : [msgData.prompt];
 
-              // 生成多个图片URL（添加nologo参数去除水印）
+              // 生成多个图片URL（添加nologo参数去除水印，支持用户自定义API Key）
               newPost.imageUrls = prompts.map((prompt) => {
-                const encodedPrompt = encodeURIComponent(prompt);
-                return `https://image.pollinations.ai/prompt/${encodedPrompt}?nologo=true&width=1024&height=1024`;
+                return window.getPollinationsImageUrl 
+                  ? window.getPollinationsImageUrl(prompt, 1024, 1024, { nologo: true })
+                  : `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?nologo=true&width=1024&height=1024`;
               });
 
               // 保持向后兼容，单张图片时也设置 imageUrl
@@ -41778,6 +41815,11 @@ ${chat.settings.aiPersona}
         state.apiConfig.minimaxSpeechModel = document.getElementById(
           "minimax-speech-model-select"
         ).value;
+        // --- 保存 Pollinations 设置 ---
+        const pollinationsApiKeyEl = document.getElementById("pollinations-api-key");
+        if (pollinationsApiKeyEl) {
+          state.apiConfig.pollinationsApiKey = pollinationsApiKeyEl.value.trim();
+        }
         // --- 保存 GitHub 备份设置 ---
         state.apiConfig.githubToken = document
           .getElementById("github-token")
@@ -42172,6 +42214,61 @@ ${chat.settings.aiPersona}
         link.download = "novelai-generated-" + Date.now() + ".png";
         link.click();
       });
+
+    // Pollinations API Key显示/隐藏切换
+    const pollinationsKeyToggle = document.getElementById("pollinations-key-toggle");
+    if (pollinationsKeyToggle) {
+      pollinationsKeyToggle.addEventListener("click", function () {
+        const input = document.getElementById("pollinations-api-key");
+        if (input.type === "password") {
+          input.type = "text";
+          this.textContent = "😌";
+        } else {
+          input.type = "password";
+          this.textContent = "👀";
+        }
+      });
+    }
+
+    // Pollinations 测试生图按钮
+    const pollinationsTestBtn = document.getElementById("pollinations-test-btn");
+    if (pollinationsTestBtn) {
+      pollinationsTestBtn.addEventListener("click", async () => {
+        const apiKey = document.getElementById("pollinations-api-key").value.trim();
+        const testPrompt = "a beautiful sunset over mountains, high quality, detailed";
+        const encodedPrompt = encodeURIComponent(testPrompt);
+        
+        let testUrl;
+        if (apiKey) {
+          // 使用带key的新API格式
+          testUrl = `https://gen.pollinations.ai/image/${encodedPrompt}?width=512&height=512&model=flux&key=${apiKey}`;
+        } else {
+          // 使用免费公共服务
+          testUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=512&height=512&nologo=true`;
+        }
+        
+        pollinationsTestBtn.disabled = true;
+        pollinationsTestBtn.textContent = "⏳ 测试中...";
+        
+        try {
+          const img = new Image();
+          await new Promise((resolve, reject) => {
+            img.onload = resolve;
+            img.onerror = () => reject(new Error("图片加载失败"));
+            const timeout = setTimeout(() => reject(new Error("图片加载超时")), 30000);
+            img.onload = () => { clearTimeout(timeout); resolve(); };
+            img.src = testUrl;
+          });
+          
+          alert(`✅ Pollinations 测试成功！${apiKey ? "（使用自定义API Key）" : "（使用免费公共服务）"}`);
+        } catch (error) {
+          alert(`❌ Pollinations 测试失败：${error.message}`);
+        } finally {
+          pollinationsTestBtn.disabled = false;
+          pollinationsTestBtn.textContent = "🧪 测试生图";
+        }
+      });
+    }
 
     // 角色专属NAI提示词弹窗事件监听器
 

@@ -245,9 +245,11 @@ function createDatingSceneCard(scene) {
 // 生成并加载图片
 function generateAndLoadImage(prompt) {
   return new Promise((resolve, reject) => {
-    const encodedPrompt = encodeURIComponent(prompt);
     const seed = Math.floor(Math.random() * 100000);
-    const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=640&seed=${seed}`;
+    // 使用全局函数获取Pollinations URL（支持用户自定义API Key）
+    const imageUrl = window.getPollinationsImageUrl 
+      ? window.getPollinationsImageUrl(prompt, 1024, 640, { seed })
+      : `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1024&height=640&seed=${seed}`;
 
     const img = new Image();
     img.src = imageUrl;
@@ -255,6 +257,7 @@ function generateAndLoadImage(prompt) {
     img.onload = () => resolve(imageUrl);
     img.onerror = () => {
       console.warn(`主URL加载失败，尝试备用URL for: ${prompt}`);
+      const encodedPrompt = encodeURIComponent(prompt);
       const fallbackUrl = `https://pollinations.ai/p/${encodedPrompt}?width=1024&height=640&seed=${seed}`;
       img.src = fallbackUrl;
       img.onload = () => resolve(fallbackUrl);
