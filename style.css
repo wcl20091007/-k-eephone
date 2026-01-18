@@ -21484,12 +21484,15 @@ body {
 /* 菱形 */
 #desktop-pet-circle.shape-diamond {
   border-radius: 0;
+  border: none;
   clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
 }
 
 /* 方形 */
 #desktop-pet-circle.shape-square {
   border-radius: 0;
+  border: none;
+  box-shadow: none;
 }
 
 #desktop-pet-circle:hover {
@@ -21523,6 +21526,12 @@ body {
 #phone-screen.dark-mode #desktop-pet-circle {
   border-color: rgba(255, 255, 255, 0.7);
   background-color: rgba(0, 0, 0, 0.3);
+}
+
+/* 夜间模式下菱形和方形也不显示边框 */
+#phone-screen.dark-mode #desktop-pet-circle.shape-diamond,
+#phone-screen.dark-mode #desktop-pet-circle.shape-square {
+  border: none;
 }
 
 /* ▼▼▼ 桌宠吸附状态样式 ▼▼▼ */
