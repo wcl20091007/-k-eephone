@@ -198,7 +198,114 @@ document.addEventListener("DOMContentLoaded", () => {
     },
   ];
 
-  const db = new Dexie("GeminiChatDB");
+  // === 修改开始：动态数据库与验证 ===
+  var db; // 声明全局变量，但不初始化
+  const APP_SECRET = "EPHONE_2026_SUPER_SECRET_KEY_V1"; // 必须与机器人一致
+
+  // HMAC-SHA256 验证函数
+  function verifyLogin(uid, pwd) {
+    if (!uid || !pwd) return false;
+    
+    // 1. 计算 HMAC-SHA256 (得到原始数据)
+    const rawHash = CryptoJS.HmacSHA256(uid.trim(), APP_SECRET);
+    
+    // 2. 转为 Base64 字符串 (天然包含大小写字母和数字)
+    let base64 = CryptoJS.enc.Base64.stringify(rawHash);
+    
+    // 3. 截取前 12 位 (增加长度)
+    let generated = base64.substring(0, 12);
+    
+    // 4. 强制插入特殊符号 (增强复杂度)
+    // 将字符串转为数组进行替换
+    let chars = generated.split('');
+    chars[2] = '@';  // 第3位强制变为 @
+    chars[7] = '!';  // 第8位强制变为 !
+    
+    // 重新组合
+    const correctPassword = chars.join('');
+    
+    // console.log("正确密码应为:", correctPassword); // 调试用，上线可注释
+    return pwd.trim() === correctPassword;
+  }
+
+  // 动态初始化数据库函数
+  function initDatabase(userId) {
+    // 数据库名带上用户ID，实现每个人数据隔离
+    db = new Dexie('GeminiChatDB');
+    
+    // 下面是你原来的数据库结构 (原封不动)
+    db.version(64).stores({
+      // 版本号从 63 升级到 64 - 添加桌宠窥屏历史记录的includeInMemory字段
+      chats:
+        "&id, isGroup, groupId, ownerId, isPinned, characterPhoneData, latestInnerVoice, innerVoiceHistory, loversSpaceData.emotionDiaries, settings.summary, settings.weiboNickname, settings.innerVoiceHideHeaderBorder, settings.innerVoiceAdopterLabelFormat, interactionStats, unlockedSymbols, settings.selectedIntimacyBadge",
+      apiConfig: "&id",
+      globalSettings: "&id, activeThemeId",
+      userStickers: "&id, url, name, categoryId",
+      userStickerCategories: "++id, &name",
+      charStickers: "&id, url, name",
+      worldBooks: "&id, name, categoryId",
+      worldBookCategories: "++id, name",
+      musicLibrary: "&id",
+      personaPresets: "&id",
+      qzoneSettings: "&id",
+      qzonePosts: "++id, authorId, timestamp",
+      qzoneAlbums: "++id, name, createdAt",
+      qzonePhotos: "++id, albumId",
+      favorites: "++id, type, timestamp, originalTimestamp",
+      qzoneGroups: "++id, name",
+      memories: "++id, chatId, timestamp, type, targetDate",
+      callRecords: "++id, chatId, timestamp, customName",
+      customAvatarFrames: "&id, name, url",
+      themes: "++id, name, css",
+      apiPresets: "++id, name, proxyUrl",
+      bubbleStylePresets: "++id, name, css",
+      fontPresets: "&id, name, url",
+      homeScreenPresets: "++id, name",
+      weiboPosts: "++id, authorId, timestamp",
+      forumGroups: "++id, name, worldview, *categories",
+      forumPosts: "++id, groupId, timestamp, *categories",
+      forumComments: "++id, postId, timestamp",
+      forumCategories: "++id, name",
+      tarotReadings: "++id, timestamp",
+      pomodoroSessions: "++id, chatId, startTime",
+      scriptKillScripts: "++id, name, isBuiltIn",
+      taobaoProducts: "++id, name, category",
+      taobaoOrders: "++id, productId, timestamp",
+      taobaoCart: "++id, productId",
+      userWalletTransactions: "++id, timestamp",
+      charPhonePresets: "++id, name",
+      ludoQuestionBanks: "++id, name",
+      ludoQuestions: "++id, bankId, text, type",
+      datingScenes: "&uid, imageUrl",
+      datingPresets: "++id, name, settings.spriteGroupId",
+      datingSpriteGroups: "++id, name",
+      datingSprites: "++id, groupId, description, url",
+      datingHistory: "++id, characterId, timestamp",
+      offlinePresets: "++id, name",
+      elemeFoods: "++id, name, category",
+      elemeOrders: "++id, recipientId, timestamp",
+      calendarEvents: "++id, date, time, content, type, startTime, endTime, categoryId",
+      calendarTodos: "++id, date, content, completed",
+      calendarCategories: "++id, name, color",
+      calendarPeriods: "++id, date, flow, pain",
+      studioScripts: "++id, name",
+      studioHistory: "++id, timestamp",
+      tukeyAccounts: "++id, category, type", // 这是你已有的，保持不变
+      tukeyAccountingGroups: "&id", // 记账群聊设置 (id, name, members, replySettings)
+      tukeyAccountingRecords:
+        "++id, groupId, timestamp, isRepliedTo, accountId",
+      desktopPetPeekingHistory: "++id, chatId, timestamp, screenId, screenContent, response, includeInMemory",
+      tukeyAccountingReplies: "++id, recordId, charId", // AI的回复记录
+      tukeyUserSettings: "&id",
+      tukeyCustomConfig: "&id",
+      auroraBooks: "++id, title, content, addedAt",
+      globalNpcs: "&id, name", // 全局NPC库
+    });
+
+    window.db = db;
+    console.log(`[System] 已加载用户 ${userId} 的数据库`);
+  }
+  // === 修改结束 ===
 
   const BLOCKED_API_SITES = ["api.pisces.ink", "aiapi.qzz.io"];
 
@@ -1321,80 +1428,8 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // ===================================================================
-  // 2. 数据库结构定义
+  // 2. 数据库结构定义 (已移至 initDatabase 函数中)
   // ===================================================================
-
-  // main-app.js
-
-  db.version(64).stores({
-    // 版本号从 63 升级到 64 - 添加桌宠窥屏历史记录的includeInMemory字段
-    chats:
-      "&id, isGroup, groupId, ownerId, isPinned, characterPhoneData, latestInnerVoice, innerVoiceHistory, loversSpaceData.emotionDiaries, settings.summary, settings.weiboNickname, settings.innerVoiceHideHeaderBorder, settings.innerVoiceAdopterLabelFormat, interactionStats, unlockedSymbols, settings.selectedIntimacyBadge",
-    apiConfig: "&id",
-    globalSettings: "&id, activeThemeId",
-    userStickers: "&id, url, name, categoryId",
-    userStickerCategories: "++id, &name",
-    charStickers: "&id, url, name",
-    worldBooks: "&id, name, categoryId",
-    worldBookCategories: "++id, name",
-    musicLibrary: "&id",
-    personaPresets: "&id",
-    qzoneSettings: "&id",
-    qzonePosts: "++id, authorId, timestamp",
-    qzoneAlbums: "++id, name, createdAt",
-    qzonePhotos: "++id, albumId",
-    favorites: "++id, type, timestamp, originalTimestamp",
-    qzoneGroups: "++id, name",
-    memories: "++id, chatId, timestamp, type, targetDate",
-    callRecords: "++id, chatId, timestamp, customName",
-    customAvatarFrames: "&id, name, url",
-    themes: "++id, name, css",
-    apiPresets: "++id, name, proxyUrl",
-    bubbleStylePresets: "++id, name, css",
-    fontPresets: "&id, name, url",
-    homeScreenPresets: "++id, name",
-    weiboPosts: "++id, authorId, timestamp",
-    forumGroups: "++id, name, worldview, *categories",
-    forumPosts: "++id, groupId, timestamp, *categories",
-    forumComments: "++id, postId, timestamp",
-    forumCategories: "++id, name",
-    tarotReadings: "++id, timestamp",
-    pomodoroSessions: "++id, chatId, startTime",
-    scriptKillScripts: "++id, name, isBuiltIn",
-    taobaoProducts: "++id, name, category",
-    taobaoOrders: "++id, productId, timestamp",
-    taobaoCart: "++id, productId",
-    userWalletTransactions: "++id, timestamp",
-    charPhonePresets: "++id, name",
-    ludoQuestionBanks: "++id, name",
-    ludoQuestions: "++id, bankId, text, type",
-    datingScenes: "&uid, imageUrl",
-    datingPresets: "++id, name, settings.spriteGroupId",
-    datingSpriteGroups: "++id, name",
-    datingSprites: "++id, groupId, description, url",
-    datingHistory: "++id, characterId, timestamp",
-    offlinePresets: "++id, name",
-    elemeFoods: "++id, name, category",
-    elemeOrders: "++id, recipientId, timestamp",
-    calendarEvents: "++id, date, time, content, type, startTime, endTime, categoryId",
-    calendarTodos: "++id, date, content, completed",
-    calendarCategories: "++id, name, color",
-    calendarPeriods: "++id, date, flow, pain",
-    studioScripts: "++id, name",
-    studioHistory: "++id, timestamp",
-    tukeyAccounts: "++id, category, type", // 这是你已有的，保持不变
-    tukeyAccountingGroups: "&id", // 记账群聊设置 (id, name, members, replySettings)
-    tukeyAccountingRecords:
-      "++id, groupId, timestamp, isRepliedTo, accountId",
-    desktopPetPeekingHistory: "++id, chatId, timestamp, screenId, screenContent, response, includeInMemory",
-    tukeyAccountingReplies: "++id, recordId, charId", // AI的回复记录
-    tukeyUserSettings: "&id",
-    tukeyCustomConfig: "&id",
-    auroraBooks: "++id, title, content, addedAt",
-    globalNpcs: "&id, name", // 全局NPC库
-  });
-
-  window.db = db;
 
   // ===================================================================
   // 3. 所有功能函数定义
@@ -50958,7 +50993,472 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
     }
   }
 
-  init();
+  // ==========================================
+  // ▼▼▼ 登录界面渲染函数 ▼▼▼
+  // ==========================================
+  function renderLoginOverlay() {
+    // 防止重复生成
+    if (document.getElementById('login-overlay')) return;
+
+    const overlay = document.createElement('div');
+    overlay.id = 'login-overlay';
+    overlay.style.cssText = `
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+      background: #1a1a2e;
+      background-image: 
+        repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.03) 2px, rgba(255,255,255,0.03) 4px),
+        repeating-linear-gradient(90deg, transparent, transparent 2px, rgba(255,255,255,0.03) 2px, rgba(255,255,255,0.03) 4px),
+        radial-gradient(circle at 20% 50%, #ff6b9d 0%, transparent 50%),
+        radial-gradient(circle at 80% 80%, #4ecdc4 0%, transparent 50%),
+        radial-gradient(circle at 40% 20%, #ffe66d 0%, transparent 50%);
+      background-size: 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%;
+      animation: gameBgShift 8s ease infinite;
+      z-index: 99999; 
+      display: flex; flex-direction: column; 
+      justify-content: center; align-items: center; 
+      color: white; 
+      font-family: 'Courier New', monospace;
+      overflow: hidden;
+    `;
+
+    // 添加游戏机风格的动画样式
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes gameBgShift {
+        0%, 100% { 
+          background-position: 0% 0%, 0% 0%, 0% 0%, 0% 0%, 0% 0%;
+        }
+        50% { 
+          background-position: 0% 0%, 0% 0%, 20% 50%, 80% 80%, 40% 20%;
+        }
+      }
+      @keyframes fadeInUp {
+        from {
+          opacity: 0;
+          transform: translateY(30px) scale(0.9);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+      }
+      @keyframes bounce {
+        0%, 100% { transform: translateY(0) rotate(0deg); }
+        25% { transform: translateY(-10px) rotate(-5deg); }
+        75% { transform: translateY(-5px) rotate(5deg); }
+      }
+      @keyframes pixelPulse {
+        0%, 100% { 
+          transform: scale(1);
+          box-shadow: 0 0 0 0 rgba(255, 107, 157, 0.7);
+        }
+        50% { 
+          transform: scale(1.1);
+          box-shadow: 0 0 20px 10px rgba(255, 107, 157, 0.4);
+        }
+      }
+      @keyframes buttonGlow {
+        0%, 100% { 
+          box-shadow: 0 0 10px rgba(78, 205, 196, 0.5),
+                      0 0 20px rgba(78, 205, 196, 0.3),
+                      inset 0 0 10px rgba(78, 205, 196, 0.2);
+        }
+        50% { 
+          box-shadow: 0 0 20px rgba(78, 205, 196, 0.8),
+                      0 0 40px rgba(78, 205, 196, 0.5),
+                      inset 0 0 15px rgba(78, 205, 196, 0.3);
+        }
+      }
+      @keyframes inputShine {
+        0% { background-position: -100% 0; }
+        100% { background-position: 200% 0; }
+      }
+      @keyframes float {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(-15px); }
+      }
+      @keyframes sparkle {
+        0%, 100% { opacity: 0; transform: scale(0) rotate(0deg); }
+        50% { opacity: 1; transform: scale(1) rotate(180deg); }
+      }
+      #login-card {
+        animation: fadeInUp 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+        position: relative;
+      }
+      .game-character {
+        animation: bounce 2s ease-in-out infinite;
+      }
+      .game-icon {
+        animation: pixelPulse 2s ease-in-out infinite;
+      }
+      #login-uid:focus, #login-pwd:focus {
+        border-color: #4ecdc4;
+        box-shadow: 0 0 0 4px rgba(78, 205, 196, 0.3),
+                    0 0 15px rgba(78, 205, 196, 0.5);
+        transform: translateY(-3px) scale(1.02);
+        background: linear-gradient(90deg, 
+          rgba(78, 205, 196, 0.2) 0%, 
+          rgba(255, 107, 157, 0.2) 50%, 
+          rgba(78, 205, 196, 0.2) 100%);
+        background-size: 200% 100%;
+        animation: inputShine 2s linear infinite;
+      }
+      #btn-login-submit {
+        animation: buttonGlow 2s ease-in-out infinite;
+        position: relative;
+        overflow: hidden;
+      }
+      #btn-login-submit:hover {
+        transform: translateY(-3px) scale(1.05);
+        animation: buttonGlow 0.5s ease-in-out infinite;
+      }
+      #btn-login-submit:active {
+        transform: translateY(-1px) scale(1.02);
+      }
+      .sparkle {
+        position: absolute;
+        width: 8px;
+        height: 8px;
+        background: #ffe66d;
+        border-radius: 50%;
+        animation: sparkle 1.5s ease-in-out infinite;
+      }
+      .pixel-border {
+        border-image: 
+          linear-gradient(45deg, #ff6b9d, #4ecdc4, #ffe66d, #ff6b9d) 1;
+        border-style: solid;
+        border-width: 3px;
+      }
+      @media (max-width: 480px) {
+        #login-card {
+          width: 95% !important;
+          padding: 30px 20px !important;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+
+    // 游戏机风格的登录界面
+    overlay.innerHTML = `
+      <div id="login-card" style="
+        width: 90%; max-width: 450px; 
+        background: linear-gradient(135deg, rgba(26, 26, 46, 0.95) 0%, rgba(30, 30, 60, 0.95) 100%);
+        border-radius: 20px;
+        padding: 50px 35px;
+        box-shadow: 
+          0 0 0 4px #ff6b9d,
+          0 0 0 8px #4ecdc4,
+          0 0 0 12px #ffe66d,
+          0 20px 60px rgba(0, 0, 0, 0.5),
+          inset 0 0 30px rgba(255, 107, 157, 0.1);
+        text-align: center;
+        position: relative;
+        overflow: hidden;
+      ">
+        <!-- 装饰性像素点 -->
+        <div class="sparkle" style="top: 20px; left: 30px; animation-delay: 0s;"></div>
+        <div class="sparkle" style="top: 40px; right: 40px; animation-delay: 0.5s;"></div>
+        <div class="sparkle" style="bottom: 60px; left: 50px; animation-delay: 1s;"></div>
+        <div class="sparkle" style="bottom: 30px; right: 30px; animation-delay: 1.5s;"></div>
+        
+        <!-- 游戏机角色图标 -->
+        <div class="game-character" style="
+          width: 100px; height: 100px; 
+          margin: 0 auto 20px;
+          background: linear-gradient(135deg, #ff6b9d 0%, #4ecdc4 100%);
+          border-radius: 15px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 50px;
+          box-shadow: 
+            0 0 0 4px #ffe66d,
+            0 10px 30px rgba(255, 107, 157, 0.5),
+            inset 0 0 20px rgba(255, 255, 255, 0.2);
+          position: relative;
+        ">
+          <div class="game-icon" style="
+            font-size: 60px;
+            filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
+          ">🎮</div>
+        </div>
+        
+        <!-- 标题 -->
+        <h2 style="
+          margin: 0 0 10px 0; 
+          font-weight: 700; 
+          font-size: 32px;
+          background: linear-gradient(135deg, #ff6b9d 0%, #4ecdc4 50%, #ffe66d 100%);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+          letter-spacing: 2px;
+          text-transform: uppercase;
+          text-shadow: 0 0 20px rgba(255, 107, 157, 0.5);
+          position: relative;
+        ">
+          <span style="animation: float 3s ease-in-out infinite;">E</span>
+          <span style="animation: float 3s ease-in-out infinite 0.1s;">P</span>
+          <span style="animation: float 3s ease-in-out infinite 0.2s;">h</span>
+          <span style="animation: float 3s ease-in-out infinite 0.3s;">o</span>
+          <span style="animation: float 3s ease-in-out infinite 0.4s;">n</span>
+          <span style="margin: 0 8px;">·</span>
+          <span style="animation: float 3s ease-in-out infinite 0.5s;">安</span>
+          <span style="animation: float 3s ease-in-out infinite 0.6s;">全</span>
+          <span style="animation: float 3s ease-in-out infinite 0.7s;">验</span>
+          <span style="animation: float 3s ease-in-out infinite 0.8s;">证</span>
+        </h2>
+        
+        <p style="
+          margin: 0 0 35px 0;
+          color: rgba(255, 255, 255, 0.9);
+          font-size: 15px;
+          font-weight: 500;
+          text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+          letter-spacing: 1px;
+        ">🎯 请输入您的账号信息以继续游戏</p>
+        
+        <!-- 账号输入框 -->
+        <div style="position: relative; margin-bottom: 25px;">
+          <div style="
+            position: absolute;
+            left: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 20px;
+            z-index: 1;
+          ">👤</div>
+          <input type="text" id="login-uid" placeholder="请输入账号 ID" 
+            style="
+              width: 100%; 
+              padding: 18px 20px 18px 50px; 
+              border-radius: 12px; 
+              border: 3px solid #4ecdc4; 
+              background: rgba(30, 30, 60, 0.8); 
+              color: white; 
+              font-size: 16px; 
+              font-family: 'Courier New', monospace;
+              box-sizing: border-box; 
+              outline: none;
+              transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+              font-weight: 600;
+              letter-spacing: 1px;
+              box-shadow: 0 4px 15px rgba(78, 205, 196, 0.3);
+            ">
+        </div>
+        
+        <!-- 密码输入框 -->
+        <div style="position: relative; margin-bottom: 30px;">
+          <div style="
+            position: absolute;
+            left: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 20px;
+            z-index: 1;
+          ">🔒</div>
+          <input type="password" id="login-pwd" placeholder="请输入密码" 
+            style="
+              width: 100%; 
+              padding: 18px 20px 18px 50px; 
+              border-radius: 12px; 
+              border: 3px solid #ff6b9d; 
+              background: rgba(30, 30, 60, 0.8); 
+              color: white; 
+              font-size: 16px; 
+              font-family: 'Courier New', monospace;
+              box-sizing: border-box; 
+              outline: none;
+              transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+              font-weight: 600;
+              letter-spacing: 1px;
+              box-shadow: 0 4px 15px rgba(255, 107, 157, 0.3);
+            ">
+        </div>
+        
+        <!-- 登录按钮 -->
+        <button id="btn-login-submit" 
+          style="
+            width: 100%; 
+            padding: 18px; 
+            background: linear-gradient(135deg, #4ecdc4 0%, #ff6b9d 50%, #ffe66d 100%);
+            background-size: 200% 200%;
+            color: #1a1a2e; 
+            border: none; 
+            border-radius: 12px; 
+            font-size: 18px; 
+            font-weight: 700; 
+            cursor: pointer; 
+            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            font-family: 'Courier New', monospace;
+            position: relative;
+            overflow: hidden;
+            text-shadow: 0 2px 4px rgba(255, 255, 255, 0.3);
+          ">
+          <span style="position: relative; z-index: 1;">▶ START GAME</span>
+        </button>
+        
+        <!-- 错误消息 -->
+        <p id="login-msg" style="
+          color: #ff6b6b; 
+          margin-top: 20px; 
+          font-size: 14px; 
+          min-height: 20px;
+          font-weight: 600;
+          text-shadow: 0 0 10px rgba(255, 107, 157, 0.8);
+          letter-spacing: 1px;
+          animation: bounce 0.5s ease;
+        "></p>
+        
+        <!-- 底部信息 -->
+        <div style="
+          margin-top: 35px; 
+          padding-top: 25px;
+          border-top: 2px dashed rgba(255, 255, 255, 0.2);
+          font-size: 13px; 
+          color: rgba(255, 255, 255, 0.8);
+          line-height: 1.8;
+        ">
+          <div style="margin-bottom: 10px; font-weight: 600;">
+            <span style="animation: float 2s ease-in-out infinite;">💬</span> 
+            请在 Discord 获取您的专属账号
+          </div>
+          <div style="
+            font-size: 12px; 
+            color: rgba(255, 255, 255, 0.6);
+            letter-spacing: 1px;
+          ">
+            🛡️ 安全登录 · 保护您的隐私
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.prepend(overlay);
+
+    // 添加输入框占位符样式
+    const inputStyle = document.createElement('style');
+    inputStyle.textContent = `
+      #login-uid::placeholder, #login-pwd::placeholder {
+        color: rgba(255, 255, 255, 0.5);
+        font-weight: 500;
+      }
+    `;
+    document.head.appendChild(inputStyle);
+
+    // 绑定事件 (确保元素存在后才绑定)
+    document.getElementById('btn-login-submit').onclick = tryLogin;
+    document.getElementById('login-pwd').onkeypress = function(e) {
+      if (e.key === 'Enter') tryLogin();
+    };
+  }
+
+  // ==========================================
+  // ▼▼▼ 验证与启动函数 ▼▼▼
+  // ==========================================
+  function tryLogin() {
+    // 获取元素
+    const uidEl = document.getElementById('login-uid');
+    const pwdEl = document.getElementById('login-pwd');
+    const msgEl = document.getElementById('login-msg');
+
+    // 安全检查：如果元素不存在（比如还没渲染），直接返回，防止报错
+    if (!uidEl || !pwdEl) {
+      console.error("找不到登录输入框，请刷新页面");
+      return;
+    }
+
+    const uid = uidEl.value.trim();
+    const pwd = pwdEl.value.trim();
+
+    if (!uid || !pwd) {
+      msgEl.textContent = "请输入完整的账号和密码";
+      return;
+    }
+
+    // 验证逻辑
+    if (verifyLogin(uid, pwd)) {
+      msgEl.style.color = "#32d74b";
+      msgEl.textContent = "验证通过，正在进入...";
+
+      try {
+        // 保存登录状态
+        localStorage.setItem('ephone_saved_uid', uid);
+
+        // 【关键修改】使用固定数据库名，找回你的旧数据
+        // 确保 script.js 上方的 initDatabase 函数里写的是 db = new Dexie('GeminiChatDB');
+        initDatabase(uid);
+        
+        // 移除遮罩
+        const overlay = document.getElementById('login-overlay');
+        if (overlay) {
+          overlay.style.transition = 'opacity 0.5s ease';
+          overlay.style.opacity = '0';
+          setTimeout(() => overlay.remove(), 500);
+        }
+        
+        // 启动 App
+        init(); 
+        
+      } catch (e) {
+        console.error(e);
+        msgEl.style.color = "#ff453a";
+        msgEl.textContent = "初始化失败，请重试";
+      }
+    } else {
+      msgEl.style.color = "#ff453a";
+      msgEl.textContent = "账号或密码错误";
+      const btn = document.getElementById('btn-login-submit');
+      btn.style.background = "#ff453a";
+      setTimeout(() => btn.style.background = "#007aff", 500);
+    }
+  }
+
+  // ==========================================
+  // ▼▼▼ 自动登录判断 (主入口) ▼▼▼
+  // ==========================================
+  
+  // 检查本地是否已登录
+  const savedUid = localStorage.getItem('ephone_saved_uid');
+
+  if (savedUid) {
+    console.log(`[Auto Login] 检测到已登录账号: ${savedUid}`);
+    try {
+      // 已登录：直接初始化数据库并启动，不显示登录框
+      initDatabase(savedUid);
+      init(); 
+    } catch (e) {
+      console.error("自动登录出错，重置状态:", e);
+      localStorage.removeItem('ephone_saved_uid');
+      renderLoginOverlay();
+    }
+  } else {
+    // 未登录：显示登录框
+    renderLoginOverlay();
+  }
+  
+  // ==========================================
+  // ▼▼▼ 退出登录按钮事件绑定 ▼▼▼
+  // ==========================================
+  // 放在一个定时器里，确保 logout-btn 已经加载出来
+  setTimeout(() => {
+    const logoutBtn = document.getElementById('logout-btn');
+    if (logoutBtn) {
+      // 移除旧的监听器防止重复
+      const newBtn = logoutBtn.cloneNode(true);
+      logoutBtn.parentNode.replaceChild(newBtn, logoutBtn);
+      
+      newBtn.addEventListener('click', async () => {
+        // 使用原生的 confirm，防止 showCustomConfirm 没加载
+        if (confirm("确定要退出登录吗？")) {
+          localStorage.removeItem('ephone_saved_uid');
+          window.location.reload();
+        }
+      });
+    }
+  }, 1000);
 
   /*
    * ===================================================================
