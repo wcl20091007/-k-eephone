@@ -3226,6 +3226,25 @@ document.addEventListener("DOMContentLoaded", () => {
         wallpaper: state.globalSettings.wallpaper,
       };
 
+      // 导出白狗拆分机数据（localStorage）
+      backupData.taskSplitterData = {
+        records: JSON.parse(localStorage.getItem("task-splitter-records") || "[]"),
+        background: localStorage.getItem("task-splitter-background") || null,
+        progress: {},
+      };
+      // 收集所有角色的任务进度
+      for (const chatId in state.chats) {
+        const progressKey = `task-splitter-progress-${chatId}`;
+        const progress = localStorage.getItem(progressKey);
+        if (progress) {
+          try {
+            backupData.taskSplitterData.progress[chatId] = JSON.parse(progress);
+          } catch (e) {
+            console.warn(`解析任务进度失败 (${chatId}):`, e);
+          }
+        }
+      }
+
       const blob = new Blob([JSON.stringify(backupData, null, 2)], {
         type: "application/json",
       });
@@ -3461,6 +3480,25 @@ document.addEventListener("DOMContentLoaded", () => {
     // 这里省略了 homeScreenState 的详细抓取，因为它依赖 DOM 元素，
     // 自动备份时可能不在主屏幕。为了安全起见，这里仅保存 globalSettings 里的 widgetData。
     // 如果需要完整还原UI布局，最好只在手动导出时包含 homeScreenState。
+
+    // 导出白狗拆分机数据（localStorage）
+    backupData.taskSplitterData = {
+      records: JSON.parse(localStorage.getItem("task-splitter-records") || "[]"),
+      background: localStorage.getItem("task-splitter-background") || null,
+      progress: {},
+    };
+    // 收集所有角色的任务进度
+    for (const chatId in state.chats) {
+      const progressKey = `task-splitter-progress-${chatId}`;
+      const progress = localStorage.getItem(progressKey);
+      if (progress) {
+        try {
+          backupData.taskSplitterData.progress[chatId] = JSON.parse(progress);
+        } catch (e) {
+          console.warn(`解析任务进度失败 (${chatId}):`, e);
+        }
+      }
+    }
 
     return JSON.stringify(backupData, null, 2);
   }
@@ -4053,6 +4091,39 @@ document.addEventListener("DOMContentLoaded", () => {
           settings.appIcons = data.homeScreenState.appIcons;
         await db.globalSettings.put(settings);
         console.log("已成功导入主屏幕样式数据。");
+      }
+
+      // 导入白狗拆分机数据（localStorage）
+      if (data.taskSplitterData) {
+        try {
+          if (data.taskSplitterData.records) {
+            localStorage.setItem(
+              "task-splitter-records",
+              JSON.stringify(data.taskSplitterData.records)
+            );
+            console.log("已成功导入白狗拆分机历史记录。");
+          }
+          if (data.taskSplitterData.background) {
+            localStorage.setItem(
+              "task-splitter-background",
+              data.taskSplitterData.background
+            );
+            console.log("已成功导入白狗拆分机背景图片。");
+          }
+          if (data.taskSplitterData.progress) {
+            for (const chatId in data.taskSplitterData.progress) {
+              localStorage.setItem(
+                `task-splitter-progress-${chatId}`,
+                JSON.stringify(data.taskSplitterData.progress[chatId])
+              );
+            }
+            console.log(
+              `已成功导入 ${Object.keys(data.taskSplitterData.progress).length} 个角色的任务进度。`
+            );
+          }
+        } catch (error) {
+          console.error("导入白狗拆分机数据失败:", error);
+        }
       }
 
       await showCustomAlert(
@@ -35885,6 +35956,12 @@ ${chat.settings.aiPersona}
       },
 
       {
+        id: "taskSplitter",
+        name: "白狗拆分机 (任务记录/进度/背景)",
+        tables: [], // 数据存储在 localStorage，需要特殊处理
+      },
+
+      {
         id: "userStickers",
         name: "我的表情包 (包含分类)",
         tables: ["userStickers", "userStickerCategories"],
@@ -36038,6 +36115,10 @@ ${chat.settings.aiPersona}
           tables: ["studioScripts", "studioHistory"],
         },
 
+        taskSplitter: {
+          tables: [], // 白狗拆分机数据存储在 localStorage，需要特殊处理
+        },
+
         userStickers: {
           tables: ["userStickers", "userStickerCategories"],
         },
@@ -36078,17 +36159,39 @@ ${chat.settings.aiPersona}
         const appInfo = appsToExportMap[appId];
         if (appInfo) {
           backupData.contains.push(appId);
-          for (const tableName of appInfo.tables) {
-            // 判断当前表是否是单个对象的设置表
-            if (singleObjectTables.includes(tableName)) {
-              // 如果是，就只获取第一个（也可能是唯一一个）对象
-              const tableData = await db[tableName].toCollection().first();
-              backupData.data[tableName] = tableData === undefined ? null : tableData;
-            } else {
-              // 如果是普通的多条记录表，就还是获取整个数组
-              backupData.data[tableName] = await db[tableName].toArray();
+          // 特殊处理白狗拆分机（数据在 localStorage）
+          if (appId === "taskSplitter") {
+            backupData.data.taskSplitterData = {
+              records: JSON.parse(localStorage.getItem("task-splitter-records") || "[]"),
+              background: localStorage.getItem("task-splitter-background") || null,
+              progress: {},
+            };
+            // 收集所有角色的任务进度
+            for (const chatId in state.chats) {
+              const progressKey = `task-splitter-progress-${chatId}`;
+              const progress = localStorage.getItem(progressKey);
+              if (progress) {
+                try {
+                  backupData.data.taskSplitterData.progress[chatId] = JSON.parse(progress);
+                } catch (e) {
+                  console.warn(`解析任务进度失败 (${chatId}):`, e);
+                }
+              }
             }
-            console.log(`已打包App数据表: ${tableName}`);
+            console.log("已打包白狗拆分机数据。");
+          } else {
+            for (const tableName of appInfo.tables) {
+              // 判断当前表是否是单个对象的设置表
+              if (singleObjectTables.includes(tableName)) {
+                // 如果是，就只获取第一个（也可能是唯一一个）对象
+                const tableData = await db[tableName].toCollection().first();
+                backupData.data[tableName] = tableData === undefined ? null : tableData;
+              } else {
+                // 如果是普通的多条记录表，就还是获取整个数组
+                backupData.data[tableName] = await db[tableName].toArray();
+              }
+              console.log(`已打包App数据表: ${tableName}`);
+            }
           }
         }
       }
@@ -36211,6 +36314,8 @@ ${chat.settings.aiPersona}
 
           studio: "小剧场数据",
 
+          taskSplitter: "白狗拆分机数据",
+
           userStickers: "我的表情包",
           charStickers: "角色通用表情包",
           gameData: "游戏大厅数据",
@@ -36277,6 +36382,39 @@ ${chat.settings.aiPersona}
           }
         }
       });
+
+      // 导入白狗拆分机数据（localStorage）
+      if (data.taskSplitterData) {
+        try {
+          if (data.taskSplitterData.records) {
+            localStorage.setItem(
+              "task-splitter-records",
+              JSON.stringify(data.taskSplitterData.records)
+            );
+            console.log("已成功导入白狗拆分机历史记录。");
+          }
+          if (data.taskSplitterData.background) {
+            localStorage.setItem(
+              "task-splitter-background",
+              data.taskSplitterData.background
+            );
+            console.log("已成功导入白狗拆分机背景图片。");
+          }
+          if (data.taskSplitterData.progress) {
+            for (const chatId in data.taskSplitterData.progress) {
+              localStorage.setItem(
+                `task-splitter-progress-${chatId}`,
+                JSON.stringify(data.taskSplitterData.progress[chatId])
+              );
+            }
+            console.log(
+              `已成功导入 ${Object.keys(data.taskSplitterData.progress).length} 个角色的任务进度。`
+            );
+          }
+        } catch (error) {
+          console.error("导入白狗拆分机数据失败:", error);
+        }
+      }
 
       await loadAllDataFromDB();
       await renderChatList();
@@ -37148,10 +37286,31 @@ ${chat.settings.aiPersona}
           }
         }
 
-        // 4. 写入JSON文件的结尾
+        // 4. 导出白狗拆分机数据（localStorage）
+        const taskSplitterData = {
+          records: JSON.parse(localStorage.getItem("task-splitter-records") || "[]"),
+          background: localStorage.getItem("task-splitter-background") || null,
+          progress: {},
+        };
+        // 收集所有角色的任务进度
+        for (const chatId in state.chats) {
+          const progressKey = `task-splitter-progress-${chatId}`;
+          const progress = localStorage.getItem(progressKey);
+          if (progress) {
+            try {
+              taskSplitterData.progress[chatId] = JSON.parse(progress);
+            } catch (e) {
+              console.warn(`解析任务进度失败 (${chatId}):`, e);
+            }
+          }
+        }
+        const taskSplitterJson = JSON.stringify(taskSplitterData);
+        controller.enqueue(encoder.encode(`,\n"taskSplitterData": ${taskSplitterJson}`));
+
+        // 5. 写入JSON文件的结尾
         controller.enqueue(encoder.encode("}"));
 
-        // 5. 通知流已经结束
+        // 6. 通知流已经结束
         controller.close();
         console.log("流式导出：所有数据写入完成。");
       },
