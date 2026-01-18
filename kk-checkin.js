@@ -2114,14 +2114,17 @@ async function handleTryOn() {
 
 // ================= KK查岗 - 沉浸式衣帽间 (升级版) =================
 
-// 辅助函数：生成衣服图片 (使用 Pollinations，因为它生成物品效果好且快，无需鉴权)
+// 辅助函数：生成衣服图片 (使用 Pollinations，因为它生成物品效果好且快)
+// 支持用户自定义API Key获得更稳定的服务
 async function generateClothingImage(prompt) {
   // 强制加上白底、产品摄影等关键词
   const enhancedPrompt = `clothing product photography, ${prompt}, white background, flat lay style, studio lighting, high quality, 4k, realistic, no human`;
-  const encodedPrompt = encodeURIComponent(enhancedPrompt);
   // 使用随机数防止缓存
   const randomSeed = Math.floor(Math.random() * 10000);
-  return `https://image.pollinations.ai/prompt/${encodedPrompt}?width=512&height=512&nologo=true&seed=${randomSeed}`;
+  // 使用全局函数获取Pollinations URL（支持用户自定义API Key）
+  return window.getPollinationsImageUrl 
+    ? window.getPollinationsImageUrl(enhancedPrompt, 512, 512, { seed: randomSeed, nologo: true })
+    : `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?width=512&height=512&nologo=true&seed=${randomSeed}`;
 }
 
 /**
@@ -2296,9 +2299,21 @@ async function generateWardrobeData(charId) {
     if (!response.ok) throw new Error(await response.text());
 
     const data = await response.json();
-    const rawContent = (isGemini ? data.candidates[0].content.parts[0].text : data.choices[0].message.content)
-      .replace(/^```json\s*|```$/g, '')
+    let rawContent = isGemini ? data.candidates[0].content.parts[0].text : data.choices[0].message.content;
+    
+    // 清理 AI 返回的 markdown 代码块格式
+    rawContent = rawContent
+      .replace(/^[\s\S]*?```(?:json)?\s*/i, '')  // 移除开头到第一个 ```json 的所有内容
+      .replace(/```[\s\S]*$/g, '')                // 移除最后一个 ``` 及之后的所有内容
       .trim();
+    
+    // 如果清理后不是以 { 开头，尝试找到 JSON 对象
+    if (!rawContent.startsWith('{')) {
+      const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        rawContent = jsonMatch[0];
+      }
+    }
 
     const result = JSON.parse(rawContent);
 
@@ -2405,9 +2420,22 @@ async function generateMoreWardrobeData() {
 
     if (!response.ok) throw new Error(await response.text());
     const data = await response.json();
-    const rawContent = (isGemini ? data.candidates[0].content.parts[0].text : data.choices[0].message.content)
-      .replace(/^```json\s*|```$/g, '')
+    let rawContent = isGemini ? data.candidates[0].content.parts[0].text : data.choices[0].message.content;
+    
+    // 清理 AI 返回的 markdown 代码块格式
+    rawContent = rawContent
+      .replace(/^[\s\S]*?```(?:json)?\s*/i, '')  // 移除开头到第一个 ```json 的所有内容
+      .replace(/```[\s\S]*$/g, '')                // 移除最后一个 ``` 及之后的所有内容
       .trim();
+    
+    // 如果清理后不是以 { 开头，尝试找到 JSON 对象
+    if (!rawContent.startsWith('{')) {
+      const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        rawContent = jsonMatch[0];
+      }
+    }
+    
     const result = JSON.parse(rawContent);
 
     if (result && result.new_items) {
