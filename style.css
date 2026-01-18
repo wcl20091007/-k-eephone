@@ -21793,6 +21793,53 @@ body {
   box-shadow: 0 4px 12px rgba(255, 59, 48, 0.3);
 }
 /* ▲▲▲ 桌宠回复气泡样式结束 ▲▲▲ */
+
+/* ▼▼▼ 桌宠台词气泡样式 ▼▼▼ */
+#desktop-pet-line-bubble {
+  position: absolute;
+  background-color: rgba(0, 0, 0, 0.85);
+  color: white;
+  padding: 10px 14px;
+  border-radius: 16px;
+  font-size: 13px;
+  max-width: 200px;
+  word-wrap: break-word;
+  white-space: normal;
+  z-index: 99998;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  line-height: 1.4;
+}
+
+#desktop-pet-line-bubble.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+#desktop-pet-line-bubble::before {
+  content: '';
+  position: absolute;
+  bottom: -8px;
+  left: 20px;
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-top: 8px solid rgba(0, 0, 0, 0.85);
+}
+
+#phone-screen.dark-mode #desktop-pet-line-bubble {
+  background-color: rgba(255, 255, 255, 0.95);
+  color: #000;
+}
+
+#phone-screen.dark-mode #desktop-pet-line-bubble::before {
+  border-top-color: rgba(255, 255, 255, 0.95);
+}
+/* ▲▲▲ 桌宠台词气泡样式结束 ▲▲▲ */
 /* ▲▲▲ 桌宠样式结束 ▲▲▲ */
   }
   100% {

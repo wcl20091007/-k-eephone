@@ -43509,6 +43509,14 @@ ${chat.settings.aiPersona}
           
           chat.settings.desktopPetEnabled = desktopPetEnabled;
           
+          // 如果开启桌宠，生成台词
+          if (desktopPetEnabled) {
+            // 异步生成台词，不阻塞保存流程
+            generateDesktopPetLines(chat).catch(error => {
+              console.error("生成桌宠台词失败:", error);
+            });
+          }
+          
           // 保存桌宠图片
           const previewImg = document.getElementById("desktop-pet-image-preview");
           const imageUrlInput = document.getElementById("desktop-pet-image-url");
@@ -47292,6 +47300,157 @@ ${chat.settings.aiPersona}
 
     // ========== 桌宠功能 ==========
     /**
+     * 为桌宠角色生成所有界面的台词
+     * @param {Object} chat - 角色聊天对象
+     */
+    async function generateDesktopPetLines(chat) {
+      if (!chat || !chat.settings) return;
+      
+      // 如果已经有台词且不需要重新生成，直接返回
+      if (chat.settings.desktopPetLines && Object.keys(chat.settings.desktopPetLines).length > 0) {
+        return;
+      }
+
+      const proxyUrl = state.apiConfig?.proxyUrl || document.getElementById("proxy-url")?.value?.trim();
+      const apiKey = state.apiConfig?.apiKey || document.getElementById("api-key")?.value?.trim();
+      const model = state.apiConfig?.model || document.getElementById("model-select")?.value?.trim();
+      
+      if (!proxyUrl || !apiKey || !model) {
+        console.warn("API配置不完整，无法生成桌宠台词");
+        return;
+      }
+
+      const persona = chat.settings?.aiPersona || "";
+      const characterName = chat.name || "角色";
+      
+      // 获取所有界面
+      const allScreens = Object.keys(window.screenNameMap || {});
+      
+      // 初始化台词存储
+      if (!chat.settings.desktopPetLines) {
+        chat.settings.desktopPetLines = {};
+      }
+
+      // 为每个界面生成10句台词
+      for (const screenId of allScreens) {
+        const screenName = window.screenNameMap[screenId] || screenId;
+        
+        const systemPrompt = `你是角色"${characterName}"，你的人设是：${persona}
+
+# 任务
+你需要为"${screenName}"界面生成10句台词，这些台词是当用户点击桌宠时，桌宠会说的话。
+
+# 要求
+1. 每句台词必须在20字以内
+2. 台词要符合你的人设和性格
+3. 台词应该反映桌宠被点击时的反应，从反应大到小排列（前5句反应较大，后5句反应较小）
+4. 台词应该与"${screenName}"界面相关，体现桌宠在这个界面下的感受或想法
+5. 台词要自然、生动，符合角色性格
+
+# 输出格式
+请以JSON数组格式输出，每句台词是一个字符串元素，例如：
+["台词1", "台词2", "台词3", "台词4", "台词5", "台词6", "台词7", "台词8", "台词9", "台词10"]
+
+现在请生成10句台词：`;
+
+        try {
+          const messagesForApi = [{ role: "user", content: systemPrompt }];
+          const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models";
+          const isGemini = proxyUrl === GEMINI_API_URL || proxyUrl?.includes("generativelanguage.googleapis.com");
+          
+          let response;
+          if (isGemini) {
+            if (window.toGeminiRequestData) {
+              const geminiConfig = window.toGeminiRequestData(model, apiKey, systemPrompt, messagesForApi, true, 0.8);
+              response = await fetch(geminiConfig.url, geminiConfig.data);
+            } else {
+              response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${model}:generateContent?key=${apiKey}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  contents: [{ role: "user", parts: [{ text: systemPrompt }] }],
+                  generationConfig: { temperature: 0.8 }
+                })
+              });
+            }
+          } else {
+            response = await fetch(`${proxyUrl}/v1/chat/completions`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+              body: JSON.stringify({ model, messages: messagesForApi, temperature: 0.8 })
+            });
+          }
+
+          if (!response.ok) {
+            console.warn(`生成界面"${screenName}"的台词失败: ${response.status}`);
+            continue;
+          }
+
+          const data = await response.json();
+          const replyContent = isGemini 
+            ? data.candidates?.[0]?.content?.parts?.[0]?.text?.trim()
+            : data.choices?.[0]?.message?.content?.trim();
+
+          if (!replyContent) {
+            console.warn(`界面"${screenName}"的台词生成返回空内容`);
+            continue;
+          }
+
+          // 尝试解析JSON
+          let lines = [];
+          try {
+            // 尝试提取JSON数组
+            const jsonMatch = replyContent.match(/\[[\s\S]*\]/);
+            if (jsonMatch) {
+              lines = JSON.parse(jsonMatch[0]);
+            } else {
+              // 如果不是JSON格式，尝试按行分割
+              lines = replyContent.split('\n')
+                .map(line => line.trim())
+                .filter(line => line && !line.startsWith('[') && !line.startsWith(']'))
+                .map(line => line.replace(/^["']|["']$/g, ''))
+                .filter(line => line.length > 0 && line.length <= 20)
+                .slice(0, 10);
+            }
+          } catch (parseError) {
+            console.warn(`解析界面"${screenName}"的台词失败:`, parseError);
+            // 如果解析失败，使用默认台词
+            lines = Array(10).fill(`${screenName}界面下的反应`);
+          }
+
+          // 确保有10句台词
+          while (lines.length < 10) {
+            lines.push(`${screenName}界面下的反应`);
+          }
+          lines = lines.slice(0, 10);
+
+          // 存储台词（前5句反应大，后5句反应小）
+          chat.settings.desktopPetLines[screenId] = {
+            highReaction: lines.slice(0, 5), // 前5句，反应大
+            lowReaction: lines.slice(5, 10), // 后5句，反应小
+            currentIndex: 0 // 当前使用的索引
+          };
+
+        } catch (error) {
+          console.error(`生成界面"${screenName}"的台词时出错:`, error);
+          // 使用默认台词
+          chat.settings.desktopPetLines[screenId] = {
+            highReaction: Array(5).fill(`${screenName}界面下的反应`),
+            lowReaction: Array(5).fill(`${screenName}界面下的反应`),
+            currentIndex: 0
+          };
+        }
+      }
+
+      // 保存到数据库
+      try {
+        await db.chats.put(chat);
+      } catch (error) {
+        console.error("保存桌宠台词失败:", error);
+      }
+    }
+
+    /**
      * 更新桌宠显示
      * 检查所有角色，找到开启桌宠的角色并显示
      */
@@ -47312,6 +47471,13 @@ ${chat.settings.aiPersona}
       }
 
       if (activePetChat) {
+        // 如果桌宠已开启但没有台词，生成台词（异步，不阻塞显示）
+        if (!activePetChat.settings.desktopPetLines || Object.keys(activePetChat.settings.desktopPetLines).length === 0) {
+          generateDesktopPetLines(activePetChat).catch(error => {
+            console.error("生成桌宠台词失败:", error);
+          });
+        }
+        
         // 显示桌宠
         // 应用桌宠图片（自定义图片或默认角色头像）
         const desktopPetImage = activePetChat.settings.desktopPetImage;
@@ -47424,6 +47590,9 @@ ${chat.settings.aiPersona}
         if (typeof updatePetWaitingBubblePosition === 'function') {
           updatePetWaitingBubblePosition();
         }
+        if (typeof updatePetLineBubblePosition === 'function') {
+          updatePetLineBubblePosition();
+        }
         
         e.preventDefault();
       };
@@ -47487,6 +47656,9 @@ ${chat.settings.aiPersona}
         // 更新气泡位置
         if (typeof updatePetWaitingBubblePosition === 'function') {
           updatePetWaitingBubblePosition();
+        }
+        if (typeof updatePetLineBubblePosition === 'function') {
+          updatePetLineBubblePosition();
         }
         
         // 保存位置到当前显示的桌宠角色
@@ -48000,6 +48172,150 @@ ${chat.settings.aiPersona}
 
     // 保存最后一次使用的 systemPrompt，用于重roll
     let lastPetSystemPrompt = null;
+
+    /**
+     * 显示桌宠台词的气泡
+     */
+    function showPetLineBubble(line) {
+      // 移除旧的台词气泡
+      const oldBubble = document.getElementById("desktop-pet-line-bubble");
+      if (oldBubble) {
+        oldBubble.remove();
+      }
+
+      const bubble = document.createElement("div");
+      bubble.id = "desktop-pet-line-bubble";
+      bubble.className = "desktop-pet-line-bubble";
+      bubble.textContent = line;
+      
+      document.getElementById("phone-screen").appendChild(bubble);
+      
+      // 定位气泡在桌宠旁边
+      updatePetLineBubblePosition();
+      
+      // 添加淡入动画
+      setTimeout(() => {
+        bubble.classList.add("visible");
+      }, 10);
+      
+      // 3秒后自动消失
+      setTimeout(() => {
+        if (bubble && bubble.parentNode) {
+          bubble.classList.remove("visible");
+          setTimeout(() => {
+            if (bubble && bubble.parentNode) {
+              bubble.remove();
+            }
+          }, 300); // 等待淡出动画完成
+        }
+      }, 3000);
+    }
+
+    /**
+     * 显示桌宠台词（根据界面和点击次数）
+     */
+    function showPetLine() {
+      // 获取当前桌宠角色
+      let activePetChat = null;
+      for (const chatId in state.chats) {
+        const chat = state.chats[chatId];
+        if (!chat.isGroup && chat.settings?.desktopPetEnabled) {
+          activePetChat = chat;
+          break;
+        }
+      }
+      if (!activePetChat || !activePetChat.settings) return;
+
+      // 获取当前界面
+      const screenId = window.getCurrentScreenId ? window.getCurrentScreenId() : 'home-screen';
+      
+      // 获取该界面的台词
+      const lines = activePetChat.settings.desktopPetLines?.[screenId];
+      if (!lines || (!lines.highReaction && !lines.lowReaction)) {
+        // 如果没有台词，尝试生成（异步，不阻塞）
+        generateDesktopPetLines(activePetChat).catch(error => {
+          console.error("生成桌宠台词失败:", error);
+        });
+        // 显示默认台词
+        showPetLineBubble("嗯？");
+        return;
+      }
+
+      // 初始化该界面的点击计数
+      if (!activePetChat.settings.desktopPetClickCounts) {
+        activePetChat.settings.desktopPetClickCounts = {};
+      }
+      if (!activePetChat.settings.desktopPetClickCounts[screenId]) {
+        activePetChat.settings.desktopPetClickCounts[screenId] = 0;
+      }
+
+      // 增加点击计数
+      let clickIndex = activePetChat.settings.desktopPetClickCounts[screenId];
+      
+      // 前5次使用反应大的台词，后5次使用反应小的台词
+      let line = "";
+      if (clickIndex < 5) {
+        // 使用反应大的台词（前5句）
+        const highReactionLines = lines.highReaction || [];
+        line = highReactionLines[clickIndex] || highReactionLines[0] || "嗯？";
+      } else {
+        // 使用反应小的台词（后5句）
+        const lowReactionLines = lines.lowReaction || [];
+        const lowIndex = clickIndex - 5;
+        line = lowReactionLines[lowIndex] || lowReactionLines[0] || "嗯...";
+      }
+
+      // 更新点击计数（循环使用，最多10次后重置）
+      clickIndex = (clickIndex + 1) % 10;
+      activePetChat.settings.desktopPetClickCounts[screenId] = clickIndex;
+      
+      // 保存到数据库（异步，不阻塞显示）
+      db.chats.put(activePetChat).catch(error => {
+        console.error("保存桌宠点击计数失败:", error);
+      });
+
+      // 显示台词
+      showPetLineBubble(line);
+    }
+
+    /**
+     * 更新台词气泡的位置（跟随桌宠移动）
+     */
+    function updatePetLineBubblePosition() {
+      const bubble = document.getElementById("desktop-pet-line-bubble");
+      if (!bubble || bubble.style.display === "none") return;
+      
+      const petContainer = document.getElementById("desktop-pet-container");
+      if (!petContainer) return;
+      
+      const petRect = petContainer.getBoundingClientRect();
+      const phoneScreen = document.getElementById("phone-screen");
+      const screenRect = phoneScreen.getBoundingClientRect();
+      
+      // 将气泡定位在桌宠上方或旁边
+      const bubbleWidth = bubble.offsetWidth || 150;
+      const bubbleHeight = bubble.offsetHeight || 50;
+      const petWidth = petRect.width;
+      const petHeight = petRect.height;
+      
+      // 尝试放在桌宠上方
+      let left = petRect.left - screenRect.left + (petWidth / 2) - (bubbleWidth / 2);
+      let top = petRect.top - screenRect.top - bubbleHeight - 10;
+      
+      // 如果上方空间不够，放在旁边
+      if (top < 0) {
+        top = petRect.top - screenRect.top;
+        left = petRect.left - screenRect.left + petWidth + 10;
+        
+        // 如果右边空间不够，放在左边
+        if (left + bubbleWidth > screenRect.width) {
+          left = petRect.left - screenRect.left - bubbleWidth - 10;
+        }
+      }
+      
+      bubble.style.left = Math.max(0, Math.min(left, screenRect.width - bubbleWidth)) + "px";
+      bubble.style.top = Math.max(0, top) + "px";
+    }
 
     /**
      * 显示桌宠回复的大气泡
@@ -48774,6 +49090,8 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
 
       let clickTimer = null;
       let clickCount = 0;
+      // 记录每个界面的点击次数
+      let screenClickCounts = {};
       
       // 触摸事件相关变量，用于区分拖拽和双击
       let touchStartTime = 0;
@@ -48856,12 +49174,14 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
         
         if (clickCount === 1) {
           clickTimer = setTimeout(() => {
+            // 单击：显示台词
+            showPetLine();
             clickCount = 0;
-          }, 300); // 300ms内没有第二次点击则重置
+          }, 300); // 300ms内没有第二次点击则触发单击
         } else if (clickCount === 2) {
           clearTimeout(clickTimer);
           clickCount = 0;
-          // 触发AI回复
+          // 双击：触发AI回复
           triggerPetAIResponse();
         }
       });
@@ -49006,7 +49326,7 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
           lastTouchEndY = 0;
           touchStartTime = 0;
           touchMoved = false;
-          // 触发AI回复
+          // 双击：触发AI回复
           triggerPetAIResponse();
         } else {
           // 记录这次触摸的信息，等待可能的第二次触摸
@@ -49014,9 +49334,11 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
           lastTouchEndX = touchEndX;
           lastTouchEndY = touchEndY;
           
-          // 设置超时，如果300ms内没有第二次触摸则清除记录
+          // 设置超时，如果300ms内没有第二次触摸则触发单击显示台词
           setTimeout(() => {
             if (lastTouchEndTime === touchEndTime) {
+              // 单击：显示台词
+              showPetLine();
               lastTouchEndTime = 0;
               lastTouchEndX = 0;
               lastTouchEndY = 0;
