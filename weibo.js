@@ -76,9 +76,9 @@ function canSeeByNickname(viewerCharId, authorNickname) {
     (chat.settings.weiboNickname === authorNickname || chat.name === authorNickname)
   );
   
-  // 如果找不到对应角色，返回 false
+  // 【重要修复】如果找不到对应角色，说明是路人评论，路人评论对所有人可见
   if (!authorChat) {
-    return false;
+    return true;
   }
   
   // 判断是否在同一分组
@@ -1601,7 +1601,8 @@ async function showFollowingList() {
 }
 
 /**
- * 【评论优化版 V3 - 禁止回复用户】AI生成微博评论的核心函数
+ * 【评论优化版 V4 - 支持NPC、避免重复评论、路人评论、分组隔离、精确角色识别】
+ * AI生成微博评论的核心函数
  * @param {number} postId - 需要生成评论的微博ID
  */
 async function generateWeiboComments(postId) {
@@ -1621,8 +1622,10 @@ async function generateWeiboComments(postId) {
 
   const userNickname = state.qzoneSettings.weiboNickname || state.qzoneSettings.nickname || '我';
 
+  // ==================== 1. 获取帖子作者信息 ====================
   let authorPersona = '一个普通用户。';
   let authorProfession = '未设定';
+  let authorCharId = post.authorId;
   const authorName = post.authorId === 'user' ? userNickname : post.authorNickname;
 
   if (post.authorId === 'user') {
@@ -1636,110 +1639,221 @@ async function generateWeiboComments(postId) {
     }
   }
   const truncatedPersona = authorPersona.substring(0, 400);
-  const postContent = (post.content || '').substring(0, 200);
-  const existingComments = (post.comments || [])
-    .slice(-5)
-    .map(c => `${c.authorNickname}: ${c.commentText}`)
-    .join('\n');
-
-  let imageContext = '';
-  if (post.imageUrl && post.imageDescription) {
-    imageContext = `
-- **图片内容**: 这条微博配有一张图片，描述为：“${post.imageDescription}”`;
-  } else if (post.postType === 'text_image' && post.hiddenContent) {
-    imageContext = `
-- **图片内容**: 这是一张文字图，上面的内容是：“${post.hiddenContent}”`;
-  }
-
-  // 【分组隔离】获取帖子作者的分组ID（如果存在）
-  const authorGroupId = post.authorId === 'user' ? null : (state.chats[post.authorId]?.groupId || null);
+  const postContent = (post.content || '').substring(0, 300);
   
-  const commenterPersonas = new Map();
-  commenterPersonas.set(authorName, `[职业: ${authorProfession}] [人设: ${truncatedPersona}]`);
+  // ==================== 2. 【分组隔离】获取帖子作者的分组ID ====================
+  const authorGroupId = post.authorId === 'user' ? null : (state.chats[post.authorId]?.groupId || null);
 
+  // ==================== 3. 收集已评论过的角色/NPC昵称（避免重复评论）====================
+  const alreadyCommentedNicknames = new Set();
   if (post.comments && post.comments.length > 0) {
     post.comments.forEach(comment => {
-      const commenterName = comment.authorNickname;
-      if (!commenterPersonas.has(commenterName)) {
-        const commenterChat = Object.values(state.chats).find(
-          c => !c.isGroup && (c.settings.weiboNickname === commenterName || c.name === commenterName)
-        );
-        if (commenterChat && !commenterChat.isGroup) {
-          // 【分组隔离】只添加与帖子作者同分组的评论者
-          const commenterGroupId = commenterChat.groupId || null;
-          // 如果帖子作者没有分组，或者评论者与作者在同一分组，则添加
-          if (!authorGroupId || commenterGroupId === authorGroupId) {
-            const profession = commenterChat.settings.weiboProfession || '未设定';
-            const persona = (commenterChat.settings.aiPersona || '无').substring(0, 200);
-            commenterPersonas.set(commenterName, `[职业: ${profession}] [人设: ${persona}]`);
-          }
-        }
+      if (comment.authorNickname && comment.authorNickname !== userNickname) {
+        alreadyCommentedNicknames.add(comment.authorNickname);
       }
     });
   }
-  
-  // 【分组隔离】获取所有与帖子作者同分组的角色，用于生成评论
-  const availableCommenters = Object.values(state.chats)
-    .filter(chat => {
-      if (chat.isGroup) return false;
-      if (post.authorId === 'user') return true; // 用户帖子，所有角色都可以评论
-      const chatGroupId = chat.groupId || null;
-      return !authorGroupId || chatGroupId === authorGroupId;
+
+  // ==================== 4. 获取已有评论上下文 ====================
+  const existingComments = (post.comments || [])
+    .slice(-8)
+    .map(c => {
+      const replyPart = c.replyToNickname ? ` (回复 @${c.replyToNickname})` : '';
+      return `${c.authorNickname}${replyPart}: ${c.commentText}`;
     })
-    .map(chat => ({
-      name: chat.settings.weiboNickname || chat.name,
+    .join('\n');
+
+  // ==================== 5. 获取图片上下文 ====================
+  let imageContext = '';
+  if (post.imageUrl && post.imageDescription) {
+    imageContext = `\n- **图片内容**: 这条微博配有一张图片，描述为："${post.imageDescription}"`;
+  } else if (post.postType === 'text_image' && post.hiddenContent) {
+    imageContext = `\n- **图片内容**: 这是一张文字图，上面的内容是："${post.hiddenContent}"`;
+  }
+
+  // ==================== 6. 【分组隔离】收集可参与评论的角色（未评论过 + 同分组）====================
+  const availableChars = [];
+  for (const chat of Object.values(state.chats)) {
+    if (chat.isGroup) continue;
+    
+    // 【分组隔离】检查是否在同一分组
+    if (post.authorId !== 'user') {
+      const chatGroupId = chat.groupId || null;
+      if (authorGroupId && chatGroupId !== authorGroupId) {
+        continue; // 不同分组，跳过
+      }
+    }
+    
+    const charNickname = chat.settings.weiboNickname || chat.name;
+    
+    // 跳过已评论过的角色
+    if (alreadyCommentedNicknames.has(charNickname)) continue;
+    // 跳过帖子作者本人
+    if (charNickname === authorName) continue;
+    
+    availableChars.push({
+      id: chat.id,
+      name: charNickname,
       profession: chat.settings.weiboProfession || '未设定',
-      persona: (chat.settings.aiPersona || '无').substring(0, 200)
-    }));
-  
-  // 将可用评论者添加到上下文中
+      persona: (chat.settings.aiPersona || '无').substring(0, 150),
+      type: 'char'
+    });
+  }
+
+  // ==================== 7. 【NPC支持】收集可参与评论的NPC（未评论过 + 同分组）====================
+  const availableNpcs = [];
+  for (const chat of Object.values(state.chats)) {
+    if (chat.isGroup) continue;
+    
+    // 【分组隔离】检查是否在同一分组
+    if (post.authorId !== 'user') {
+      const chatGroupId = chat.groupId || null;
+      if (authorGroupId && chatGroupId !== authorGroupId) {
+        continue; // 不同分组，跳过
+      }
+    }
+    
+    // 获取该角色启用的NPC
+    let enabledNpcs = [];
+    if (typeof getEnabledNpcs === 'function') {
+      enabledNpcs = await getEnabledNpcs(chat);
+    } else if (chat.enabledNpcIds && chat.enabledNpcIds.length > 0) {
+      const allNpcsFromDb = await db.globalNpcs.toArray();
+      enabledNpcs = allNpcsFromDb.filter(npc => chat.enabledNpcIds.includes(npc.id));
+    }
+    
+    for (const npc of enabledNpcs) {
+      // 跳过已评论过的NPC
+      if (alreadyCommentedNicknames.has(npc.name)) continue;
+      // 跳过帖子作者本人（如果是NPC发的帖子）
+      if (npc.name === authorName) continue;
+      
+      availableNpcs.push({
+        id: npc.id,
+        name: npc.name,
+        persona: (npc.persona || '').substring(0, 100),
+        ownerId: chat.id,
+        ownerName: chat.name,
+        type: 'npc'
+      });
+    }
+  }
+
+  // ==================== 8. 构建评论者上下文 ====================
   let availableCommentersContext = '';
-  if (availableCommenters.length > 0) {
-    availableCommentersContext = '\n# 可参与评论的角色（与作者在同一分组）\n';
-    availableCommenters.forEach(char => {
+  
+  // 8.1 角色评论者
+  if (availableChars.length > 0) {
+    availableCommentersContext += '\n# 可参与评论的【角色】（尚未评论过，你可以让他们中的1-3位发表评论）\n';
+    availableChars.forEach(char => {
       availableCommentersContext += `- **${char.name}**: [职业: ${char.profession}] [人设: ${char.persona}]\n`;
     });
-    availableCommentersContext += '\n**重要提示**: 生成的评论者昵称必须来自上述列表中的角色，确保评论者与帖子作者在同一分组。\n';
   }
-
-  let commenterContext = '';
-  if (commenterPersonas.size > 0) {
-    commenterContext += '\n# 评论区已有角色人设 (供你回复时参考)\n';
-    commenterPersonas.forEach((persona, name) => {
-      commenterContext += `- **${name}**: ${persona}\n`;
+  
+  // 8.2 NPC评论者
+  if (availableNpcs.length > 0) {
+    availableCommentersContext += '\n# 可参与评论的【NPC】（尚未评论过，你可以让他们中的1-2位发表评论）\n';
+    availableNpcs.forEach(npc => {
+      availableCommentersContext += `- **${npc.name}**: [人设: ${npc.persona}] (${npc.ownerName}的朋友)\n`;
     });
   }
 
+  // ==================== 9. 已评论角色上下文（供回复参考）====================
+  let existingCommentersContext = '';
+  if (alreadyCommentedNicknames.size > 0) {
+    existingCommentersContext += '\n# 已评论过的角色/NPC（你可以回复他们的评论，但他们【不应该】再次发表新评论）\n';
+    existingCommentersContext += `已评论者昵称列表: ${Array.from(alreadyCommentedNicknames).join('、')}\n`;
+    existingCommentersContext += '**重要**: 这些人已经评论过了，不要让他们再次评论！\n';
+  }
+
+  // ==================== 10. 【精确角色识别】分析帖子内容，识别提到的角色 ====================
+  let mentionedCharsContext = '';
+  const allCharNames = Object.values(state.chats)
+    .filter(c => !c.isGroup)
+    .map(c => ({
+      name: c.name,
+      nickname: c.settings.weiboNickname || c.name,
+      id: c.id
+    }));
+  
+  // 检查帖子内容中是否明确提到了某个角色
+  const mentionedChars = allCharNames.filter(char => {
+    const content = (post.content || '').toLowerCase();
+    return content.includes(char.name.toLowerCase()) || 
+           content.includes(char.nickname.toLowerCase()) ||
+           content.includes(`@${char.name}`) ||
+           content.includes(`@${char.nickname}`);
+  });
+  
+  if (mentionedChars.length > 0) {
+    mentionedCharsContext = `\n# 【关键】这条微博明确提到了以下角色\n`;
+    mentionedChars.forEach(char => {
+      mentionedCharsContext += `- **${char.nickname}** (角色名: ${char.name})\n`;
+    });
+    mentionedCharsContext += `**提示**: 如果微博内容是关于这些角色的，只有这些角色本人（如果在可评论列表中）才应该对"关于自己"的内容做出反应。其他角色不应该误以为内容是在说自己。\n`;
+  }
+
+  // ==================== 11. 构建系统提示词 ====================
   const systemPrompt = `
 # 任务
-你是一个专业的“社交媒体模拟器”。你的任务是根据一个特定角色的“人设”，为他/她发布的一条微博生成一批真实的、符合情景的网友评论。
+你是一个专业的"社交媒体模拟器"。你的任务是为一条微博生成一批真实的、符合情景的评论。
+评论应该来自【角色】、【NPC】和【路人】三种类型的人。
 
 # 微博情景
-- **作者**: ${authorName}
+- **作者昵称**: ${authorName}
+- **作者职业**: ${authorProfession}
+- **作者人设概要**: ${truncatedPersona.substring(0, 200)}
 - **微博文字**: ${postContent || '(该微博没有配文)'}
 ${imageContext}
-- **已有评论 (你可以回复他们)**:
+
+# 已有评论 (你可以回复他们，但不要让已评论过的人再次发表新评论)
 ${existingComments || '(暂无评论)'}
 
-${commenterContext}
+${existingCommentersContext}
 
 ${availableCommentersContext}
 
-# 【【【评论生成核心规则】】】
-1.  **【【【回复禁令】】】**: 绝对禁止回复昵称为“**${userNickname}**”的任何评论。这是最高优先级的规则，因为用户会自己回复。你可以回复其他任何人的评论。
-2.  **【【【严禁使用】】】**: 绝对禁止使用 “路人甲”、“网友A”、“粉丝B” 这类代号作为评论者昵称。
-3.  **昵称多样化**: 评论者的昵称必须非常真实、多样化且符合微博生态。例如：“今天也要早睡”、“可乐加冰块”、“是小王不是小张”、“理性吃瓜第一线”。
-4.  **内容与人设强相关**: 评论内容必须与【微博内容(包括文字和图片)】和【作者以及被回复者的人设】高度相关。思考：什么样的粉丝会关注这样的人？他们会怎么说话？当回复一个有特定人设的角色时，你的回复必须考虑到对方的身份。
-5.  **风格多样化**: 生成的评论应包含不同立场和风格，例如：
-    -   **粉丝**: “哥哥太帅了！新剧什么时候播？”
-    -   **路人**: “这个地方看起来不错，求地址！”
-    -   **黑粉/质疑者**: “就这？感觉p图有点过了吧...”
-    -   **玩梗**: “楼上是不是XX派来的间谍（狗头）”
-6.  **格式铁律**: 你的回复【必须且只能】是一个严格的JSON数组，每个对象代表一条评论。
-    -   发表新评论, 使用格式: \`{"author": "不吃香菜的仙女", "comment": "哇，这个好好看！"}\`
-    -   回复已有评论, 使用格式: \`{"author": "爱吃瓜的猹", "comment": "我也觉得！", "replyTo": "不吃香菜的仙女"}\`
+${mentionedCharsContext}
 
-现在，请开始你的表演。
+# 【【【评论生成核心规则】】】
+
+## 1. 【回复禁令】
+- 绝对禁止回复昵称为"**${userNickname}**"的任何评论，用户会自己回复。
+
+## 2. 【避免重复评论】
+- 已经评论过的角色/NPC【绝对不能】再次发表新评论。
+- 你只能让"可参与评论的角色/NPC"列表中的人发表新评论。
+
+## 3. 【精确角色识别 - 最重要！】
+- 当用户发微博评论或@某个角色时，【只有被@或被明确提到的角色】才应该认为这条内容是关于自己的。
+- 其他角色【不应该】误以为内容是在说自己。
+- 例如：如果用户发"今天和小明一起吃饭好开心"，只有"小明"这个角色可以回应"关于自己"的评论，其他角色应该以路人视角评论。
+
+## 4. 【评论类型分布】(共生成6-10条评论)
+- **角色评论** (1-3条): 从"可参与评论的角色"列表中选择，评论内容必须符合角色的职业和人设。
+- **NPC评论** (1-2条): 从"可参与评论的NPC"列表中选择，评论内容要符合NPC的人设。
+- **路人评论** (3-5条): 生成真实的路人昵称和评论，昵称要多样化，如："今天也要早睡"、"可乐加冰块"、"是小王不是小张"、"理性吃瓜第一线"。
+
+## 5. 【禁止使用的昵称】
+- 绝对禁止使用 "路人甲"、"网友A"、"粉丝B"、"匿名用户" 等代号作为评论者昵称。
+
+## 6. 【评论风格多样化】
+- **粉丝**: "哥哥太帅了！新剧什么时候播？"
+- **路人**: "这个地方看起来不错，求地址！"
+- **黑粉/质疑者**: "就这？感觉p图有点过了吧..."
+- **玩梗**: "楼上是不是XX派来的间谍（狗头）"
+
+## 7. 【格式铁律】
+你的回复【必须且只能】是一个严格的JSON数组，每个对象代表一条评论:
+- 发表新评论: \`{"author": "昵称", "comment": "评论内容", "type": "char/npc/passerby"}\`
+- 回复已有评论: \`{"author": "昵称", "comment": "评论内容", "replyTo": "被回复者昵称", "type": "char/npc/passerby"}\`
+
+**type字段说明**: "char"=角色, "npc"=NPC, "passerby"=路人
+
+现在，请开始生成评论。记住：
+1. 已评论过的人不能再评论
+2. 只有被明确提到的角色才能认为内容是关于自己的
+3. 路人评论的昵称要真实多样化
 `;
 
   try {
@@ -1777,7 +1891,12 @@ ${availableCommentersContext}
       .replace(/^```json\s*|```$/g, '')
       .trim();
 
-    const newComments = JSON.parse(aiResponseContent);
+    let newComments = JSON.parse(aiResponseContent);
+    
+    // 如果返回的是对象而不是数组，尝试提取数组
+    if (!Array.isArray(newComments)) {
+      newComments = newComments.comments || newComments.data || [];
+    }
 
     if (Array.isArray(newComments) && newComments.length > 0) {
       const postToUpdate = await db.weiboPosts.get(post.id);
@@ -1785,30 +1904,43 @@ ${availableCommentersContext}
 
       if (!postToUpdate.comments) postToUpdate.comments = [];
 
+      // 【防重复】再次检查，过滤掉已评论者的重复评论
+      const existingNicknames = new Set(postToUpdate.comments.map(c => c.authorNickname));
+      
+      let addedCount = 0;
       newComments.forEach(comment => {
         if (comment.author && comment.comment) {
+          // 跳过已评论过的人（双重保险）
+          if (existingNicknames.has(comment.author) && comment.type !== 'passerby') {
+            console.log(`跳过重复评论者: ${comment.author}`);
+            return;
+          }
+          
           const newCommentObject = {
             commentId: 'comment_' + Date.now() + Math.random(),
             authorNickname: comment.author,
             commentText: comment.comment,
             timestamp: Date.now(),
+            commentType: comment.type || 'passerby', // 记录评论类型
           };
           if (comment.replyTo) {
             newCommentObject.replyToNickname = comment.replyTo;
           }
           postToUpdate.comments.push(newCommentObject);
+          existingNicknames.add(comment.author);
+          addedCount++;
         }
       });
 
       postToUpdate.baseLikesCount =
-        (postToUpdate.baseLikesCount || 0) + Math.floor(Math.random() * newComments.length * 3 + 5);
+        (postToUpdate.baseLikesCount || 0) + Math.floor(Math.random() * addedCount * 3 + 5);
 
       await db.weiboPosts.put(postToUpdate);
 
       await renderMyWeiboFeed();
       await renderFollowingWeiboFeed();
 
-      alert(`成功生成了 ${newComments.length} 条新评论！`);
+      alert(`成功生成了 ${addedCount} 条新评论！`);
     } else {
       alert('AI没有生成有效的评论。');
     }
@@ -1817,6 +1949,7 @@ ${availableCommentersContext}
     await showCustomAlert('生成失败', `发生了一个错误：\n${error.message}`);
   }
 }
+
 
 /**
  * 【全新】打开指定角色的微博主页
