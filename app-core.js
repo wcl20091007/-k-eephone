@@ -7301,6 +7301,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const imageEl = document.createElement("div");
         imageEl.className = "sticker-image";
         imageEl.style.backgroundImage = `url(${sticker.url})`;
+        imageEl.dataset.stickerId = sticker.id; // 添加data属性以便后续更新选中状态
 
         const nameEl = document.createElement("span");
         nameEl.className = "sticker-name";
@@ -7309,26 +7310,24 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (isUserStickerSelectionMode) {
           imageEl.classList.add("in-selection-mode");
+          itemContainer.classList.add("in-selection-mode");
           if (selectedUserStickers.has(sticker.id)) {
             imageEl.classList.add("selected");
+            itemContainer.classList.add("selected");
           }
           itemContainer.addEventListener("click", () => {
-            imageEl.classList.toggle("selected");
+            // 先更新选中状态
             if (selectedUserStickers.has(sticker.id)) {
               selectedUserStickers.delete(sticker.id);
+              imageEl.classList.remove("selected");
+              itemContainer.classList.remove("selected");
             } else {
               selectedUserStickers.add(sticker.id);
+              imageEl.classList.add("selected");
+              itemContainer.classList.add("selected");
             }
-            const deleteBtn = document.getElementById(
-              "delete-selected-user-stickers-btn"
-            );
-            deleteBtn.textContent = `删除已选 (${selectedUserStickers.size})`;
-            deleteBtn.disabled = selectedUserStickers.size === 0;
-
-            const moveBtn = document.getElementById(
-              "move-selected-stickers-btn"
-            );
-            moveBtn.disabled = selectedUserStickers.size === 0;
+            // 使用统一的UI更新函数（只更新按钮状态，不更新表情选中状态，因为已经手动更新了）
+            updateStickerSelectionUI(false);
           });
         } else {
           itemContainer.addEventListener("click", () =>
@@ -7377,6 +7376,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // 每次渲染表情列表后，都更新一次分类页签栏
     renderStickerCategories();
+    
+    // 如果处于编辑模式，更新选择相关的UI（包括全选按钮状态）
+    // 注意：不更新表情的选中状态显示，因为已经在渲染时设置了
+    if (isUserStickerSelectionMode) {
+      updateStickerSelectionUI(false);
+    }
   }
 
   /**
@@ -7476,6 +7481,132 @@ document.addEventListener("DOMContentLoaded", () => {
       toggleUserStickerSelectionMode();
 
       alert("选中的表情已删除。");
+    }
+  }
+
+  /**
+   * 全选/取消全选当前分类中的所有表情包
+   */
+  function toggleSelectAllStickersInCategory() {
+    if (!isUserStickerSelectionMode) return;
+
+    // 获取当前分类下的所有表情包
+    let stickersInCategory;
+    if (activeStickerCategoryId === "uncategorized") {
+      stickersInCategory = state.userStickers.filter(
+        (sticker) => !sticker.categoryId
+      );
+    } else {
+      stickersInCategory = state.userStickers.filter(
+        (sticker) => sticker.categoryId === activeStickerCategoryId
+      );
+    }
+
+    // 如果有关键词，按名称搜索过滤
+    if (stickerSearchKeyword.trim()) {
+      const keyword = stickerSearchKeyword.trim().toLowerCase();
+      stickersInCategory = stickersInCategory.filter((sticker) =>
+        sticker.name.toLowerCase().includes(keyword)
+      );
+    }
+
+    if (stickersInCategory.length === 0) return;
+
+    // 检查当前分类下的所有表情是否都已选中
+    const allSelected = stickersInCategory.every((sticker) =>
+      selectedUserStickers.has(sticker.id)
+    );
+
+    if (allSelected) {
+      // 如果全部已选中，则取消全选（只取消当前分类的）
+      stickersInCategory.forEach((sticker) => {
+        selectedUserStickers.delete(sticker.id);
+      });
+    } else {
+      // 如果未全选，则全选当前分类的所有表情
+      stickersInCategory.forEach((sticker) => {
+        selectedUserStickers.add(sticker.id);
+      });
+    }
+
+    // 重新渲染面板以更新选中状态显示
+    renderStickerPanel();
+  }
+
+  /**
+   * 更新表情选择相关的UI（按钮文本、禁用状态等）
+   * @param {boolean} updateStickers - 是否更新表情的选中状态显示（默认true）
+   */
+  function updateStickerSelectionUI(updateStickers = true) {
+    const deleteBtn = document.getElementById(
+      "delete-selected-user-stickers-btn"
+    );
+    if (deleteBtn) {
+      deleteBtn.textContent = `删除已选 (${selectedUserStickers.size})`;
+      deleteBtn.disabled = selectedUserStickers.size === 0;
+    }
+
+    const moveBtn = document.getElementById("move-selected-stickers-btn");
+    if (moveBtn) {
+      moveBtn.disabled = selectedUserStickers.size === 0;
+    }
+
+    // 更新全选按钮文本
+    const selectAllBtn = document.getElementById("select-all-stickers-btn");
+    if (selectAllBtn) {
+      // 获取当前分类下的所有表情包
+      let stickersInCategory;
+      if (activeStickerCategoryId === "uncategorized") {
+        stickersInCategory = state.userStickers.filter(
+          (sticker) => !sticker.categoryId
+        );
+      } else {
+        stickersInCategory = state.userStickers.filter(
+          (sticker) => sticker.categoryId === activeStickerCategoryId
+        );
+      }
+
+      // 如果有关键词，按名称搜索过滤
+      if (stickerSearchKeyword.trim()) {
+        const keyword = stickerSearchKeyword.trim().toLowerCase();
+        stickersInCategory = stickersInCategory.filter((sticker) =>
+          sticker.name.toLowerCase().includes(keyword)
+        );
+      }
+
+      // 检查是否全部选中
+      const allSelected =
+        stickersInCategory.length > 0 &&
+        stickersInCategory.every((sticker) =>
+          selectedUserStickers.has(sticker.id)
+        );
+
+      selectAllBtn.textContent = allSelected ? "取消全选" : "全选";
+    }
+
+    // 如果需要更新表情的选中状态显示，则更新DOM中的选中标记
+    if (updateStickers) {
+      const grid = document.getElementById("sticker-grid");
+      if (grid) {
+        const stickerItems = grid.querySelectorAll(".sticker-item");
+        stickerItems.forEach((item) => {
+          const imageEl = item.querySelector(".sticker-image");
+          if (imageEl) {
+            // 从data属性中获取sticker ID
+            const stickerId = imageEl.dataset.stickerId;
+            if (stickerId) {
+              const isSelected = selectedUserStickers.has(parseInt(stickerId));
+              if (isSelected) {
+                imageEl.classList.add("selected");
+                item.classList.add("selected");
+              } else {
+                imageEl.classList.remove("selected");
+                item.classList.remove("selected");
+              }
+            }
+          }
+        });
+      }
     }
   }
 
@@ -37316,13 +37447,25 @@ ${chat.settings.aiPersona}
       },
     });
 
-    // 6. 使用 Response 将流包装成可下载的文件
-    const response = new Response(stream, {
-      headers: { "Content-Type": "application/json" },
-    });
+    // 6. 收集所有数据块
+    const chunks = [];
+    const reader = stream.getReader();
 
-    // 7. 创建并触发下载链接
-    const url = URL.createObjectURL(await response.blob());
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    // 7. 将所有块合并成 Blob
+    const blob = new Blob(chunks, { type: "application/json" });
+
+    // 8. 创建并触发下载链接
+    const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
     link.download = `EPhone-Stream-Backup-${
@@ -37331,10 +37474,16 @@ ${chat.settings.aiPersona}
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    
+    // 延迟释放URL，确保下载已开始
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+    }, 100);
 
     // 关闭“请稍候”的弹窗
     hideCustomModal();
+    
+    await showCustomAlert("导出成功", "流式导出已完成，文件已开始下载。");
   }
   /**
    * 恢复所有App名称为默认值
@@ -39694,7 +39843,7 @@ ${chat.settings.aiPersona}
         try {
           const data = await downloadAndMerge(task.name, task.type);
 
-          if (data) {
+          if (data !== null && data !== undefined) {
             if (task.type === "object") {
               // 恢复单对象配置
               if (task.name === "apiConfig") {
@@ -39704,13 +39853,17 @@ ${chat.settings.aiPersona}
                   data.githubToken = state.apiConfig.githubToken;
               }
               await db[task.name].put(data);
+              successCount++;
             } else {
               // 恢复数组表数据
               if (Array.isArray(data) && data.length > 0) {
                 await db[task.name].bulkPut(data);
+                successCount++;
+              } else if (Array.isArray(data) && data.length === 0) {
+                // 空数组也算成功（表被清空了）
+                successCount++;
               }
             }
-            successCount++;
           }
         } catch (err) {
           console.warn(`恢复 ${task.name} 时出错，跳过:`, err);
@@ -39731,167 +39884,6 @@ ${chat.settings.aiPersona}
     }
   }
 
-  /**
-   * Git流式导入 (分表下载，节省内存)
-   */
-  async function restoreBackupFromGitHubStream() {
-    let { githubToken, githubUsername, githubRepo, githubPath } =
-      state.apiConfig;
-
-    if (!githubToken || !githubUsername || !githubRepo) {
-      alert("请先在 API 设置中填写 GitHub 配置！");
-      return;
-    }
-
-    // 整理路径
-    githubToken = githubToken.trim();
-    githubUsername = githubUsername.trim();
-    githubRepo = githubRepo
-      .trim()
-      .replace(/\/$/, "")
-      .split("/")
-      .pop()
-      .replace(".git", "");
-    let basePath = (githubPath || "ephone_backup").trim();
-    if (basePath.endsWith(".json")) {
-      basePath = basePath.replace(".json", "");
-    }
-
-    const confirmed = await showCustomConfirm(
-      "⚠️ 确认流式恢复",
-      `将从 GitHub 依次下载以 "${basePath}_" 开头的文件并覆盖当前数据。\n\n此操作会【清空】当前所有数据且不可撤销！\n确定要继续吗？`,
-      { confirmButtonClass: "btn-danger" }
-    );
-    if (!confirmed) return;
-
-    const loadingOverlay = document.getElementById("generation-overlay");
-    const loadingText = loadingOverlay.querySelector("p");
-    loadingOverlay.classList.add("visible");
-
-    try {
-      // 1. 定义需要恢复的表名和配置 (与上传时对应)
-      // 即使云端没有某些表，尝试下载404也会被忽略，保证健壮性
-      const tablesToImport = db.tables.map((t) => t.name);
-      const singleObjects = [
-        "apiConfig",
-        "globalSettings",
-        "musicLibrary",
-        "qzoneSettings",
-      ];
-
-      const totalTasks = tablesToImport.length + singleObjects.length;
-      let completedTasks = 0;
-      let successCount = 0;
-
-      // 先清空数据库 (为了保证数据纯净)
-      loadingText.textContent = "正在清空当前数据库...";
-      for (const table of db.tables) {
-        await table.clear();
-      }
-
-      // 2. 辅助下载函数
-      const downloadAndImport = async (
-        fileName,
-        targetStore,
-        isSingleObject = false
-      ) => {
-        const apiUrl = `https://api.github.com/repos/${githubUsername}/${githubRepo}/contents/${fileName}`;
-        try {
-          const res = await fetch(apiUrl, {
-            headers: { Authorization: `token ${githubToken}` },
-          });
-
-          if (res.status === 404) {
-            console.log(`跳过: ${fileName} 不存在`);
-            return false;
-          }
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-          const json = await res.json();
-
-          // 处理大文件 Blob (如果是大文件 github api 会返回 sha 没 content)
-          let finalContentStr = "";
-          if (json.content) {
-            finalContentStr = json.content.replace(/\s/g, "");
-          } else if (json.sha) {
-            // Blob API for large files
-            const blobUrl = `https://api.github.com/repos/${githubUsername}/${githubRepo}/git/blobs/${json.sha}`;
-            const blobRes = await fetch(blobUrl, {
-              headers: { Authorization: `token ${githubToken}` },
-            });
-            const blobJson = await blobRes.json();
-            finalContentStr = blobJson.content.replace(/\s/g, "");
-          }
-
-          // 解码
-          const binaryString = atob(finalContentStr);
-          const bytes = new Uint8Array(binaryString.length);
-          for (let i = 0; i < binaryString.length; i++) {
-            bytes[i] = binaryString.charCodeAt(i);
-          }
-          const decoder = new TextDecoder("utf-8");
-          const dataJson = JSON.parse(decoder.decode(bytes));
-
-          // 写入数据库
-          if (isSingleObject) {
-            // 对于配置对象，如果是 apiConfig，保留当前的 Key 别被空值覆盖
-            if (targetStore === "apiConfig") {
-              // 恢复时，如果备份里是空的，就保留当前内存里的Key
-              if (!dataJson.apiKey)
-                dataJson.apiKey = state.apiConfig.apiKey;
-              if (!dataJson.githubToken)
-                dataJson.githubToken = state.apiConfig.githubToken;
-            }
-            await db[targetStore].put(dataJson);
-          } else {
-            // 数组数据
-            if (Array.isArray(dataJson) && dataJson.length > 0) {
-              await db[targetStore].bulkPut(dataJson);
-            }
-          }
-          return true;
-        } catch (e) {
-          console.warn(`下载/导入 ${fileName} 失败:`, e);
-          return false;
-        }
-      };
-
-      // 3. 循环恢复表
-      for (const tableName of tablesToImport) {
-        loadingText.textContent = `[${
-          completedTasks + 1
-        }/${totalTasks}] 正在下载并导入: ${tableName}...`;
-        const fileName = `${basePath}_${tableName}.json`;
-        if (await downloadAndImport(fileName, tableName, false)) {
-          successCount++;
-        }
-        completedTasks++;
-      }
-
-      // 4. 循环恢复配置
-      for (const configName of singleObjects) {
-        loadingText.textContent = `[${
-          completedTasks + 1
-        }/${totalTasks}] 正在下载并导入配置: ${configName}...`;
-        const fileName = `${basePath}_${configName}.json`;
-        if (await downloadAndImport(fileName, configName, true)) {
-          successCount++;
-        }
-        completedTasks++;
-      }
-
-      await showCustomAlert(
-        "恢复完成",
-        `流式恢复结束！\n成功恢复了 ${successCount} 个数据模块。\n应用即将刷新。`
-      );
-      setTimeout(() => window.location.reload(), 1500);
-    } catch (error) {
-      console.error("流式恢复失败:", error);
-      await showCustomAlert("恢复失败", `发生错误: ${error.message}`);
-    } finally {
-      loadingOverlay.classList.remove("visible");
-    }
-  }
   // ---------------- [修改开始] 新增功能逻辑 ----------------
 
   // 1. 初始化漫游字号调整
@@ -50845,6 +50837,9 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
       .addEventListener("click", openDatingPresetManager);
 
     // --- 表情分类功能事件绑定 ---
+    document
+      .getElementById("select-all-stickers-btn")
+      .addEventListener("click", toggleSelectAllStickersInCategory);
     document
       .getElementById("move-selected-stickers-btn")
       .addEventListener("click", openStickerCategoryModal);
