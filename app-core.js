@@ -3010,11 +3010,36 @@ document.addEventListener("DOMContentLoaded", () => {
         taobaoCart,
         userWalletTransactions,
         userStickerCategories,
+        weiboPosts,
+        forumGroups,
+        forumPosts,
+        forumComments,
+        forumCategories,
+        tarotReadings,
+        charPhonePresets,
+        offlinePresets,
+        elemeFoods,
+        elemeOrders,
+        calendarEvents,
+        calendarTodos,
+        calendarCategories,
+        calendarPeriods,
+        studioScripts,
+        studioHistory,
+        tukeyAccounts,
+        tukeyAccountingGroups,
+        tukeyAccountingRecords,
+        desktopPetPeekingHistory,
+        tukeyAccountingReplies,
+        tukeyUserSettings,
+        tukeyCustomConfig,
+        auroraBooks,
+        globalNpcs,
       ] = await Promise.all([
         db.chats.toArray(),
         db.worldBooks.toArray(),
         db.userStickers.toArray(),
-        db.charStickers.toArray(), // <--- 新增的这一行！
+        db.charStickers.toArray(),
         db.apiConfig.get("main"),
         db.globalSettings.get("main"),
         db.personaPresets.toArray(),
@@ -3048,6 +3073,31 @@ document.addEventListener("DOMContentLoaded", () => {
         db.taobaoCart.toArray(),
         db.userWalletTransactions.toArray(),
         db.userStickerCategories.toArray(),
+        db.weiboPosts.toArray(),
+        db.forumGroups.toArray(),
+        db.forumPosts.toArray(),
+        db.forumComments.toArray(),
+        db.forumCategories.toArray(),
+        db.tarotReadings.toArray(),
+        db.charPhonePresets.toArray(),
+        db.offlinePresets.toArray(),
+        db.elemeFoods.toArray(),
+        db.elemeOrders.toArray(),
+        db.calendarEvents.toArray(),
+        db.calendarTodos.toArray(),
+        db.calendarCategories.toArray(),
+        db.calendarPeriods.toArray(),
+        db.studioScripts.toArray(),
+        db.studioHistory.toArray(),
+        db.tukeyAccounts.toArray(),
+        db.tukeyAccountingGroups.toCollection().first().catch(() => null),
+        db.tukeyAccountingRecords.toArray(),
+        db.desktopPetPeekingHistory.toArray(),
+        db.tukeyAccountingReplies.toArray(),
+        db.tukeyUserSettings.get("main").catch(() => null),
+        db.tukeyCustomConfig.get("main").catch(() => null),
+        db.auroraBooks.toArray(),
+        db.globalNpcs.toArray(),
       ]);
 
       Object.assign(backupData, {
@@ -3088,6 +3138,31 @@ document.addEventListener("DOMContentLoaded", () => {
         taobaoCart,
         userWalletTransactions,
         userStickerCategories,
+        weiboPosts,
+        forumGroups,
+        forumPosts,
+        forumComments,
+        forumCategories,
+        tarotReadings,
+        charPhonePresets,
+        offlinePresets,
+        elemeFoods,
+        elemeOrders,
+        calendarEvents,
+        calendarTodos,
+        calendarCategories,
+        calendarPeriods,
+        studioScripts,
+        studioHistory,
+        tukeyAccounts,
+        tukeyAccountingGroups,
+        tukeyAccountingRecords,
+        desktopPetPeekingHistory,
+        tukeyAccountingReplies,
+        tukeyUserSettings,
+        tukeyCustomConfig,
+        auroraBooks,
+        globalNpcs,
       });
 
       backupData.homeScreenState = {
@@ -3227,6 +3302,31 @@ document.addEventListener("DOMContentLoaded", () => {
       taobaoCart,
       userWalletTransactions,
       userStickerCategories,
+      weiboPosts,
+      forumGroups,
+      forumPosts,
+      forumComments,
+      forumCategories,
+      tarotReadings,
+      charPhonePresets,
+      offlinePresets,
+      elemeFoods,
+      elemeOrders,
+      calendarEvents,
+      calendarTodos,
+      calendarCategories,
+      calendarPeriods,
+      studioScripts,
+      studioHistory,
+      tukeyAccounts,
+      tukeyAccountingGroups,
+      tukeyAccountingRecords,
+      desktopPetPeekingHistory,
+      tukeyAccountingReplies,
+      tukeyUserSettings,
+      tukeyCustomConfig,
+      auroraBooks,
+      globalNpcs,
     ] = await Promise.all([
       db.chats.toArray(),
       db.worldBooks.toArray(),
@@ -3265,6 +3365,31 @@ document.addEventListener("DOMContentLoaded", () => {
       db.taobaoCart.toArray(),
       db.userWalletTransactions.toArray(),
       db.userStickerCategories.toArray(),
+      db.weiboPosts.toArray(),
+      db.forumGroups.toArray(),
+      db.forumPosts.toArray(),
+      db.forumComments.toArray(),
+      db.forumCategories.toArray(),
+      db.tarotReadings.toArray(),
+      db.charPhonePresets.toArray(),
+      db.offlinePresets.toArray(),
+      db.elemeFoods.toArray(),
+      db.elemeOrders.toArray(),
+      db.calendarEvents.toArray(),
+      db.calendarTodos.toArray(),
+      db.calendarCategories.toArray(),
+      db.calendarPeriods.toArray(),
+      db.studioScripts.toArray(),
+      db.studioHistory.toArray(),
+      db.tukeyAccounts.toArray(),
+      db.tukeyAccountingGroups.toCollection().first().catch(() => null),
+      db.tukeyAccountingRecords.toArray(),
+      db.desktopPetPeekingHistory.toArray(),
+      db.tukeyAccountingReplies.toArray(),
+      db.tukeyUserSettings.get("main").catch(() => null),
+      db.tukeyCustomConfig.get("main").catch(() => null),
+      db.auroraBooks.toArray(),
+      db.globalNpcs.toArray(),
     ]);
 
     // 组装数据
@@ -3306,6 +3431,31 @@ document.addEventListener("DOMContentLoaded", () => {
       taobaoCart,
       userWalletTransactions,
       userStickerCategories,
+      weiboPosts,
+      forumGroups,
+      forumPosts,
+      forumComments,
+      forumCategories,
+      tarotReadings,
+      charPhonePresets,
+      offlinePresets,
+      elemeFoods,
+      elemeOrders,
+      calendarEvents,
+      calendarTodos,
+      calendarCategories,
+      calendarPeriods,
+      studioScripts,
+      studioHistory,
+      tukeyAccounts,
+      tukeyAccountingGroups,
+      tukeyAccountingRecords,
+      desktopPetPeekingHistory,
+      tukeyAccountingReplies,
+      tukeyUserSettings,
+      tukeyCustomConfig,
+      auroraBooks,
+      globalNpcs,
     });
 
     // 这里省略了 homeScreenState 的详细抓取，因为它依赖 DOM 元素，
@@ -3760,7 +3910,7 @@ document.addEventListener("DOMContentLoaded", () => {
           "worldBooks",
           "userStickers",
           "charStickers",
-          "personaPresets", // <--- 在这里加入了 'charStickers'
+          "personaPresets",
           "qzonePosts",
           "qzoneAlbums",
           "qzonePhotos",
@@ -3775,6 +3925,42 @@ document.addEventListener("DOMContentLoaded", () => {
           "bubbleStylePresets",
           "fontPresets",
           "homeScreenPresets",
+          "weiboPosts",
+          "forumGroups",
+          "forumPosts",
+          "forumComments",
+          "forumCategories",
+          "tarotReadings",
+          "pomodoroSessions",
+          "scriptKillScripts",
+          "taobaoProducts",
+          "taobaoOrders",
+          "taobaoCart",
+          "userWalletTransactions",
+          "userStickerCategories",
+          "datingScenes",
+          "datingPresets",
+          "datingSpriteGroups",
+          "datingSprites",
+          "datingHistory",
+          "ludoQuestionBanks",
+          "ludoQuestions",
+          "charPhonePresets",
+          "offlinePresets",
+          "elemeFoods",
+          "elemeOrders",
+          "calendarEvents",
+          "calendarTodos",
+          "calendarCategories",
+          "calendarPeriods",
+          "studioScripts",
+          "studioHistory",
+          "tukeyAccounts",
+          "tukeyAccountingRecords",
+          "desktopPetPeekingHistory",
+          "tukeyAccountingReplies",
+          "auroraBooks",
+          "globalNpcs",
         ];
 
         // 世界书格式兼容转换代码
@@ -3840,6 +4026,9 @@ document.addEventListener("DOMContentLoaded", () => {
           "globalSettings",
           "musicLibrary",
           "qzoneSettings",
+          "tukeyAccountingGroups",
+          "tukeyUserSettings",
+          "tukeyCustomConfig",
         ];
         for (const tableName of objectTables) {
           if (data[tableName] && db[tableName]) {
@@ -35872,6 +36061,17 @@ ${chat.settings.aiPersona}
         },
       };
 
+      // 定义哪些表是单个对象的设置表
+      const singleObjectTables = [
+        "apiConfig",
+        "globalSettings",
+        "musicLibrary",
+        "qzoneSettings",
+        "tukeyAccountingGroups",
+        "tukeyUserSettings",
+        "tukeyCustomConfig",
+      ];
+
       // 1. 导出选中的App数据
       for (const checkbox of appCheckboxes) {
         const appId = checkbox.value;
@@ -35879,7 +36079,15 @@ ${chat.settings.aiPersona}
         if (appInfo) {
           backupData.contains.push(appId);
           for (const tableName of appInfo.tables) {
-            backupData.data[tableName] = await db[tableName].toArray();
+            // 判断当前表是否是单个对象的设置表
+            if (singleObjectTables.includes(tableName)) {
+              // 如果是，就只获取第一个（也可能是唯一一个）对象
+              const tableData = await db[tableName].toCollection().first();
+              backupData.data[tableName] = tableData === undefined ? null : tableData;
+            } else {
+              // 如果是普通的多条记录表，就还是获取整个数组
+              backupData.data[tableName] = await db[tableName].toArray();
+            }
             console.log(`已打包App数据表: ${tableName}`);
           }
         }
@@ -36040,10 +36248,28 @@ ${chat.settings.aiPersona}
 
       console.log("即将操作的有效数据表:", tablesToUpdate);
 
+      // 定义哪些表是单个对象的设置表
+      const singleObjectTables = [
+        "apiConfig",
+        "globalSettings",
+        "musicLibrary",
+        "qzoneSettings",
+        "tukeyAccountingGroups",
+        "tukeyUserSettings",
+        "tukeyCustomConfig",
+      ];
+
       // 4. 只对这些有效的数据表开启一个数据库事务
       await db.transaction("rw", tablesToUpdate, async () => {
         for (const tableName of tablesToUpdate) {
-          if (Array.isArray(data.data[tableName])) {
+          if (singleObjectTables.includes(tableName)) {
+            // 处理对象类型的表
+            if (data.data[tableName] && typeof data.data[tableName] === "object" && !Array.isArray(data.data[tableName])) {
+              console.log(`正在导入设置: ${tableName}...`);
+              await db[tableName].put(data.data[tableName]);
+            }
+          } else if (Array.isArray(data.data[tableName])) {
+            // 处理数组类型的表
             console.log(
               `正在向表格 "${tableName}" 中补充/覆盖 ${data.data[tableName].length} 条数据...`
             );
@@ -36838,6 +37064,27 @@ ${chat.settings.aiPersona}
       "datingSpriteGroups",
       "datingSprites",
       "datingHistory",
+      "charPhonePresets",
+      "offlinePresets",
+      "elemeFoods",
+      "elemeOrders",
+      "calendarEvents",
+      "calendarTodos",
+      "calendarCategories",
+      "calendarPeriods",
+      "studioScripts",
+      "studioHistory",
+      "tukeyAccounts",
+      "tukeyAccountingGroups",
+      "tukeyAccountingRecords",
+      "desktopPetPeekingHistory",
+      "tukeyAccountingReplies",
+      "tukeyUserSettings",
+      "tukeyCustomConfig",
+      "auroraBooks",
+      "globalNpcs",
+      "ludoQuestionBanks",
+      "ludoQuestions",
     ];
 
     const stream = new ReadableStream({
