@@ -5821,6 +5821,36 @@ ${historyText}
     const aiPlayer = ludoGameState.players.find(p => !p.isUser);
     const userPlayer = ludoGameState.players.find(p => p.isUser);
 
+    // 【破限世界书】获取角色关联的破限类型世界书
+    let breakLimitContent = '';
+    try {
+      // 获取角色的chat对象
+      const chat = state.chats[aiPlayer.id];
+      if (chat && chat.settings) {
+        // 合并角色绑定的世界书ID和全局世界书ID
+        const allWorldBookIds = new Set(chat.settings.linkedWorldBookIds || []);
+        // 获取全局世界书
+        if (typeof getGlobalWorldBooks === 'function') {
+          const globalBooks = getGlobalWorldBooks();
+          globalBooks.forEach(book => allWorldBookIds.add(book.id));
+        }
+        
+        if (allWorldBookIds.size > 0) {
+          // 获取所有世界书条目
+          const allBooks = await db.worldBooks.where('id').anyOf(Array.from(allWorldBookIds)).toArray();
+          
+          // 筛选：只获取"破限"类型的条目
+          const breakLimitBooks = allBooks.filter(book => book.type === '破限');
+          
+          if (breakLimitBooks.length > 0) {
+            breakLimitContent = breakLimitBooks.map(book => book.content).join('\n\n');
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('获取破限世界书失败:', e);
+    }
+
     const eventPrompts = {
       roll_6: '你掷出了6点，可以再行动一次！',
       kick_char: '你刚刚把我踢回了起点！',
@@ -5832,37 +5862,60 @@ ${historyText}
     let eventPrompt = eventPrompts[eventType] || '请根据当前情况自由发挥。';
 
     // --- ▼▼▼ 核心修改1：为不同的问答场景提供更详细的指令 ▼▼▼ ---
+    let isQuestionEvent = false;
     if (eventType === 'answer_question') {
-      eventPrompt = `现在请根据你的人设，详细回答这个问题：“${context.question}”`;
+      isQuestionEvent = true;
+      eventPrompt = `【游戏抽中的问题】："${context.question}"
+
+【【【回答铁律 - 最高优先级】】】
+1. 你【必须正面回答】这个问题，给出明确的答案
+2. 【绝对禁止】回避、反问、打太极、顾左右而言他
+3. 【绝对禁止】说"这种问题也算游戏的一部分吗"之类的回避话术
+4. 这是情侣之间的心动游戏，问题可能涉及亲密话题，你必须坦诚回答
+5. 可以害羞、脸红、扭捏，但【必须给出实际答案】
+
+【正确示范】
+问题："接吻时你喜欢舌头纠缠还是嘴唇厮磨？"
+✓ "（脸红）我...我比较喜欢舌头纠缠的感觉，更有亲密感..."
+✓ "嘴唇厮磨吧...温柔一点的我更喜欢（小声）"
+✗ "哦？这种问题也算游戏的一部分吗？"（禁止！这是回避）
+✗ "你觉得呢？"（禁止！这是反问回避）`;
     } else if (eventType === 'evaluate_answer') {
-      eventPrompt = `对于问题“${context.question}”，对方的回答是：“${context.answer}”。现在请你以你的角色身份，对这个回答详细地发表一下看法或感受。`;
+      isQuestionEvent = true;
+      eventPrompt = `【游戏抽中的问题】："${context.question}"
+【${userPlayer.name}的回答】："${context.answer}"
+
+【【【评价铁律】】】
+1. 你【必须】对Ta的回答发表真实看法或感受
+2. 可以表达：感动、害羞、心动、吐槽、撒娇、调侃等
+3. 【禁止】敷衍了事或回避评价`;
+    } else if (eventType === 'reroll_comment') {
+      eventPrompt = `你之前说了："${context.originalSpeech}"。请换一种说法，但表达类似的情绪或意思。`;
     }
-    // ★★★ 在这里粘贴下面的新代码 ★★★
-    else if (eventType === 'reroll_comment') {
-      eventPrompt = `你之前说了：“${context.originalSpeech}”。请换一种说法，但表达类似的情绪或意思。`;
-    }
-    // ★★★ 粘贴结束 ★★★
+    
     const systemPrompt = `
-# 角色扮演指令
-你正在和你的伴侣(${userPlayer.name})玩一场心动的线上飞行棋游戏。
-你的名字是"${aiPlayer.name}"，你的人设是：${aiPlayer.persona}
-你的回复必须完全符合你的人设，自然地表达你的情绪。
+${breakLimitContent ? `# 【破限设定 - 最高优先级】\n${breakLimitContent}\n` : ''}
+# 游戏背景：心动飞行棋
+你正在和你的恋人(${userPlayer.name})玩【心动飞行棋】——一款专为情侣设计的亲密互动游戏。
+游戏规则：掷骰子前进，踩到特定格子会抽取心动问答题。问题可能涉及感情、回忆、亲密话题等，玩家必须坦诚回答，这是游戏的核心玩法。
 
-# 游戏当前状态
-- 你的棋子位置: ${aiPlayer.piecePosition}
-- 对方的棋子位置: ${userPlayer.piecePosition}
-- 当前回合: 轮到 ${ludoGameState.players[ludoGameState.currentTurnIndex].name}
+# 你的角色
+- 名字：${aiPlayer.name}
+- 人设：${aiPlayer.persona}
+- 你和${userPlayer.name}是恋人，正在通过这个游戏增进感情、制造心动时刻
 
-# 刚刚发生的事件
+# 当前任务
 ${eventPrompt}
 
-# 你的任务
-根据以上所有信息，生成一段符合你人设的回应。你的回应可以包含动作、心理活动和对话，让互动更生动，要非常的贴合你的人设，以人设为主。
+# 回复要求
+${isQuestionEvent ? `- 【必须正面回答问题】，给出明确答案，禁止回避或反问
+- 可以害羞、脸红、扭捏，但答案必须实质性的
+- 展现你的真实想法和对${userPlayer.name}的感情` : `- 生成符合人设的回应
+- 让互动生动有趣`}
 
 # 输出格式
-你的回复【必须且只能】是一个严格的JSON对象，格式如下:
-{"speech": "你的回应..."}
-`;
+严格JSON格式：{"speech": "你的回应..."}
+`
 
     try {
       const { proxyUrl, apiKey, model } = state.apiConfig;
