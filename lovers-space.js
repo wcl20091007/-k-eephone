@@ -2862,8 +2862,74 @@ async function renderPomodoroHistory(charId) {
             </div>
         `;
     item.addEventListener('click', () => showPomodoroHistoryDetail(session.id));
+    // 添加长按删除功能
+    addPomodoroLongPressListener(item, () => deletePomodoroSession(session.id, session.task));
     listEl.appendChild(item);
   });
+}
+
+/**
+ * 为番茄钟历史记录项添加长按监听器
+ * @param {HTMLElement} element - 元素
+ * @param {Function} callback - 长按后的回调函数
+ */
+function addPomodoroLongPressListener(element, callback) {
+  let pressTimer;
+  let isLongPressTriggered = false;
+
+  element.addEventListener('touchstart', e => {
+    isLongPressTriggered = false;
+    pressTimer = window.setTimeout(() => {
+      isLongPressTriggered = true;
+      callback();
+    }, 500);
+  });
+
+  element.addEventListener('touchend', () => {
+    clearTimeout(pressTimer);
+    if (isLongPressTriggered) {
+      isLongPressTriggered = false;
+    }
+  });
+
+  element.addEventListener('touchmove', () => {
+    clearTimeout(pressTimer);
+  });
+
+  // 鼠标长按支持（桌面端）
+  element.addEventListener('mousedown', e => {
+    if (e.button !== 0) return; // 只响应左键
+    isLongPressTriggered = false;
+    pressTimer = window.setTimeout(() => {
+      isLongPressTriggered = true;
+      callback();
+    }, 500);
+  });
+
+  element.addEventListener('mouseup', () => {
+    clearTimeout(pressTimer);
+  });
+
+  element.addEventListener('mouseleave', () => {
+    clearTimeout(pressTimer);
+  });
+}
+
+/**
+ * 删除指定的专注记录
+ * @param {number} sessionId - 会话ID
+ * @param {string} taskName - 任务名称
+ */
+async function deletePomodoroSession(sessionId, taskName) {
+  const confirmed = await showCustomConfirm('删除专注记录', `确定要删除"${taskName}"的专注记录吗？此操作无法恢复。`, {
+    confirmText: '删除',
+    cancelText: '取消',
+  });
+
+  if (confirmed) {
+    await db.pomodoroSessions.delete(sessionId);
+    await renderPomodoroHistory(activeLoversSpaceCharId);
+  }
 }
 
 /**
