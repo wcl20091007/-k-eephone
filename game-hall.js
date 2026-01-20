@@ -1472,6 +1472,22 @@ ${formattedLog}
           return `${log.message.player.name}: ${log.message.speech}`;
         }
         
+        // ★★★ 修复：处理投票详情类型（log.message是对象而非字符串）★★★
+        if (log.type === 'vote-header') {
+          return '📊 投票公示';
+        }
+        if (log.type === 'vote-detail') {
+          // 投票详情是对象，需要特殊处理
+          const { voterName, targetName, isAbstain } = log.message;
+          return `${voterName} 投票给 ${isAbstain ? '弃票' : targetName}`;
+        }
+        
+        // ★★★ 修复：确保 log.message 是字符串再调用 replace ★★★
+        if (typeof log.message !== 'string') {
+          // 如果是其他未知的对象类型，尝试转换为字符串或跳过
+          return null;
+        }
+        
         const message = log.message.replace(/<strong>/g, '').replace(/<\/strong>/g, '');
         
         // 狼人可以看到所有信息（包括被守护的信息，因为狼人知道攻击了谁）
