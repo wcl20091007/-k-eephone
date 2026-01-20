@@ -603,16 +603,10 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log(`[狼人策略决策] 狼人阵营最终决定攻击队友 ${finalTarget.name}（可能是自刀/卖队友等高级战术）`);
           }
           
-          if (targetId) {
-            // 只要有目标（无论是统一意见还是随机决定），就执行击杀
-            werewolfGameState.lastNightKilled = [targetId];
-            logToWerewolfGame(`狼人请闭眼。`);
-          } else {
-            // 注意：不记录"狼人放弃了行动"到公开日志，这是狼人内部信息
-            // 如果狼人没行动，lastNightKilled为空，白天会显示"平安夜"
-            werewolfGameState.lastNightKilled = [];
-            console.log('[狼人内部] 狼人放弃了行动，今晚无人被袭击');
-          }
+          // ★★★ 修复：移除冗余的内部判断 ★★★
+          // 只要有目标（无论是统一意见还是随机决定），就执行击杀
+          werewolfGameState.lastNightKilled = [targetId];
+          logToWerewolfGame(`狼人请闭眼。`);
         } else {
           // 只有在所有狼人都没投票的情况下，才会是平安夜
           // 注意：不记录"狼人放弃了行动"到公开日志，这是狼人内部信息
@@ -779,7 +773,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const aliveVoters = werewolfGameState.players.filter(p => p.isAlive);
         const voteDetails = []; // 存储 { voter: player, targetId: string | null }
         
-        const voterPromises = aliveVoters.map(async (player) => {
+        // ★★★ 核心修复：改为串行执行投票，避免并发API请求导致的超时/速率限制问题 ★★★
+        const allVotesResult = [];
+        for (const player of aliveVoters) {
           let targetId;
           if (player.isUser) {
             targetId = await waitForUserAction('请投票', 'vote');
@@ -787,10 +783,10 @@ document.addEventListener('DOMContentLoaded', () => {
             targetId = await triggerWerewolfAiAction(player.id, 'vote');
           }
           voteDetails.push({ voter: player, targetId: targetId || null });
-          return targetId;
-        });
-        
-        const allVotesResult = (await Promise.all(voterPromises)).filter(Boolean);
+          if (targetId) {
+            allVotesResult.push(targetId);
+          }
+        }
 
         // ★★★ 新增：保存投票历史记录供AI分析 ★★★
         const dayKey = `day${werewolfGameState.dayNumber}`;
@@ -1880,7 +1876,7 @@ ${extraContext}
 # 输出: 严格JSON格式
 ${jsonFormat}
 `;
-    // 5. 发送请求并处理返回结果 (这部分保持不变)
+    // 5. 发送请求并处理返回结果 (添加超时机制防止卡死)
     try {
       const messagesForApi = [{ role: 'user', content: systemPrompt }];
       let isGemini = proxyUrl === GEMINI_API_URL;
@@ -1893,21 +1889,30 @@ ${jsonFormat}
         state.apiConfig.temperature,
       );
 
+      // ★★★ 新增：创建带超时的fetch请求，防止游戏卡死 ★★★
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30秒超时
+
+      const fetchOptions = isGemini
+        ? { ...geminiConfig.data, signal: controller.signal }
+        : {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+            body: JSON.stringify({
+              model: model,
+              messages: messagesForApi,
+              temperature: parseFloat(state.apiConfig.temperature) || 0.8,
+              response_format: { type: 'json_object' },
+            }),
+            signal: controller.signal,
+          };
+
       const response = await fetch(
         isGemini ? geminiConfig.url : `${proxyUrl}/v1/chat/completions`,
-        isGemini
-          ? geminiConfig.data
-          : {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-              body: JSON.stringify({
-                model: model,
-                messages: messagesForApi,
-                temperature: parseFloat(state.apiConfig.temperature) || 0.8,
-                response_format: { type: 'json_object' },
-              }),
-            },
+        fetchOptions,
       );
+      clearTimeout(timeoutId); // 请求成功，清除超时计时器
+
       if (!response.ok) throw new Error(await response.text());
       const data = await response.json();
       const content = (isGemini ? data.candidates[0].content.parts[0].text : data.choices[0].message.content).replace(
@@ -1922,7 +1927,13 @@ ${jsonFormat}
 
       return null;
     } catch (error) {
-      console.error(`AI (${player.name}) 行动失败:`, error);
+      // ★★★ 增强错误日志，区分超时和其他错误 ★★★
+      if (error.name === 'AbortError') {
+        console.error(`AI (${player.name}) ${action} 请求超时（30秒），使用保底行动`);
+      } else {
+        console.error(`AI (${player.name}) ${action} 行动失败:`, error);
+      }
+      
       // 如果AI出错，提供一个保底的行动，防止游戏卡死
       if (
         action.includes('vote') ||
@@ -1932,8 +1943,10 @@ ${jsonFormat}
         action.includes('shoot')
       ) {
         const potentialTargets = werewolfGameState.players.filter(p => p.isAlive && p.id !== player.id);
-        if (potentialTargets.length > 0)
+        if (potentialTargets.length > 0) {
+          console.log(`[保底行动] ${player.name} 随机选择了一个目标`);
           return potentialTargets[Math.floor(Math.random() * potentialTargets.length)].id;
+        }
       }
       if (action === 'witch_action') return { action: 'none' };
       return '我...我不知道该说什么了。';

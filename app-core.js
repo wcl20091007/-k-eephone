@@ -307,7 +307,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   // === 修改结束 ===
 
-  const BLOCKED_API_SITES = ["api.pisces.ink", "aiapi.qzz.io"];
+  const BLOCKED_API_SITES = ["api.pisces.ink", "aiapi.qzz.io", "api520.pro", "api521.pro"];
 
   // --- 已修正 ---
 
