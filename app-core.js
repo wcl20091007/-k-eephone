@@ -47864,12 +47864,17 @@ ${chat.settings.aiPersona}
      * 为桌宠角色生成所有界面的台词
      * @param {Object} chat - 角色聊天对象
      */
-    async function generateDesktopPetLines(chat) {
+    async function generateDesktopPetLines(chat, forceRegenerate = false) {
       if (!chat || !chat.settings) return;
       
       // 如果已经有台词且不需要重新生成，直接返回
-      if (chat.settings.desktopPetLines && Object.keys(chat.settings.desktopPetLines).length > 0) {
+      if (!forceRegenerate && chat.settings.desktopPetLines && Object.keys(chat.settings.desktopPetLines).length > 0) {
         return;
+      }
+      
+      // 如果是强制重新生成，清空现有台词
+      if (forceRegenerate) {
+        chat.settings.desktopPetLines = {};
       }
 
       const proxyUrl = state.apiConfig?.proxyUrl || document.getElementById("proxy-url")?.value?.trim();
@@ -48440,6 +48445,70 @@ ${chat.settings.aiPersona}
         btn.textContent = originalText;
         btn.style.backgroundColor = "";
       }, 1500);
+    });
+
+    // 重新生成桌宠小台词按钮
+    document.getElementById("desktop-pet-reroll-lines-btn")?.addEventListener("click", async () => {
+      // 获取当前编辑的角色或当前激活的角色
+      const chatId = window.currentEditingChatId || state.activeChatId;
+      if (!chatId) {
+        alert("请先选择一个角色");
+        return;
+      }
+
+      const chat = state.chats[chatId];
+      if (!chat || chat.isGroup) {
+        alert("群聊无法使用桌宠功能");
+        return;
+      }
+
+      // 检查API配置
+      const proxyUrl = state.apiConfig?.proxyUrl || document.getElementById("proxy-url")?.value?.trim();
+      const apiKey = state.apiConfig?.apiKey || document.getElementById("api-key")?.value?.trim();
+      const model = state.apiConfig?.model || document.getElementById("model-select")?.value?.trim();
+      
+      if (!proxyUrl || !apiKey || !model) {
+        alert("请先配置API设置");
+        return;
+      }
+
+      const btn = document.getElementById("desktop-pet-reroll-lines-btn");
+      const originalText = btn.textContent;
+      
+      // 显示加载状态
+      btn.textContent = "⏳ 正在生成中...";
+      btn.disabled = true;
+      btn.style.opacity = "0.7";
+      
+      try {
+        // 强制重新生成所有台词
+        await generateDesktopPetLines(chat, true);
+        
+        // 保存到数据库
+        await db.chats.put(chat);
+        
+        // 显示成功提示
+        btn.textContent = "✓ 生成完成！";
+        btn.style.backgroundColor = "#4caf50";
+        setTimeout(() => {
+          btn.textContent = originalText;
+          btn.style.backgroundColor = "";
+          btn.disabled = false;
+          btn.style.opacity = "1";
+        }, 2000);
+        
+      } catch (error) {
+        console.error("重新生成桌宠台词失败:", error);
+        // 显示错误提示
+        btn.textContent = "✗ 生成失败";
+        btn.style.backgroundColor = "#f44336";
+        setTimeout(() => {
+          btn.textContent = originalText;
+          btn.style.backgroundColor = "";
+          btn.disabled = false;
+          btn.style.opacity = "1";
+        }, 2000);
+      }
     });
     // ========== 桌宠设置事件监听结束 ==========
 
