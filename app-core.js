@@ -2994,6 +2994,79 @@ document.addEventListener("DOMContentLoaded", () => {
     textImageModeContent.classList.remove("active");
   }
 
+  // ===================================================================
+  // 浏览器持久化存储状态 UI 更新函数
+  // ===================================================================
+  async function updatePersistenceStatusUI() {
+    if (!window.DBPersistence) {
+      console.warn('[Persistence UI] DBPersistence 模块未加载');
+      return;
+    }
+
+    try {
+      const status = await window.DBPersistence.getStatus();
+      
+      // 更新状态图标和文字
+      const iconEl = document.getElementById("persistence-status-icon");
+      const textEl = document.getElementById("persistence-status-text");
+      const usageBarFill = document.getElementById("storage-usage-fill");
+      const usageText = document.getElementById("storage-usage-text");
+      const requestBtn = document.getElementById("request-persistence-btn");
+
+      if (iconEl && textEl) {
+        if (!status.isSupported) {
+          iconEl.textContent = "❌";
+          textEl.textContent = "您的浏览器不支持持久化存储";
+          textEl.style.color = "#ff6b6b";
+          if (requestBtn) requestBtn.disabled = true;
+        } else if (status.isPersisted) {
+          iconEl.textContent = "✅";
+          textEl.textContent = "已启用持久化保护，数据安全";
+          textEl.style.color = "#4CAF50";
+          if (requestBtn) {
+            requestBtn.textContent = "✓ 已持久化";
+            requestBtn.disabled = true;
+            requestBtn.style.backgroundColor = "#4CAF50";
+            requestBtn.style.color = "white";
+          }
+        } else {
+          iconEl.textContent = "⚠️";
+          textEl.textContent = "未启用持久化，数据可能被清理";
+          textEl.style.color = "#ff9800";
+          if (requestBtn) requestBtn.disabled = false;
+        }
+      }
+
+      // 更新存储使用情况
+      if (status.storage && usageBarFill && usageText) {
+        const percent = parseFloat(status.storage.percentUsed);
+        usageBarFill.style.width = `${Math.min(percent, 100)}%`;
+        
+        // 根据使用率改变颜色
+        if (percent > 80) {
+          usageBarFill.style.background = "linear-gradient(90deg, #ff6b6b, #ee5253)";
+        } else if (percent > 50) {
+          usageBarFill.style.background = "linear-gradient(90deg, #ffa502, #ff7f50)";
+        } else {
+          usageBarFill.style.background = "linear-gradient(90deg, #4CAF50, #8BC34A)";
+        }
+        
+        usageText.textContent = `存储使用: ${status.storage.usedMB} MB / ${status.storage.quotaMB} MB (${status.storage.percentUsed}%)`;
+      }
+
+      // 创建快速备份信息
+      if (window.db) {
+        await window.DBPersistence.createQuickBackup();
+      }
+
+    } catch (error) {
+      console.error('[Persistence UI] 更新状态失败:', error);
+    }
+  }
+
+  // 暴露到全局供其他模块调用
+  window.updatePersistenceStatusUI = updatePersistenceStatusUI;
+
   async function exportBackup() {
     try {
       const backupData = {
@@ -41220,6 +41293,54 @@ ${chat.settings.aiPersona}
     document
       .getElementById("import-data-input")
       .addEventListener("change", (e) => importBackup(e.target.files[0]));
+
+    // ===================================================================
+    // 浏览器持久化存储 UI 事件绑定
+    // ===================================================================
+    const requestPersistenceBtn = document.getElementById("request-persistence-btn");
+    if (requestPersistenceBtn) {
+      requestPersistenceBtn.addEventListener("click", async () => {
+        if (window.DBPersistence) {
+          const granted = await window.DBPersistence.requestPersistence();
+          updatePersistenceStatusUI();
+          if (granted) {
+            await showCustomAlert("成功", "已获得持久化存储权限！您的数据将受到保护，不会被浏览器自动清理。");
+          } else {
+            await showCustomAlert("提示", "浏览器拒绝了持久化存储请求。\n\n建议：\n• 将此网站添加到书签或主屏幕\n• 定期导出数据备份\n• 避免使用隐私模式浏览");
+          }
+        }
+      });
+    }
+
+    const checkDataIntegrityBtn = document.getElementById("check-data-integrity-btn");
+    if (checkDataIntegrityBtn) {
+      checkDataIntegrityBtn.addEventListener("click", async () => {
+        if (window.DBPersistence) {
+          const result = await window.DBPersistence.checkDataIntegrity();
+          let message = `数据状态: ${result.isHealthy ? "✅ 健康" : "⚠️ 有问题"}\n\n`;
+          message += `📊 数据统计:\n`;
+          for (const [table, count] of Object.entries(result.stats)) {
+            message += `  • ${table}: ${count} 条\n`;
+          }
+          if (result.issues.length > 0) {
+            message += `\n⚠️ 发现问题:\n`;
+            result.issues.forEach(issue => {
+              message += `  • ${issue}\n`;
+            });
+          }
+          if (result.lastQuickBackup) {
+            message += `\n⏰ 上次快速备份: ${new Date(result.lastQuickBackup).toLocaleString()}`;
+          }
+          await showCustomAlert("数据完整性检查", message);
+        }
+      });
+    }
+
+    // 初始化持久化状态 UI
+    setTimeout(() => {
+      updatePersistenceStatusUI();
+    }, 2000);
+
     document
       .getElementById("back-to-list-btn")
       .addEventListener("click", () => {

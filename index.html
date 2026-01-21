@@ -89,6 +89,7 @@
     <script src="script-kill-data.js" defer></script>
     <script src="utils.js" defer></script>
     <script src="api-handlers.js" defer></script>
+    <script src="db-persistence.js" defer></script>
     <script src="app-core.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
@@ -1750,6 +1751,39 @@
               <p style="font-size: 12px; color: #999; margin-top: 5px">
                 *
                 流式模式会将数据拆分为多个文件(按表)上传，解决大文件导致崩溃的问题。
+              </p>
+
+              <div class="moe-divider"></div>
+
+              <h4
+                style="
+                  font-size: 14px;
+                  margin-bottom: 10px;
+                  color: var(--accent-color);
+                "
+              >
+                🛡️ 浏览器持久化保护
+              </h4>
+              <div id="persistence-status-container" style="margin-bottom: 12px;">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                  <span id="persistence-status-icon" style="font-size: 20px;">⏳</span>
+                  <span id="persistence-status-text" style="font-size: 13px; color: #666;">检测中...</span>
+                </div>
+                <div id="storage-usage-bar" style="background: #e0e0e0; border-radius: 10px; height: 8px; overflow: hidden; margin-bottom: 5px;">
+                  <div id="storage-usage-fill" style="background: linear-gradient(90deg, #4CAF50, #8BC34A); height: 100%; width: 0%; transition: width 0.3s;"></div>
+                </div>
+                <p id="storage-usage-text" style="font-size: 11px; color: #888; text-align: center; margin: 0;">存储使用: --</p>
+              </div>
+              <div class="moe-btn-group">
+                <button class="moe-btn-secondary" id="request-persistence-btn" style="flex: 1;">
+                  🔒 请求持久化
+                </button>
+                <button class="moe-btn-secondary" id="check-data-integrity-btn" style="flex: 1;">
+                  🔍 检查数据
+                </button>
+              </div>
+              <p style="font-size: 11px; color: #999; margin-top: 8px; line-height: 1.5;">
+                持久化存储可防止浏览器在存储空间不足时自动清理您的数据。建议定期备份数据到本地或云端。
               </p>
 
               <div class="moe-divider"></div>
