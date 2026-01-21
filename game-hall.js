@@ -453,8 +453,14 @@ document.addEventListener('DOMContentLoaded', () => {
   async function processGameTurn() {
     if (!werewolfGameState.isActive) return;
 
-    renderWerewolfGameScreen();
+    // ★★★ 新增：全局错误捕获，防止游戏卡死 ★★★
+    try {
+      renderWerewolfGameScreen();
+    } catch (renderError) {
+      console.error('[渲染错误]', renderError);
+    }
 
+    try {
     switch (werewolfGameState.gamePhase) {
       case 'start':
         logToWerewolfGame('游戏开始，正在分配身份...');
@@ -592,7 +598,8 @@ document.addEventListener('DOMContentLoaded', () => {
           targetId = tiedTargets[Math.floor(Math.random() * tiedTargets.length)];
           // 注意：不记录狼人内部讨论到公开日志，这是狼人内部信息，好人不应知道
           // 只在控制台记录，用于调试
-          console.log(`[狼人内部] 平票处理，最终决定目标为 ${werewolfGameState.players.find(p => p.id === targetId).name}`);
+          const targetName = werewolfGameState.players.find(p => p.id === targetId)?.name || '未知';
+          console.log(`[狼人内部] 平票处理，最终决定目标为 ${targetName}`);
         }
 
         if (targetId) {
@@ -633,13 +640,18 @@ document.addEventListener('DOMContentLoaded', () => {
           } else {
             targetId = await triggerWerewolfAiAction(seer.id, 'seer_check');
           }
-          const targetPlayer = werewolfGameState.players.find(p => p.id === targetId);
-          const isWolf = targetPlayer.role === 'wolf';
-          werewolfGameState.seerLastNightResult = { targetName: targetPlayer.name, isWolf: isWolf };
-          logToWerewolfGame(`预言家请闭眼。`);
-          if (seer.isUser) {
-            await showCustomAlert('查验结果', `${targetPlayer.name} 的身份是：${isWolf ? '狼人' : '好人'}`);
+          // ★★★ 修复：添加空值检查，防止游戏卡死 ★★★
+          const targetPlayer = targetId ? werewolfGameState.players.find(p => p.id === targetId) : null;
+          if (targetPlayer) {
+            const isWolf = targetPlayer.role === 'wolf';
+            werewolfGameState.seerLastNightResult = { targetName: targetPlayer.name, isWolf: isWolf };
+            if (seer.isUser) {
+              await showCustomAlert('查验结果', `${targetPlayer.name} 的身份是：${isWolf ? '狼人' : '好人'}`);
+            }
+          } else {
+            console.warn('[预言家] 查验目标无效，跳过本回合');
           }
+          logToWerewolfGame(`预言家请闭眼。`);
         }
         werewolfGameState.gamePhase = 'witch_action';
         await sleep(2000);
@@ -687,10 +699,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const deathsThisNight = new Set();
 
         werewolfGameState.lastNightKilled.forEach(killedId => {
+          if (!killedId) return; // ★★★ 修复：跳过无效ID ★★★
           if (killedId === werewolfGameState.guardLastNightProtected) {
-            logToWerewolfGame(
-              `昨晚 ${werewolfGameState.players.find(p => p.id === killedId).name} 被袭击但同时也被守护了。`,
-            );
+            const protectedPlayer = werewolfGameState.players.find(p => p.id === killedId);
+            if (protectedPlayer) {
+              logToWerewolfGame(
+                `昨晚 ${protectedPlayer.name} 被袭击但同时也被守护了。`,
+              );
+            }
           } else {
             deathsThisNight.add(killedId);
           }
@@ -701,7 +717,8 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
           deathsThisNight.forEach(deadId => {
             const deadPlayer = werewolfGameState.players.find(p => p.id === deadId);
-            if (deadPlayer.isAlive) {
+            // ★★★ 修复：添加空值检查 ★★★
+            if (deadPlayer && deadPlayer.isAlive) {
               deadPlayer.isAlive = false;
               deathAnnouncements.push(`${deadPlayer.name} 昨晚被淘汰了。`);
             }
@@ -715,7 +732,8 @@ document.addEventListener('DOMContentLoaded', () => {
         let hunterDied = null;
         deathsThisNight.forEach(deadId => {
           const deadPlayer = werewolfGameState.players.find(p => p.id === deadId);
-          if (deadPlayer.role === 'hunter') hunterDied = deadPlayer;
+          // ★★★ 修复：添加空值检查 ★★★
+          if (deadPlayer && deadPlayer.role === 'hunter') hunterDied = deadPlayer;
         });
 
         if (hunterDied) {
@@ -727,12 +745,15 @@ document.addEventListener('DOMContentLoaded', () => {
           } else {
             targetId = await triggerWerewolfAiAction(hunterDied.id, 'hunter_shoot');
           }
+          // ★★★ 修复：添加空值检查 ★★★
           if (targetId) {
             const targetPlayer = werewolfGameState.players.find(p => p.id === targetId);
-            targetPlayer.isAlive = false;
-            logToWerewolfGame(`猎人开枪带走了 ${targetPlayer.name}。`);
-            renderWerewolfGameScreen();
-            if (checkGameOver()) return;
+            if (targetPlayer) {
+              targetPlayer.isAlive = false;
+              logToWerewolfGame(`猎人开枪带走了 ${targetPlayer.name}。`);
+              renderWerewolfGameScreen();
+              if (checkGameOver()) return;
+            }
           }
         }
 
@@ -836,25 +857,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (playersToEliminate.length === 1) {
           const eliminatedPlayer = werewolfGameState.players.find(p => p.id === playersToEliminate[0]);
-          eliminatedPlayer.isAlive = false;
-          // ★★★ 修改：显示票数统计 ★★★
-          logToWerewolfGame(`投票结果：${eliminatedPlayer.name} 以 ${maxVotesResult} 票被淘汰。`);
-          renderWerewolfGameScreen();
-          if (checkGameOver()) return;
-          if (eliminatedPlayer.role === 'hunter') {
-            logToWerewolfGame(`${eliminatedPlayer.name} 是猎人，可以选择一名玩家带走。`);
-            let targetId;
-            if (eliminatedPlayer.isUser) {
-              targetId = await waitForUserAction('请选择你要带走的玩家', 'hunter_shoot');
-            } else {
-              targetId = await triggerWerewolfAiAction(eliminatedPlayer.id, 'hunter_shoot');
-            }
-            if (targetId) {
-              const targetPlayer = werewolfGameState.players.find(p => p.id === targetId);
-              targetPlayer.isAlive = false;
-              logToWerewolfGame(`猎人开枪带走了 ${targetPlayer.name}。`);
-              renderWerewolfGameScreen();
-              if (checkGameOver()) return;
+          // ★★★ 修复：添加空值检查 ★★★
+          if (!eliminatedPlayer) {
+            console.error('[投票] 无法找到被淘汰的玩家，跳过');
+          } else {
+            eliminatedPlayer.isAlive = false;
+            // ★★★ 修改：显示票数统计 ★★★
+            logToWerewolfGame(`投票结果：${eliminatedPlayer.name} 以 ${maxVotesResult} 票被淘汰。`);
+            renderWerewolfGameScreen();
+            if (checkGameOver()) return;
+            if (eliminatedPlayer.role === 'hunter') {
+              logToWerewolfGame(`${eliminatedPlayer.name} 是猎人，可以选择一名玩家带走。`);
+              let targetId;
+              if (eliminatedPlayer.isUser) {
+                targetId = await waitForUserAction('请选择你要带走的玩家', 'hunter_shoot');
+              } else {
+                targetId = await triggerWerewolfAiAction(eliminatedPlayer.id, 'hunter_shoot');
+              }
+              if (targetId) {
+                const targetPlayer = werewolfGameState.players.find(p => p.id === targetId);
+                if (targetPlayer) {
+                  targetPlayer.isAlive = false;
+                  logToWerewolfGame(`猎人开枪带走了 ${targetPlayer.name}。`);
+                  renderWerewolfGameScreen();
+                  if (checkGameOver()) return;
+                }
+              }
             }
           }
         } else {
@@ -870,6 +898,31 @@ document.addEventListener('DOMContentLoaded', () => {
         await sleep(3000);
         await processGameTurn();
         break;
+    }
+    } catch (gameError) {
+      // ★★★ 全局错误处理：防止游戏完全卡死 ★★★
+      console.error('[狼人杀游戏错误]', gameError);
+      console.error('[当前阶段]', werewolfGameState.gamePhase);
+      console.error('[游戏状态]', JSON.stringify(werewolfGameState, null, 2));
+      
+      // 尝试恢复游戏：如果卡在某个阶段，尝试跳到下一个阶段
+      const phaseOrder = ['night_start', 'guard_action', 'wolf_action', 'seer_action', 'witch_action', 'day_start', 'day_discussion', 'day_vote'];
+      const currentIndex = phaseOrder.indexOf(werewolfGameState.gamePhase);
+      if (currentIndex !== -1 && currentIndex < phaseOrder.length - 1) {
+        console.warn(`[恢复尝试] 从 ${werewolfGameState.gamePhase} 跳转到 ${phaseOrder[currentIndex + 1]}`);
+        werewolfGameState.gamePhase = phaseOrder[currentIndex + 1];
+        await sleep(2000);
+        await processGameTurn();
+      } else if (werewolfGameState.gamePhase === 'day_vote') {
+        // 如果在投票阶段出错，跳回夜晚
+        console.warn('[恢复尝试] 投票阶段出错，跳转到新的夜晚');
+        werewolfGameState.gamePhase = 'night_start';
+        await sleep(2000);
+        await processGameTurn();
+      } else {
+        // 无法恢复，提示用户
+        logToWerewolfGame('游戏出现异常，请检查控制台日志或重新开始游戏。');
+      }
     }
   }
   // ▲▲▲ 新引擎代码结束 ▲▲▲
