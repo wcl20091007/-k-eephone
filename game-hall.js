@@ -6912,6 +6912,7 @@ ${isQuestionEvent ? `- 【必须正面回答问题】，给出明确答案，禁
       gameLog: [],
       turnIndex: 0,
       votes: {},
+      voteHistory: {}, // ★★★ 修复：添加缺失的 voteHistory 初始化 ★★★
       votedOutPlayers: [],
       tiedPlayers: [],
     };
