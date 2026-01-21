@@ -6985,8 +6985,14 @@ ${isQuestionEvent ? `- 【必须正面回答问题】，给出明确答案，禁
   async function processUndercoverTurn() {
     if (!undercoverGameState.isActive) return;
 
-    renderUndercoverGameScreen();
+    // ★★★ 新增：全局错误捕获，防止游戏卡死 ★★★
+    try {
+      renderUndercoverGameScreen();
+    } catch (renderError) {
+      console.error('[卧底渲染错误]', renderError);
+    }
 
+    try {
     switch (undercoverGameState.gamePhase) {
       case 'reveal_words': {
         logToUndercoverGame(`游戏开始，第 ${undercoverGameState.dayNumber} 轮。请查看自己的词语。`, 'system');
@@ -7109,13 +7115,14 @@ ${isQuestionEvent ? `- 【必须正面回答问题】，给出明确答案，禁
         }
 
         if (playersToEliminate.length > 1) {
-          // 处理平票
-          logToUndercoverGame(
-            `出现平票: ${playersToEliminate
-              .map(id => undercoverGameState.players.find(p => p.id === id).name)
-              .join('、 ')}。`,
-            'system',
-          );
+          // 处理平票 - ★★★ 修复：添加空值检查 ★★★
+          const tiedNames = playersToEliminate
+            .map(id => {
+              const p = undercoverGameState.players.find(p => p.id === id);
+              return p ? p.name : '未知';
+            })
+            .join('、 ');
+          logToUndercoverGame(`出现平票: ${tiedNames}。`, 'system');
           logToUndercoverGame('平票玩家将进行补充发言，之后再次投票。', 'system');
           undercoverGameState.tiedPlayers = playersToEliminate;
           undercoverGameState.gamePhase = 'tie_vote_speech';
@@ -7123,14 +7130,18 @@ ${isQuestionEvent ? `- 【必须正面回答问题】，给出明确答案，禁
           await processUndercoverTurn();
           return;
         } else if (playersToEliminate.length === 1) {
-          // 唯一最高票，淘汰
+          // 唯一最高票，淘汰 - ★★★ 修复：添加空值检查 ★★★
           const eliminatedPlayerId = playersToEliminate[0];
           const eliminatedPlayer = undercoverGameState.players.find(p => p.id === eliminatedPlayerId);
-          eliminatedPlayer.isAlive = false;
-          undercoverGameState.votedOutPlayers.push(eliminatedPlayer);
-          const roleName =
-            { undercover: '卧底', civilian: '平民', whiteboard: '白板' }[eliminatedPlayer.role] || '未知';
-          logToUndercoverGame(`【${eliminatedPlayer.name}】被淘汰！他/她的身份是【${roleName}】。`, 'system');
+          if (eliminatedPlayer) {
+            eliminatedPlayer.isAlive = false;
+            undercoverGameState.votedOutPlayers.push(eliminatedPlayer);
+            const roleName =
+              { undercover: '卧底', civilian: '平民', whiteboard: '白板' }[eliminatedPlayer.role] || '未知';
+            logToUndercoverGame(`【${eliminatedPlayer.name}】被淘汰！他/她的身份是【${roleName}】。`, 'system');
+          } else {
+            console.error('[卧底] 无法找到被淘汰的玩家');
+          }
         } else {
           // 无人被投
           logToUndercoverGame('本轮无人被投，无人出局。', 'system');
@@ -7222,14 +7233,17 @@ ${isQuestionEvent ? `- 【必须正面回答问题】，给出明确答案，禁
         } else {
           const eliminatedPlayerId = playersToEliminate[0];
           const eliminatedPlayer = undercoverGameState.players.find(p => p.id === eliminatedPlayerId);
-          eliminatedPlayer.isAlive = false;
-          undercoverGameState.votedOutPlayers.push(eliminatedPlayer);
-          const roleName =
-            { undercover: '卧底', civilian: '平民', whiteboard: '白板' }[eliminatedPlayer.role] || '未知';
-          logToUndercoverGame(
-            `PK投票结果：【${eliminatedPlayer.name}】被淘汰！他/她的身份是【${roleName}】。`,
-            'system',
-          );
+          // ★★★ 修复：添加空值检查 ★★★
+          if (eliminatedPlayer) {
+            eliminatedPlayer.isAlive = false;
+            undercoverGameState.votedOutPlayers.push(eliminatedPlayer);
+            const roleName =
+              { undercover: '卧底', civilian: '平民', whiteboard: '白板' }[eliminatedPlayer.role] || '未知';
+            logToUndercoverGame(
+              `PK投票结果：【${eliminatedPlayer.name}】被淘汰！他/她的身份是【${roleName}】。`,
+              'system',
+            );
+          }
         }
 
         renderUndercoverGameScreen();
@@ -7241,6 +7255,28 @@ ${isQuestionEvent ? `- 【必须正面回答问题】，给出明确答案，禁
         await sleep(3000);
         await processUndercoverTurn();
         break;
+      }
+    }
+    } catch (gameError) {
+      // ★★★ 全局错误处理：防止游戏完全卡死 ★★★
+      console.error('[卧底游戏错误]', gameError);
+      console.error('[当前阶段]', undercoverGameState.gamePhase);
+      
+      // 尝试恢复游戏
+      const phaseOrder = ['reveal_words', 'description_round', 'voting_round', 'elimination', 'tie_vote_speech', 'tie_vote_re-vote'];
+      const currentIndex = phaseOrder.indexOf(undercoverGameState.gamePhase);
+      if (currentIndex !== -1 && currentIndex < phaseOrder.length - 1) {
+        console.warn(`[卧底恢复] 从 ${undercoverGameState.gamePhase} 跳转到 ${phaseOrder[currentIndex + 1]}`);
+        undercoverGameState.gamePhase = phaseOrder[currentIndex + 1];
+        await sleep(2000);
+        await processUndercoverTurn();
+      } else {
+        // 尝试进入下一轮
+        console.warn('[卧底恢复] 尝试进入下一轮描述阶段');
+        undercoverGameState.dayNumber++;
+        undercoverGameState.gamePhase = 'description_round';
+        await sleep(2000);
+        await processUndercoverTurn();
       }
     }
   }
@@ -7571,9 +7607,13 @@ ${jsonFormat}
         state.apiConfig.temperature,
       );
 
-      const response = isGemini
-        ? await fetch(geminiConfig.url, geminiConfig.data)
-        : await fetch(`${proxyUrl}/v1/chat/completions`, {
+      // ★★★ 新增：创建带超时的fetch请求，防止游戏卡死 ★★★
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30秒超时
+
+      const fetchOptions = isGemini
+        ? { ...geminiConfig.data, signal: controller.signal }
+        : {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
             body: JSON.stringify({
@@ -7582,7 +7622,14 @@ ${jsonFormat}
               temperature: parseFloat(state.apiConfig.temperature) || 0.8,
               response_format: { type: 'json_object' },
             }),
-          });
+            signal: controller.signal,
+          };
+
+      const response = await fetch(
+        isGemini ? geminiConfig.url : `${proxyUrl}/v1/chat/completions`,
+        fetchOptions,
+      );
+      clearTimeout(timeoutId); // 请求成功，清除超时计时器
 
       if (!response.ok) throw new Error(await response.text());
       const data = await response.json();
@@ -7607,7 +7654,12 @@ ${jsonFormat}
       }
       return null;
     } catch (error) {
-      console.error(`卧底AI (${player.name}) 行动失败:`, error);
+      // ★★★ 增强错误日志，区分超时和其他错误 ★★★
+      if (error.name === 'AbortError') {
+        console.error(`卧底AI (${player.name}) ${actionType} 请求超时（30秒），使用保底行动`);
+      } else {
+        console.error(`卧底AI (${player.name}) ${actionType} 行动失败:`, error);
+      }
       if (actionType === 'describe' || actionType === 'tie_speak') return '我想不出来，过。';
       if (actionType === 'vote') {
         const targets = voteTargets.filter(p => p.id !== player.id);
