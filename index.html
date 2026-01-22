@@ -4999,6 +4999,7 @@
         <div id="lock-main-date">星期一, 1月1日</div>
       </div>
       <div id="unlock-hint">向上轻扫以解锁</div>
+      <button style="position:absolute;right:12px;bottom:12px;padding:6px 10px;font-size:13px;" data-open-ephone-login>订阅登录</button>
     </div>
 
     <div id="password-modal-overlay" class="modal">
@@ -5008,6 +5009,19 @@
         <div class="password-actions">
           <button id="password-cancel-btn">取消</button>
           <button id="password-confirm-btn">进入</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== ephone 账号登录弹窗（用于外部订阅验证） ===== -->
+    <div id="ephone-login-modal" class="modal" style="display: none;">
+      <div class="password-modal-content">
+        <p>账号登录</p>
+        <input type="text" id="ephone-account" placeholder="账号" maxlength="64" />
+        <input type="password" id="ephone-password" placeholder="密码" maxlength="64" />
+        <div class="password-actions">
+          <button id="ephone-login-cancel">取消</button>
+          <button id="ephone-login-btn">登录</button>
         </div>
       </div>
     </div>

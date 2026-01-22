@@ -202,31 +202,117 @@ document.addEventListener("DOMContentLoaded", () => {
   var db; // 声明全局变量，但不初始化
   const APP_SECRET = "EPHONE_2026_SUPER_SECRET_KEY_V1"; // 必须与机器人一致
 
-  // HMAC-SHA256 验证函数
-  function verifyLogin(uid, pwd) {
-    if (!uid || !pwd) return false;
+  // 后端 API 验证函数 (异步)
+  async function verifyLogin(account, password) {
+    if (!account || !password) return { success: false, message: "请输入完整的账号和密码" };
     
-    // 1. 计算 HMAC-SHA256 (得到原始数据)
-    const rawHash = CryptoJS.HmacSHA256(uid.trim(), APP_SECRET);
-    
-    // 2. 转为 Base64 字符串 (天然包含大小写字母和数字)
-    let base64 = CryptoJS.enc.Base64.stringify(rawHash);
-    
-    // 3. 截取前 12 位 (增加长度)
-    let generated = base64.substring(0, 12);
-    
-    // 4. 强制插入特殊符号 (增强复杂度)
-    // 将字符串转为数组进行替换
-    let chars = generated.split('');
-    chars[2] = '@';  // 第3位强制变为 @
-    chars[7] = '!';  // 第8位强制变为 !
-    
-    // 重新组合
-    const correctPassword = chars.join('');
-    
-    // console.log("正确密码应为:", correctPassword); // 调试用，上线可注释
-    return pwd.trim() === correctPassword;
+    try {
+      const response = await fetch('https://puppy-subscription-api.zeabur.app/api/verify', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          account: account.trim(),
+          password: password.trim()
+        })
+      });
+      
+      const data = await response.json();
+      // 返回格式: { success: true/false, message: "提示信息", user_id: "用户ID", username: "用户名" }
+      return data;
+    } catch (error) {
+      console.error('登录验证请求失败:', error);
+      return { success: false, message: "网络连接失败，请检查网络后重试" };
+    }
   }
+
+  // 前端与订阅服务交互的登录函数（UI 绑定）
+  async function ephoneVerify() {
+    const accountEl = document.getElementById('ephone-account');
+    const passwordEl = document.getElementById('ephone-password');
+    const btn = document.getElementById('ephone-login-btn');
+
+    if (!accountEl || !passwordEl || !btn) return;
+
+    const account = accountEl.value.trim();
+    const password = passwordEl.value;
+
+    if (!account || !password) {
+      alert('请输入账号和密码');
+      return;
+    }
+
+    btn.disabled = true;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+    try {
+      const res = await fetch('https://puppy-subscription-api.zeabur.app/api/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({ account: account, password: password })
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error(`网络错误: ${res.status} ${res.statusText} ${text}`);
+      }
+
+      const data = await res.json();
+
+      if (data && data.success) {
+        // 登录成功 — 保存必要信息（不可保存明文密码）
+        try {
+          localStorage.setItem('ephone_auth', 'true');
+          if (data.token) localStorage.setItem('ephone_token', data.token);
+          if (data.user_id) localStorage.setItem('ephone_user_id', data.user_id);
+        } catch (e) {
+          console.warn('无法写入 localStorage:', e);
+        }
+
+        // 隐藏登录弹窗并调用锁屏解锁行为
+        const modal = document.getElementById('ephone-login-modal');
+        if (modal) modal.style.display = 'none';
+        if (typeof unlockPhone === 'function') {
+          setTimeout(() => unlockPhone(), 200);
+        }
+      } else {
+        alert('验证失败: ' + (data && data.message ? data.message : '未知错误'));
+      }
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        alert('请求超时，请稍后重试');
+      } else {
+        console.error('ephoneVerify 错误:', err);
+        alert('验证过程中出现错误，请检查控制台或稍后重试');
+      }
+    } finally {
+      btn.disabled = false;
+      clearTimeout(timeoutId);
+    }
+  }
+
+  // 绑定登录弹窗按钮（初始化阶段）
+  (function bindEphoneLoginButtons() {
+    const openModalBtns = document.querySelectorAll('[data-open-ephone-login]');
+    const modal = document.getElementById('ephone-login-modal');
+    const cancel = document.getElementById('ephone-login-cancel');
+    const confirm = document.getElementById('ephone-login-btn');
+
+    if (openModalBtns && modal) {
+      openModalBtns.forEach(b => b.addEventListener('click', () => { modal.style.display = 'block'; }));
+    }
+    if (cancel && modal) {
+      cancel.addEventListener('click', () => { modal.style.display = 'none'; });
+    }
+    if (confirm) {
+      confirm.addEventListener('click', ephoneVerify);
+    }
+  })();
 
   // 动态初始化数据库函数
   function initDatabase(userId) {
@@ -52874,11 +52960,12 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
   // ==========================================
   // ▼▼▼ 验证与启动函数 ▼▼▼
   // ==========================================
-  function tryLogin() {
+  async function tryLogin() {
     // 获取元素
     const uidEl = document.getElementById('login-uid');
     const pwdEl = document.getElementById('login-pwd');
     const msgEl = document.getElementById('login-msg');
+    const btn = document.getElementById('btn-login-submit');
 
     // 安全检查：如果元素不存在（比如还没渲染），直接返回，防止报错
     if (!uidEl || !pwdEl) {
@@ -52886,26 +52973,39 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
       return;
     }
 
-    const uid = uidEl.value.trim();
-    const pwd = pwdEl.value.trim();
+    const account = uidEl.value.trim();
+    const password = pwdEl.value.trim();
 
-    if (!uid || !pwd) {
+    if (!account || !password) {
       msgEl.textContent = "请输入完整的账号和密码";
       return;
     }
 
-    // 验证逻辑
-    if (verifyLogin(uid, pwd)) {
+    // 显示加载状态
+    btn.disabled = true;
+    btn.textContent = "验证中...";
+    msgEl.style.color = "#8e8e93";
+    msgEl.textContent = "正在连接服务器...";
+
+    // 异步验证逻辑
+    const result = await verifyLogin(account, password);
+    
+    if (result.success) {
       msgEl.style.color = "#32d74b";
-      msgEl.textContent = "验证通过，正在进入...";
+      msgEl.textContent = result.message || "验证通过，正在进入...";
 
       try {
-        // 保存登录状态
-        localStorage.setItem('ephone_saved_uid', uid);
+        // 保存登录状态 (使用后端返回的 user_id 或账号)
+        const userId = result.user_id || account;
+        localStorage.setItem('ephone_saved_uid', userId);
+        // 如果后端返回了用户名，也可以保存
+        if (result.username) {
+          localStorage.setItem('ephone_username', result.username);
+        }
 
         // 【关键修改】使用固定数据库名，找回你的旧数据
         // 确保 script.js 上方的 initDatabase 函数里写的是 db = new Dexie('GeminiChatDB');
-        initDatabase(uid);
+        initDatabase(userId);
         
         // 移除遮罩
         const overlay = document.getElementById('login-overlay');
@@ -52922,12 +53022,15 @@ ${recentHistory || "暂无聊天记录"}${musicInfo}`;
         console.error(e);
         msgEl.style.color = "#ff453a";
         msgEl.textContent = "初始化失败，请重试";
+        btn.disabled = false;
+        btn.textContent = "登录";
       }
     } else {
       msgEl.style.color = "#ff453a";
-      msgEl.textContent = "账号或密码错误";
-      const btn = document.getElementById('btn-login-submit');
+      msgEl.textContent = result.message || "账号或密码错误";
       btn.style.background = "#ff453a";
+      btn.disabled = false;
+      btn.textContent = "登录";
       setTimeout(() => btn.style.background = "#007aff", 500);
     }
   }
